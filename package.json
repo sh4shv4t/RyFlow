@@ -1,0 +1,24 @@
+{
+  "name": "ryflow",
+  "version": "1.0.0",
+  "description": "RyFlow — Your Campus. Your GPU. Your AI. Offline-first P2P AI collaboration workspace.",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:backend": "cd backend && node index.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "electron": "electron electron/main.js",
+    "build": "cd frontend && npm run build",
+    "start": "npm run build && npm run electron",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.9.1"
+  },
+  "author": "",
+  "license": "MIT"
+}
