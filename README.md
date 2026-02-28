@@ -199,17 +199,3 @@ Without an AMD GPU, everything runs on CPU — fully functional, just slower.
 
 ---
 
-## Design System
-
-| Token | Value |
-|-------|-------|
-| Primary | `#E8000D` (AMD Red) |
-| Background | `#1A1A1A` (Charcoal) |
-| Surface | `#2C2C2C` (Gray) |
-| Text | `#F5F5F0` (White) |
-| Accent | `#FF6B00` (Orange) |
-| Success | `#00C853` (Green) |
-| Heading Font | Syne |
-| Body Font | Inter |
-
----
