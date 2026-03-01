@@ -18,5 +18,16 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist'
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.js'],
+    css: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: ['node_modules/', 'vitest.setup.js']
+    }
   }
 });

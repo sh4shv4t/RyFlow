@@ -161,3 +161,103 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--amd-white) !important;
   border: 1px solid rgba(245, 245, 240, 0.1) !important;
 }
+
+/* ─────────────────────────────────────────
+   Light Mode overrides (.light-mode on root)
+   ───────────────────────────────────────── */
+.light-mode,
+.light-mode body {
+  background-color: #F4F3EE;
+  color: #1A1A1A;
+}
+
+/* Scrollbar */
+.light-mode ::-webkit-scrollbar-track { background: #F4F3EE; }
+.light-mode ::-webkit-scrollbar-thumb { background: #D0CFC9; }
+.light-mode ::-webkit-scrollbar-thumb:hover { background: #B8B7B0; }
+
+/* Root layout background */
+.light-mode .bg-amd-charcoal,
+.light-mode [class*="bg-amd-charcoal"] {
+  background-color: #F4F3EE !important;
+}
+
+/* Surface / panel backgrounds */
+.light-mode .bg-amd-gray,
+.light-mode [class*="bg-amd-gray"] {
+  background-color: #E8E7E1 !important;
+}
+
+/* Glass cards */
+.light-mode .glass-card {
+  background: rgba(255, 255, 255, 0.82) !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.light-mode .glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(232, 0, 13, 0.25) !important;
+}
+
+/* TopBar / header */
+.light-mode header {
+  background-color: rgba(244, 243, 238, 0.92) !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Sidebar nav area */
+.light-mode nav,
+.light-mode aside {
+  background-color: #ECEAE3 !important;
+  border-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+/* Text colours */
+.light-mode .text-amd-white           { color: #1A1A1A !important; }
+.light-mode .text-amd-white\/80       { color: rgba(26,26,26,0.8) !important; }
+.light-mode .text-amd-white\/60       { color: rgba(26,26,26,0.6) !important; }
+.light-mode .text-amd-white\/50       { color: rgba(26,26,26,0.5) !important; }
+.light-mode .text-amd-white\/40       { color: rgba(26,26,26,0.4) !important; }
+.light-mode .text-amd-white\/30       { color: rgba(26,26,26,0.3) !important; }
+.light-mode .text-amd-white\/20       { color: rgba(26,26,26,0.2) !important; }
+.light-mode .text-amd-white\/10       { color: rgba(26,26,26,0.1) !important; }
+
+/* White-tinted backgrounds (hover / surface) */
+.light-mode [class*="bg-white\/5"]    { background-color: rgba(0,0,0,0.04) !important; }
+.light-mode [class*="bg-white\/10"]   { background-color: rgba(0,0,0,0.06) !important; }
+.light-mode [class*="bg-white\/20"]   { background-color: rgba(0,0,0,0.09) !important; }
+
+/* Borders */
+.light-mode [class*="border-white\/5"]  { border-color: rgba(0,0,0,0.06) !important; }
+.light-mode [class*="border-white\/10"] { border-color: rgba(0,0,0,0.09) !important; }
+.light-mode [class*="border-white\/20"] { border-color: rgba(0,0,0,0.14) !important; }
+
+/* Inputs */
+.light-mode input,
+.light-mode textarea {
+  color: #1A1A1A !important;
+  caret-color: #1A1A1A;
+}
+.light-mode input::placeholder,
+.light-mode textarea::placeholder { color: rgba(26,26,26,0.35) !important; }
+
+/* Skeleton */
+.light-mode .skeleton-loader {
+  background: linear-gradient(90deg, #E8E7E1 25%, #F0EFE9 50%, #E8E7E1 75%) !important;
+  background-size: 200% 100% !important;
+}
+
+/* TipTap editor */
+.light-mode .ProseMirror {
+  color: #1A1A1A;
+}
+.light-mode .ProseMirror pre {
+  background: #E8E7E1;
+}
+
+/* Toast overrides in light mode */
+.light-mode .toast-custom {
+  background: #fff !important;
+  color: #1A1A1A !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}

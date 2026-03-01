@@ -58,6 +58,19 @@ const useStore = create((set, get) => ({
     set({ selectedModel: model });
   },
 
+  // Theme: 'dark' | 'light'
+  theme: localStorage.getItem('ryflow_theme') || 'dark',
+  toggleTheme: () =>
+    set((state) => {
+      const next = state.theme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('ryflow_theme', next);
+      return { theme: next };
+    }),
+  setTheme: (theme) => {
+    localStorage.setItem('ryflow_theme', theme);
+    set({ theme });
+  },
+
   // Logout / reset
   logout: () => {
     localStorage.removeItem('ryflow_user');

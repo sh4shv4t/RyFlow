@@ -14,15 +14,19 @@ import WorkspaceSetup from './components/workspace/WorkspaceSetup';
 import useStore from './store/useStore';
 
 export default function App() {
-  const { user, workspace } = useStore();
+  const { user, workspace, theme } = useStore();
 
   // Show onboarding if no user/workspace configured
   if (!user || !workspace) {
-    return <WorkspaceSetup />;
+    return (
+      <div className={theme === 'light' ? 'light-mode' : ''}>
+        <WorkspaceSetup />
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-amd-charcoal">
+    <div className={`flex h-screen w-screen overflow-hidden bg-amd-charcoal ${theme === 'light' ? 'light-mode' : ''}`}>
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />

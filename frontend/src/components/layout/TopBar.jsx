@@ -6,6 +6,7 @@ import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import { startPeerPolling, stopPeerPolling } from '../../utils/lanDiscovery';
 import AMDbadge from './AMDbadge';
+import ThemeToggle from './ThemeToggle';
 
 export default function TopBar() {
   const { aiStatus, setAiStatus, peers, setPeers, user, workspace, aiActive } = useStore();
@@ -54,6 +55,9 @@ export default function TopBar() {
           <Users size={14} />
           <span>{peers.length} peer{peers.length !== 1 ? 's' : ''}</span>
         </div>
+
+        {/* Theme toggle */}
+        <ThemeToggle />
 
         {/* User avatar */}
         <div
