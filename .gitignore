@@ -1,1 +1,32 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+
+# SQLite and local database artifacts
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Logs and temp runtime artifacts
+*.log
+*.pid
+*.tmp
+*.temp
+
+# Build and test outputs
+dist/
+build/
+coverage/
+
+# App runtime directories
+backend/uploads/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
