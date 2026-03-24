@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Home, FileText, CheckSquare, GitBranch, Cpu,
-  Settings, PanelLeftClose, PanelLeft, Zap
+  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 
@@ -14,6 +14,8 @@ const navItems = [
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/graph', icon: GitBranch, label: 'Graph' },
   { to: '/ai', icon: Cpu, label: 'AI Studio' },
+  { to: '/code', icon: Code2, label: 'Code' },
+  { to: '/canvas', icon: PencilRuler, label: 'Canvas' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

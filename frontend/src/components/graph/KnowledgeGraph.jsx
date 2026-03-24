@@ -1,5 +1,6 @@
 // KnowledgeGraph — D3.js force-directed graph visualization with semantic search
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as d3 from 'd3';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Zap, Loader2 } from 'lucide-react';
@@ -15,9 +16,12 @@ const NODE_COLORS = {
   ai_chat: '#9B59B6',
   voice: '#00C853',
   image: '#FFD700',
+  code: '#64B5F6',
+  canvas: '#00BCD4',
 };
 
 export default function KnowledgeGraph() {
+  const navigate = useNavigate();
   const svgRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
@@ -133,6 +137,10 @@ export default function KnowledgeGraph() {
       .attr('font-size', '10px')
       .text(d => d.title?.length > 20 ? d.title.substring(0, 20) + '...' : d.title);
 
+    // Show title and summary snippet in native tooltip on hover.
+    nodeGroups.append('title')
+      .text((d) => `${d.title || 'Untitled'}\n${(d.content_summary || '').slice(0, 100)}${(d.content_summary || '').length > 100 ? '...' : ''}`);
+
     // Hover tooltip
     nodeGroups
       .on('mouseenter', (event, d) => {
@@ -178,11 +186,31 @@ export default function KnowledgeGraph() {
     const results = await search(searchQuery);
     if (results) {
       setHighlightedIds(new Set(results.map(r => r.id)));
-      if (results.length > 0) {
-        setSelectedNode(results[0]);
-      }
+      if (results.length > 0) setSelectedNode(results[0]);
     }
   }, [searchQuery, search]);
+
+  // Opens the most relevant workspace screen for a selected graph node.
+  const handleOpenNode = useCallback((node) => {
+    if (!node) return;
+    if (node.type === 'doc' || node.type === 'docs') {
+      navigate(node.source_id ? `/editor/${node.source_id}` : '/editor');
+      return;
+    }
+    if (node.type === 'code') {
+      navigate(node.source_id ? `/code/${node.source_id}` : '/code');
+      return;
+    }
+    if (node.type === 'canvas') {
+      navigate(node.source_id ? `/canvas/${node.source_id}` : '/canvas');
+      return;
+    }
+    if (node.type === 'task' || node.type === 'tasks') {
+      navigate('/tasks');
+      return;
+    }
+    navigate('/editor');
+  }, [navigate]);
 
   return (
     <div className="flex h-full gap-4">
@@ -283,6 +311,13 @@ export default function KnowledgeGraph() {
             <div className="mt-4 text-xs text-amd-white/30">
               Created: {new Date(selectedNode.created_at).toLocaleDateString()}
             </div>
+
+            <button
+              onClick={() => handleOpenNode(selectedNode)}
+              className="mt-4 w-full px-3 py-2 rounded-lg bg-amd-red/15 text-amd-red hover:bg-amd-red/25 transition-colors text-sm"
+            >
+              Open in Editor
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

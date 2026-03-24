@@ -27,7 +27,7 @@ export default function ChatPanel() {
   const [showTemplates, setShowTemplates] = useState(false);
   const messagesEndRef = useRef(null);
   const { chatStream, loading, streamingText } = useOllama();
-  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus } = useStore();
+  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace } = useStore();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -45,12 +45,15 @@ export default function ChatPanel() {
     setInput('');
 
     try {
-      const fullResponse = await chatStream(
+      const streamResult = await chatStream(
         newMessages.map(m => ({ role: m.role, content: m.content })),
         () => {} // streaming updates handled by hook
       );
 
-      setMessages(prev => [...prev, { role: 'assistant', content: fullResponse }]);
+      const fullResponse = typeof streamResult === 'string' ? streamResult : streamResult?.content || '';
+      const ragUsed = typeof streamResult === 'object' ? Boolean(streamResult?.ragUsed) : false;
+
+      setMessages(prev => [...prev, { role: 'assistant', content: fullResponse, ragUsed }]);
     } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -145,9 +148,16 @@ export default function ChatPanel() {
             >
               <div className="whitespace-pre-wrap">{msg.content}</div>
               {msg.role === 'assistant' && (
-                <div className="flex items-center gap-1 mt-2 text-[10px] text-amd-red/50">
-                  <Zap size={8} /> Powered by AMD ROCm
-                </div>
+                <>
+                  <div className="flex items-center gap-1 mt-2 text-[10px] text-amd-red/50">
+                    <Zap size={8} /> Powered by AMD ROCm
+                  </div>
+                  {msg.ragUsed && (
+                    <div className="mt-1 text-[11px] italic text-amd-orange/90">
+                      📚 Answered using your workspace knowledge
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </motion.div>

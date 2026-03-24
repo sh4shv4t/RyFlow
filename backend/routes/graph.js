@@ -92,7 +92,13 @@ router.post('/search', async (req, res) => {
       return res.status(400).json({ error: 'query and workspace_id are required' });
     }
     const results = await semanticSearch(query, workspace_id, top_k || 5);
-    res.json({ results });
+    res.json({ results: results.map((r) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      content_summary: r.content_summary,
+      score: r.score
+    })) });
   } catch (err) {
     res.status(500).json({ error: 'Semantic search failed. Is Ollama running with nomic-embed-text?', details: err.message });
   }

@@ -20,7 +20,7 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
   });
 
   // Auto-create relationships asynchronously
-  autoCreateRelationships(id, workspaceId, title).catch(err => {
+  autoCreateRelationships({ id, title, content_summary: contentSummary || '' }, workspaceId).catch(err => {
     console.error('[Graph] Auto-relationship creation failed for node', id, err.message);
   });
 
@@ -28,16 +28,16 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
 }
 
 // Uses LLM to find relationships between a new node and existing nodes
-async function autoCreateRelationships(newNodeId, workspaceId, newTitle) {
+async function autoCreateRelationships(newNode, workspaceId) {
   const db = getDb();
   const recentNodes = db.prepare(
-    'SELECT id, title FROM nodes WHERE workspace_id = ? AND id != ? ORDER BY created_at DESC LIMIT 20'
-  ).all(workspaceId, newNodeId);
+    'SELECT id, title, content_summary FROM nodes WHERE workspace_id = ? AND id != ? ORDER BY created_at DESC LIMIT 20'
+  ).all(workspaceId, newNode.id);
 
   if (recentNodes.length === 0) return;
 
-  const nodeList = recentNodes.map(n => `{id: "${n.id}", title: "${n.title}"}`).join(', ');
-  const prompt = `Given this new item: "${newTitle}". And these existing items: [${nodeList}]. Which existing items is this most related to? Return ONLY valid JSON array: [{id, relationship_label}] for top 3 most related. No explanation.`;
+  const existing = recentNodes.map((n) => ({ id: n.id, title: n.title, summary: n.content_summary || '' }));
+  const prompt = `Given this new item:\nTitle: ${newNode.title}\nContent: ${newNode.content_summary || ''}\n\nAnd these existing workspace items:\n${JSON.stringify(existing)}\n\nWhich items is this most semantically related to?\nReturn ONLY valid JSON array: [{id, relationship_label}] for the top 3 most related. No explanation.`;
 
   try {
     const response = await chat(
@@ -59,7 +59,7 @@ async function autoCreateRelationships(newNodeId, workspaceId, newTitle) {
         const edgeId = uuidv4();
         db.prepare(
           'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
-        ).run(edgeId, newNodeId, rel.id, rel.relationship_label, 0.8);
+        ).run(edgeId, newNode.id, rel.id, rel.relationship_label, 0.8);
       }
     }
   } catch (err) {

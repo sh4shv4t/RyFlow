@@ -2,6 +2,17 @@
 const { getDb } = require('../db/database');
 const { embed } = require('./ollamaService');
 
+// Builds embedding text consistently from a node-like object.
+function buildEmbeddingText(node = {}) {
+  return `${node.title || ''}. ${node.content || node.content_summary || ''}`.trim();
+}
+
+// Builds and embeds combined title/content text.
+async function embedText(title, content) {
+  const textToEmbed = `${title || ''}. ${content || ''}`.trim();
+  return embed(textToEmbed);
+}
+
 // Computes cosine similarity between two vectors
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
@@ -34,8 +45,10 @@ async function semanticSearch(query, workspaceId, topK = 5) {
         parsedEmbedding = [];
       }
       return {
-        ...node,
-        embedding: undefined,
+        id: node.id,
+        type: node.type,
+        title: node.title,
+        content_summary: node.content_summary,
         score: cosineSimilarity(queryEmbedding, parsedEmbedding)
       };
     })
@@ -46,7 +59,8 @@ async function semanticSearch(query, workspaceId, topK = 5) {
 // Generates and stores an embedding for a given node
 async function generateAndStoreEmbedding(nodeId, text) {
   try {
-    const embedding = await embed(text);
+    const textToEmbed = typeof text === 'object' ? buildEmbeddingText(text) : String(text || '').trim();
+    const embedding = await embed(textToEmbed);
     const db = getDb();
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?')
       .run(JSON.stringify(embedding), nodeId);
@@ -57,4 +71,4 @@ async function generateAndStoreEmbedding(nodeId, text) {
   }
 }
 
-module.exports = { cosineSimilarity, semanticSearch, generateAndStoreEmbedding };
+module.exports = { cosineSimilarity, semanticSearch, generateAndStoreEmbedding, embedText, buildEmbeddingText };

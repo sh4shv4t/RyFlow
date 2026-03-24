@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     ).run(id, workspace_id, title, content || '', created_by || null);
 
     // Add to knowledge graph
-    await createNode(workspace_id, 'doc', title, (content || '').substring(0, 200), id);
+    await createNode(workspace_id, 'doc', title, (content || '').substring(0, 500), id);
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     res.status(201).json(doc);
@@ -75,7 +75,7 @@ router.put('/:id', async (req, res) => {
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'doc');
     if (node) {
       db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?')
-        .run(title || existing.title, (content || '').substring(0, 200), node.id);
+        .run(title || existing.title, (content || '').substring(0, 500), node.id);
       // Refresh semantic embedding whenever document content changes.
       await generateAndStoreEmbedding(node.id, `${title || existing.title}. ${content !== undefined ? content : existing.content || ''}`);
     }

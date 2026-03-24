@@ -9,7 +9,8 @@ export default function useOllama() {
   const [streamingText, setStreamingText] = useState('');
   const [response, setResponse] = useState('');
   const [error, setError] = useState(null);
-  const { selectedModel, setAiActive, language } = useStore();
+  const [ragUsed, setRagUsed] = useState(false);
+  const { selectedModel, setAiActive, language, workspace } = useStore();
   const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
     ? 'http://localhost:3001'
     : '';
@@ -56,16 +57,19 @@ export default function useOllama() {
     setLoading(true);
     setAiActive(true);
     setError(null);
+    setRagUsed(false);
     try {
       const finalMessages = buildLanguageLockedMessages(messages);
 
       const res = await axios.post('/api/ai/chat', {
         messages: finalMessages,
-        model: model || selectedModel
+        model: model || selectedModel,
+        workspace_id: workspace?.id || null
       });
       // Expose latest response for consumers that use stateful API shape.
       setResponse(res.data.content || '');
-      return res.data.content;
+      setRagUsed(Boolean(res.data.ragUsed));
+      return { content: res.data.content || '', ragUsed: Boolean(res.data.ragUsed) };
     } catch (err) {
       setError(err.message || 'AI service unavailable');
       toast.error('AI service unavailable. Is Ollama running?');
@@ -74,7 +78,7 @@ export default function useOllama() {
       setLoading(false);
       setAiActive(false);
     }
-  }, [selectedModel, setAiActive, buildLanguageLockedMessages]);
+  }, [selectedModel, setAiActive, buildLanguageLockedMessages, workspace?.id]);
 
   // Sends a streaming chat request via SSE
   const chatStream = useCallback(async (messages, onChunk, model = null) => {
@@ -82,6 +86,7 @@ export default function useOllama() {
     setAiActive(true);
     setStreamingText('');
     setError(null);
+    setRagUsed(false);
 
     try {
       const finalMessages = buildLanguageLockedMessages(messages);
@@ -91,7 +96,8 @@ export default function useOllama() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: finalMessages,
-          model: model || selectedModel
+          model: model || selectedModel,
+          workspace_id: workspace?.id || null
         })
       });
 
@@ -102,6 +108,7 @@ export default function useOllama() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
+      let localRagUsed = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -116,18 +123,22 @@ export default function useOllama() {
             if (data === '[DONE]') break;
             try {
               const parsed = JSON.parse(data);
+              if (typeof parsed.ragUsed === 'boolean') {
+                localRagUsed = parsed.ragUsed;
+                setRagUsed(localRagUsed);
+              }
               if (parsed.text) {
                 fullText += parsed.text;
                 setStreamingText(fullText);
                 setResponse(fullText);
-                onChunk && onChunk(parsed.text, fullText);
+                onChunk && onChunk(parsed.text, fullText, localRagUsed);
               }
             } catch {}
           }
         }
       }
 
-      return fullText;
+      return { content: fullText, ragUsed: localRagUsed };
     } catch (err) {
       setError(err.message || 'AI streaming failed');
       toast.error('AI streaming failed. Is Ollama running?');
@@ -136,7 +147,7 @@ export default function useOllama() {
       setLoading(false);
       setAiActive(false);
     }
-  }, [selectedModel, setAiActive, buildLanguageLockedMessages]);
+  }, [selectedModel, setAiActive, buildLanguageLockedMessages, workspace?.id]);
 
   // Provide a generic message sender API for components expecting a simplified hook contract.
   const sendMessage = useCallback(async (messages, onChunk, model = null) => {
@@ -160,6 +171,7 @@ export default function useOllama() {
     sendMessage,
     response,
     error,
+    ragUsed,
     isLoading: loading,
     loading,
     streamingText

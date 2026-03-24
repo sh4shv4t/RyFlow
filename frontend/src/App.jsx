@@ -10,6 +10,8 @@ import Tasks from './pages/Tasks';
 import Graph from './pages/Graph';
 import AIStudio from './pages/AIStudio';
 import Settings from './pages/Settings';
+import CodeEditorPage from './pages/CodeEditorPage';
+import CanvasPage from './pages/CanvasPage';
 import WorkspaceSetup from './components/workspace/WorkspaceSetup';
 import useStore from './store/useStore';
 
@@ -40,6 +42,10 @@ export default function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/graph" element={<Graph />} />
             <Route path="/ai" element={<AIStudio />} />
+            <Route path="/code" element={<CodeEditorPage />} />
+            <Route path="/code/:id" element={<CodeEditorPage />} />
+            <Route path="/canvas" element={<CanvasPage />} />
+            <Route path="/canvas/:id" element={<CanvasPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

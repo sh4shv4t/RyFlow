@@ -4,7 +4,13 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
 const { createNode } = require('../services/graphService');
+const { generateAndStoreEmbedding } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
+
+// Builds canonical task embedding text from task fields.
+function buildTaskEmbeddingText(task) {
+  return `${task.title || ''}. ${task.description || ''}. Priority: ${task.priority || 'medium'}. Due: ${task.due_date || 'none'}`;
+}
 
 // GET /api/tasks — List tasks for a workspace, optionally filtered by status
 router.get('/', (req, res) => {
@@ -44,7 +50,9 @@ router.post('/', async (req, res) => {
     ).run(id, workspace_id, title, description || '', assignee || '', status || 'todo', priority || 'medium', due_date || null);
 
     // Add to knowledge graph
-    await createNode(workspace_id, 'task', title, description || '', id);
+    const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
+    const node = await createNode(workspace_id, 'task', title, summary, id);
+    await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText({ title, description, priority, due_date }));
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     res.status(201).json(task);
@@ -54,7 +62,7 @@ router.post('/', async (req, res) => {
 });
 
 // PATCH /api/tasks/:id — Update a task's fields
-router.patch('/:id', (req, res) => {
+router.patch('/:id', async (req, res) => {
   try {
     const db = getDb();
     const existing = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
@@ -74,6 +82,15 @@ router.patch('/:id', (req, res) => {
     );
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+
+    // Keep task node summary and embedding in sync after updates.
+    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'task');
+    if (node) {
+      const summary = `${task.description || ''} Priority: ${task.priority || 'medium'}. Due: ${task.due_date || 'none'}`;
+      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?').run(task.title, summary, node.id);
+      await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText(task));
+    }
+
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -138,7 +155,14 @@ router.post('/nl-create', async (req, res) => {
       ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', t.assignee || '', 'todo', t.priority || 'medium', t.due_date || null);
 
       // Add to knowledge graph
-      await createNode(workspace_id, 'task', t.title, t.description || '', id);
+      const summary = `${t.description || ''} Priority: ${t.priority || 'medium'}. Due: ${t.due_date || 'none'}`;
+      const node = await createNode(workspace_id, 'task', t.title, summary, id);
+      await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText({
+        title: t.title,
+        description: t.description || '',
+        priority: t.priority || 'medium',
+        due_date: t.due_date || null
+      }));
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
       createdTasks.push(task);

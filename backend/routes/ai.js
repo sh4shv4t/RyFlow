@@ -4,6 +4,37 @@ const router = express.Router();
 const { execSync } = require('child_process');
 const ollamaService = require('../services/ollamaService');
 const { getImageUrl, generateImage, createVariations } = require('../services/imageService');
+const { semanticSearch } = require('../services/embeddingService');
+
+// Builds optional RAG-augmented message list and metadata for AI responses.
+async function buildRagMessages(messages, workspaceId) {
+  const safeMessages = Array.isArray(messages) ? [...messages] : [];
+  if (!workspaceId || !safeMessages.length) {
+    return { finalMessages: safeMessages, ragUsed: false };
+  }
+
+  const lastUser = [...safeMessages].reverse().find((m) => m.role === 'user' && m.content);
+  if (!lastUser) {
+    return { finalMessages: safeMessages, ragUsed: false };
+  }
+
+  const matches = await semanticSearch(lastUser.content, workspaceId, 5);
+  const strongMatches = matches.filter((m) => Number(m.score || 0) > 0.3);
+  if (!strongMatches.length) {
+    return { finalMessages: safeMessages, ragUsed: false };
+  }
+
+  const ragContext = strongMatches
+    .map((r) => `[${String(r.type || '').toUpperCase()}] ${r.title}: ${r.content_summary || ''}`)
+    .join('\n\n');
+
+  const ragSystemPrompt = `You are RyFlow's AI assistant. You have access to this user's workspace knowledge. Use the following context from their workspace to give a more accurate and relevant answer. If the context is not relevant to the question, ignore it and answer normally.\n\nWORKSPACE CONTEXT:\n${ragContext}\n\nAnswer the user's question using this context where relevant.`;
+
+  return {
+    finalMessages: [{ role: 'system', content: ragSystemPrompt }, ...safeMessages],
+    ragUsed: true
+  };
+}
 
 // GET /api/ai/system-status — Returns GPU, ROCm, and model info
 router.get('/system-status', async (req, res) => {
@@ -63,12 +94,13 @@ router.get('/system-status', async (req, res) => {
 // POST /api/ai/chat — Non-streaming chat with Ollama
 router.post('/chat', async (req, res) => {
   try {
-    const { messages, model } = req.body;
+    const { messages, model, workspace_id } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
     }
-    const response = await ollamaService.chat(messages, model || 'phi3:mini', false);
-    res.json({ content: response });
+    const { finalMessages, ragUsed } = await buildRagMessages(messages, workspace_id);
+    const response = await ollamaService.chat(finalMessages, model || 'phi3:mini', false);
+    res.json({ content: response, ragUsed });
   } catch (err) {
     res.status(500).json({ error: 'AI service unavailable. Is Ollama running?', details: err.message });
   }
@@ -77,7 +109,7 @@ router.post('/chat', async (req, res) => {
 // POST /api/ai/chat/stream — SSE streaming chat with Ollama
 router.post('/chat/stream', async (req, res) => {
   try {
-    const { messages, model } = req.body;
+    const { messages, model, workspace_id } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
     }
@@ -87,7 +119,13 @@ router.post('/chat/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const stream = await ollamaService.chat(messages, model || 'phi3:mini', true);
+    const { finalMessages, ragUsed } = await buildRagMessages(messages, workspace_id);
+    const stream = await ollamaService.chat(finalMessages, model || 'phi3:mini', true);
+
+    // Send a metadata event first so frontend can show RAG usage indicator.
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ ragUsed })}\n\n`);
+    }
 
     let buffer = '';
     stream.on('data', (chunk) => {
