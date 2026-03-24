@@ -8,7 +8,6 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RichEditor from '../components/editor/RichEditor';
 import CollabPresence from '../components/editor/CollabPresence';
-import usePeer from '../hooks/usePeer';
 
 export default function Editor() {
   const { id } = useParams();
@@ -18,7 +17,6 @@ export default function Editor() {
   const [currentDoc, setCurrentDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
-  const { connected, presenceList, sharedDoc } = usePeer();
 
   // Fetch all documents
   const fetchDocuments = useCallback(async () => {
@@ -73,6 +71,30 @@ export default function Editor() {
       toast.success('Document created');
     } catch (err) {
       toast.error('Failed to create document');
+    }
+  };
+
+  // Keeps current document title and sidebar list in sync while typing.
+  const handleTitleChange = (nextTitle) => {
+    setCurrentDoc((prev) => {
+      if (!prev) return prev;
+      return { ...prev, title: nextTitle };
+    });
+    setDocuments((prev) => prev.map((d) => (
+      d.id === currentDoc?.id ? { ...d, title: nextTitle } : d
+    )));
+  };
+
+  // Persists title edits and reconciles local list with server response.
+  const handleTitleBlur = async () => {
+    if (!currentDoc) return;
+    try {
+      const res = await axios.put(`/api/docs/${currentDoc.id}`, { title: currentDoc.title });
+      const saved = res.data;
+      setCurrentDoc(saved);
+      setDocuments((prev) => prev.map((d) => (d.id === saved.id ? { ...d, ...saved } : d)));
+    } catch {
+      toast.error('Failed to rename document');
     }
   };
 
@@ -193,22 +215,22 @@ export default function Editor() {
             <div className="flex items-center justify-between p-3 border-b border-white/5">
               <input
                 value={currentDoc.title}
-                onChange={(e) => setCurrentDoc({ ...currentDoc, title: e.target.value })}
-                onBlur={() => {
-                  axios.put(`/api/docs/${currentDoc.id}`, { title: currentDoc.title }).catch(() => {});
-                }}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                onBlur={handleTitleBlur}
                 className="font-heading font-semibold text-amd-white bg-transparent outline-none text-lg"
               />
-              <CollabPresence connected={connected} presenceList={presenceList} />
+              {/* Hide presence until collaboration provider is fully wired for this route. */}
+              <CollabPresence connected={false} presenceList={[]} />
             </div>
 
             {/* TipTap editor */}
             <div className="flex-1 overflow-hidden relative">
               <RichEditor
+                key={currentDoc.id}
                 content={getEditorContent()}
                 onSave={handleSave}
                 docId={currentDoc.id}
-                collabDoc={sharedDoc}
+                collabDoc={null}
               />
             </div>
           </>

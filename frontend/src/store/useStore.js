@@ -1,16 +1,28 @@
 // Zustand global state store — manages user, workspace, AI status, and app state
 import { create } from 'zustand';
 
+// Parse persisted JSON defensively to avoid app boot crashes from malformed localStorage values.
+function safeParseJSON(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+}
+
 const useStore = create((set, get) => ({
   // User state
-  user: JSON.parse(localStorage.getItem('ryflow_user') || 'null'),
+  user: safeParseJSON('ryflow_user', null),
   setUser: (user) => {
     localStorage.setItem('ryflow_user', JSON.stringify(user));
     set({ user });
   },
 
   // Workspace state
-  workspace: JSON.parse(localStorage.getItem('ryflow_workspace') || 'null'),
+  workspace: safeParseJSON('ryflow_workspace', null),
   setWorkspace: (workspace) => {
     localStorage.setItem('ryflow_workspace', JSON.stringify(workspace));
     set({ workspace });

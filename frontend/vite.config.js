@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // Use browser-compatible events implementation required by readable-stream/simple-peer deps.
+    alias: {
+      events: 'events'
+    }
+  },
   server: {
     port: 5173,
     proxy: {

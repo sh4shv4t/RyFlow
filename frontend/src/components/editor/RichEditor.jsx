@@ -2,8 +2,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -23,28 +21,13 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const [selectedText, setSelectedText] = useState('');
   const [aiAction, setAiAction] = useState(null);
   const saveTimerRef = useRef(null);
+  const latestDocRef = useRef({ json: null, text: '' });
   const { selectedModel } = useStore();
 
   const editor = useEditor({
     extensions: [
-      // Disable history because Yjs collaboration manages undo/redo state.
-      StarterKit.configure({ history: !collabDoc }),
-      ...(collabDoc ? [
-        Collaboration.configure({ document: collabDoc, field: `doc-${docId}` }),
-        CollaborationCursor.configure({
-          provider: {
-            awareness: {
-              getStates: () => new Map(),
-              on: () => {},
-              off: () => {}
-            }
-          },
-          user: {
-            name: 'Collaborator',
-            color: '#E8000D'
-          }
-        })
-      ] : []),
+      // Keep editor in local mode until full Yjs provider wiring is available.
+      StarterKit,
       Highlight.configure({ multicolor: true }),
       Typography,
       Placeholder.configure({
@@ -58,18 +41,31 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       },
     },
     onUpdate: ({ editor }) => {
-      // Auto-save every 30 seconds
+      // Keep latest content snapshot so we can flush on unmount/doc switch.
+      latestDocRef.current = {
+        json: editor.getJSON(),
+        text: editor.getText()
+      };
+
+      // Debounced autosave to avoid losing edits when users switch documents quickly.
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => {
-        if (onSave) onSave(editor.getJSON(), editor.getText());
-      }, 30000);
+        if (onSave && latestDocRef.current.json) {
+          onSave(latestDocRef.current.json, latestDocRef.current.text);
+        }
+      }, 2000);
     },
   });
 
   // Update editor content when prop changes
   useEffect(() => {
-    if (editor && content && !editor.isFocused) {
-      editor.commands.setContent(content);
+    if (editor && !editor.isFocused) {
+      try {
+        // Always sync selected document content to prevent stale/blank editor states.
+        editor.commands.setContent(content || '');
+      } catch {
+        // Ignore malformed content payloads and keep editor usable.
+      }
     }
   }, [content, editor]);
 
@@ -77,8 +73,12 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      // Force a final save when leaving this editor instance.
+      if (onSave && latestDocRef.current.json) {
+        onSave(latestDocRef.current.json, latestDocRef.current.text);
+      }
     };
-  }, []);
+  }, [onSave]);
 
   // Handles AI floating toolbar actions on selected text
   const handleAIAction = useCallback((action) => {

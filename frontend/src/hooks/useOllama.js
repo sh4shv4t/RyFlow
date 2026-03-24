@@ -14,23 +14,50 @@ export default function useOllama() {
     ? 'http://localhost:3001'
     : '';
 
+  // Enforce selected language on every turn with stable system constraints.
+  const buildLanguageLockedMessages = useCallback((messages) => {
+    const langPrompts = {
+      hi: { label: 'Hindi', system: 'Respond only in Hindi.' },
+      ta: { label: 'Tamil', system: 'Respond only in Tamil.' },
+      bn: { label: 'Bengali', system: 'Respond only in Bengali.' },
+      mr: { label: 'Marathi', system: 'Respond only in Marathi.' },
+    };
+
+    const cloned = Array.isArray(messages) ? messages.map((m) => ({ ...m })) : [];
+    if (language === 'en' || !langPrompts[language]) return cloned;
+
+    const { label, system } = langPrompts[language];
+
+    // Remove prior language-lock system instructions before adding the current one.
+    const sanitized = cloned.filter((m) => !(m.role === 'system' && /Respond only in/i.test(m.content || '')));
+
+    const locked = [
+      { role: 'system', content: system },
+      {
+        role: 'system',
+        content: `Strict rule: Every assistant response must be entirely in ${label}. If the user writes in another language, still reply only in ${label}.`
+      },
+      ...sanitized
+    ];
+
+    // Reinforce the most recent user turn to prevent drift in longer chats.
+    for (let i = locked.length - 1; i >= 0; i -= 1) {
+      if (locked[i].role === 'user') {
+        locked[i].content = `[Reply language: ${label}]\n${locked[i].content || ''}`;
+        break;
+      }
+    }
+
+    return locked;
+  }, [language]);
+
   // Sends a chat message and returns the full response
   const chat = useCallback(async (messages, model = null) => {
     setLoading(true);
     setAiActive(true);
     setError(null);
     try {
-      // Prepend language system prompt if not English
-      const langPrompts = {
-        hi: 'Respond only in Hindi.',
-        ta: 'Respond only in Tamil.',
-        bn: 'Respond only in Bengali.',
-        mr: 'Respond only in Marathi.',
-      };
-      let finalMessages = [...messages];
-      if (language !== 'en' && langPrompts[language]) {
-        finalMessages = [{ role: 'system', content: langPrompts[language] }, ...finalMessages];
-      }
+      const finalMessages = buildLanguageLockedMessages(messages);
 
       const res = await axios.post('/api/ai/chat', {
         messages: finalMessages,
@@ -47,7 +74,7 @@ export default function useOllama() {
       setLoading(false);
       setAiActive(false);
     }
-  }, [selectedModel, language, setAiActive]);
+  }, [selectedModel, setAiActive, buildLanguageLockedMessages]);
 
   // Sends a streaming chat request via SSE
   const chatStream = useCallback(async (messages, onChunk, model = null) => {
@@ -57,16 +84,7 @@ export default function useOllama() {
     setError(null);
 
     try {
-      const langPrompts = {
-        hi: 'Respond only in Hindi.',
-        ta: 'Respond only in Tamil.',
-        bn: 'Respond only in Bengali.',
-        mr: 'Respond only in Marathi.',
-      };
-      let finalMessages = [...messages];
-      if (language !== 'en' && langPrompts[language]) {
-        finalMessages = [{ role: 'system', content: langPrompts[language] }, ...finalMessages];
-      }
+      const finalMessages = buildLanguageLockedMessages(messages);
 
       const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
         method: 'POST',
@@ -118,7 +136,7 @@ export default function useOllama() {
       setLoading(false);
       setAiActive(false);
     }
-  }, [selectedModel, language, setAiActive]);
+  }, [selectedModel, setAiActive, buildLanguageLockedMessages]);
 
   // Provide a generic message sender API for components expecting a simplified hook contract.
   const sendMessage = useCallback(async (messages, onChunk, model = null) => {

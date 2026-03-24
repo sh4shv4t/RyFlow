@@ -1,7 +1,6 @@
 // Hook for WebRTC peer connections via Socket.io signaling
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
-import SimplePeer from 'simple-peer';
 import * as Y from 'yjs';
 import useStore from '../store/useStore';
 
@@ -14,13 +13,15 @@ export default function usePeer() {
   const socketRef = useRef(null);
   const peersRef = useRef(new Map());
   const yDocRef = useRef(new Y.Doc());
+  const simplePeerCtorRef = useRef(null);
   const { user, workspace } = useStore();
 
   const ensurePeer = useCallback((targetId, initiator, sock) => {
     if (!targetId) return null;
     if (peersRef.current.has(targetId)) return peersRef.current.get(targetId);
+    if (!simplePeerCtorRef.current) return null;
 
-    const peer = new SimplePeer({ initiator, trickle: true });
+    const peer = new simplePeerCtorRef.current({ initiator, trickle: true });
 
     peer.on('signal', (signalData) => {
       // Route SDP and ICE through existing socket signaling channels.
@@ -54,81 +55,110 @@ export default function usePeer() {
   useEffect(() => {
     if (!user || !workspace) return;
 
-    const sock = io(SOCKET_URL, {
-      transports: ['websocket', 'polling']
-    });
+    let sock;
+    let cancelled = false;
 
-    sock.on('connect', () => {
-      setConnected(true);
-      sock.emit('join-workspace', {
-        workspaceId: workspace.id,
-        userName: user.name,
-        userId: user.id,
-        avatarColor: user.avatar_color
-      });
-    });
+    const init = async () => {
+      try {
+        const mod = await import('simple-peer');
+        // Lazily load simple-peer so browser-incompatible deps do not crash initial app boot.
+        simplePeerCtorRef.current = mod.default || mod;
+      } catch (err) {
+        console.warn('[Peer] simple-peer unavailable, collaboration data channel disabled:', err?.message || err);
+      }
 
-    sock.on('presence-update', (users) => {
-      setPresenceList(users);
-      const selfId = sock.id;
-      const targets = users
-        .map((u) => u.socketId)
-        .filter((id) => id && id !== selfId);
+      if (cancelled) return;
 
-      // Remove peers no longer present in this workspace room.
-      Array.from(peersRef.current.keys()).forEach((id) => {
-        if (!targets.includes(id)) {
-          peersRef.current.get(id)?.destroy();
-          peersRef.current.delete(id);
-        }
+      sock = io(SOCKET_URL, {
+        transports: ['websocket', 'polling']
       });
 
-      // Connect to newly observed peers using deterministic initiator ordering.
-      targets.forEach((targetId) => {
-        if (!peersRef.current.has(targetId)) {
-          ensurePeer(targetId, String(selfId) < String(targetId), sock);
-        }
+      sock.on('connect', () => {
+        setConnected(true);
+        sock.emit('join-workspace', {
+          workspaceId: workspace.id,
+          userName: user.name,
+          userId: user.id,
+          avatarColor: user.avatar_color
+        });
       });
-    });
 
-    sock.on('signal-offer', ({ offer, from }) => {
-      const peer = ensurePeer(from, false, sock);
-      peer?.signal(offer);
-    });
+      sock.on('presence-update', (users) => {
+        setPresenceList(users);
+        const selfId = sock.id;
+        const targets = users
+          .map((u) => u.socketId)
+          .filter((id) => id && id !== selfId);
 
-    sock.on('signal-answer', ({ answer, from }) => {
-      const peer = ensurePeer(from, false, sock);
-      peer?.signal(answer);
-    });
+        // Remove peers no longer present in this workspace room.
+        Array.from(peersRef.current.keys()).forEach((id) => {
+          if (!targets.includes(id)) {
+            peersRef.current.get(id)?.destroy();
+            peersRef.current.delete(id);
+          }
+        });
 
-    sock.on('signal-ice', ({ candidate, from }) => {
-      const peer = ensurePeer(from, false, sock);
-      peer?.signal(candidate);
-    });
-
-    sock.on('disconnect', () => {
-      setConnected(false);
-    });
-
-    const onYUpdate = (update, origin) => {
-      if (origin === 'remote') return;
-      const payload = JSON.stringify({ type: 'y-update', update: Array.from(update) });
-      peersRef.current.forEach((peer) => {
-        if (peer.connected) {
-          peer.send(payload);
-        }
+        // Connect to newly observed peers using deterministic initiator ordering.
+        targets.forEach((targetId) => {
+          if (!peersRef.current.has(targetId)) {
+            ensurePeer(targetId, String(selfId) < String(targetId), sock);
+          }
+        });
       });
+
+      sock.on('signal-offer', ({ offer, from }) => {
+        const peer = ensurePeer(from, false, sock);
+        peer?.signal(offer);
+      });
+
+      sock.on('signal-answer', ({ answer, from }) => {
+        const peer = ensurePeer(from, false, sock);
+        peer?.signal(answer);
+      });
+
+      sock.on('signal-ice', ({ candidate, from }) => {
+        const peer = ensurePeer(from, false, sock);
+        peer?.signal(candidate);
+      });
+
+      sock.on('disconnect', () => {
+        setConnected(false);
+      });
+
+      const onYUpdate = (update, origin) => {
+        if (origin === 'remote') return;
+        const payload = JSON.stringify({ type: 'y-update', update: Array.from(update) });
+        peersRef.current.forEach((peer) => {
+          if (peer.connected) {
+            peer.send(payload);
+          }
+        });
+      };
+      yDocRef.current.on('update', onYUpdate);
+
+      socketRef.current = sock;
+      setSocket(sock);
+
+      // Cleanup callback captures hook-local handlers and socket reference.
+      init.cleanup = () => {
+        yDocRef.current.off('update', onYUpdate);
+        peersRef.current.forEach((peer) => peer.destroy());
+        peersRef.current.clear();
+        sock.disconnect();
+      };
     };
-    yDocRef.current.on('update', onYUpdate);
 
-    socketRef.current = sock;
-    setSocket(sock);
+    init();
 
     return () => {
-      yDocRef.current.off('update', onYUpdate);
-      peersRef.current.forEach((peer) => peer.destroy());
-      peersRef.current.clear();
-      sock.disconnect();
+      cancelled = true;
+      if (typeof init.cleanup === 'function') {
+        init.cleanup();
+      } else {
+        peersRef.current.forEach((peer) => peer.destroy());
+        peersRef.current.clear();
+        if (sock) sock.disconnect();
+      }
     };
   }, [user, workspace, ensurePeer]);
 

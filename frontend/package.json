@@ -24,6 +24,7 @@
     "@tiptap/starter-kit": "^2.1.16",
     "axios": "^1.6.5",
     "d3": "^7.8.5",
+    "events": "^3.3.0",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.303.0",
     "react": "^18.2.0",
