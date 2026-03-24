@@ -7,6 +7,9 @@ import useGraph from '../../hooks/useGraph';
 import useStore from '../../store/useStore';
 
 const NODE_COLORS = {
+  docs: '#E8000D',
+  tasks: '#FF6B00',
+  ai_chats: '#9B59B6',
   doc: '#E8000D',
   task: '#FF6B00',
   ai_chat: '#9B59B6',

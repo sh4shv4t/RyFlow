@@ -3,8 +3,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import axios from 'axios';
 import App from './App';
 import './index.css';
+
+// Use an explicit backend origin when running from Electron/file protocol.
+if (window.location.protocol === 'file:' || window.electronAPI?.isElectron) {
+  axios.defaults.baseURL = 'http://localhost:3001';
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

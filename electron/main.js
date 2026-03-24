@@ -18,20 +18,40 @@ function startBackend() {
       silent: true,
     });
 
+    let settled = false;
+
     backendProcess.stdout?.on('data', (data) => {
       const msg = data.toString();
       console.log('[backend]', msg);
-      if (msg.includes('listening') || msg.includes('running')) {
+      if (!settled && (msg.includes('listening') || msg.includes('running'))) {
+        settled = true;
         resolve();
       }
     });
 
     backendProcess.stderr?.on('data', (data) => {
-      console.error('[backend:err]', data.toString());
+      const errText = data.toString();
+      console.error('[backend:err]', errText);
+      if (!settled && errText.includes('EADDRINUSE')) {
+        settled = true;
+        reject(new Error('Backend port 3001 is already in use'));
+      }
     });
 
-    // Resolve after a short delay in case the log message format differs
-    setTimeout(resolve, 3000);
+    backendProcess.on('exit', (code) => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`Backend exited early with code ${code}`));
+      }
+    });
+
+    // Fail fast if startup logs are never emitted.
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error('Backend startup timed out'));
+      }
+    }, 10000);
   });
 }
 
@@ -73,8 +93,13 @@ async function createWindow() {
 }
 
 app.on('ready', async () => {
-  await startBackend();
-  createWindow();
+  try {
+    await startBackend();
+    createWindow();
+  } catch (err) {
+    console.error('[electron] Failed to start backend:', err.message);
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => {

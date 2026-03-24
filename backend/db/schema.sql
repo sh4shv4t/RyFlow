@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
   workspace_id TEXT,
   avatar_color TEXT,
   language TEXT DEFAULT 'en',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Enforce workspace ownership for user records.
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -23,7 +25,10 @@ CREATE TABLE IF NOT EXISTS documents (
   content TEXT,
   created_by TEXT,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Keep documents tied to workspace/user lifecycle.
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -35,7 +40,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT DEFAULT 'todo',
   priority TEXT DEFAULT 'medium',
   due_date TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Keep task assignments and workspace links consistent.
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (assignee) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS nodes (
@@ -46,7 +54,9 @@ CREATE TABLE IF NOT EXISTS nodes (
   content_summary TEXT,
   embedding TEXT,
   source_id TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Ensure nodes are cleaned when a workspace is deleted.
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -55,7 +65,10 @@ CREATE TABLE IF NOT EXISTS edges (
   target_id TEXT NOT NULL,
   relationship_label TEXT,
   weight REAL DEFAULT 1.0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Keep edge references valid as nodes are removed.
+  FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
+  FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS voice_logs (
@@ -63,7 +76,9 @@ CREATE TABLE IF NOT EXISTS voice_logs (
   workspace_id TEXT NOT NULL,
   transcript TEXT,
   audio_path TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Ensure voice logs follow workspace lifecycle.
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sustainability_logs (
@@ -72,5 +87,7 @@ CREATE TABLE IF NOT EXISTS sustainability_logs (
   hours_used REAL,
   date TEXT,
   ai_tip TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Preserve log integrity for user-linked sustainability entries.
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );

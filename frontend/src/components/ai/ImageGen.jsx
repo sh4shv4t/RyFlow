@@ -22,6 +22,7 @@ export default function ImageGen() {
   const [prompt, setPrompt] = useState('');
   const [style, setStyle] = useState(STYLES[0]);
   const [imageUrl, setImageUrl] = useState(null);
+  const [imageObjectUrl, setImageObjectUrl] = useState(null);
   const [variations, setVariations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingVariations, setLoadingVariations] = useState(false);
@@ -36,9 +37,14 @@ export default function ImageGen() {
     try {
       const fullPrompt = prompt + style.suffix;
       const res = await axios.get('/api/ai/image', {
-        params: { prompt: fullPrompt, width: 1024, height: 768 }
+        params: { prompt: fullPrompt, width: 1024, height: 768 },
+        responseType: 'blob'
       });
-      setImageUrl(res.data.url);
+      // Render proxied image bytes using an object URL.
+      if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
+      const objectUrl = URL.createObjectURL(res.data);
+      setImageObjectUrl(objectUrl);
+      setImageUrl(objectUrl);
       toast.success('Image generated!');
     } catch (err) {
       toast.error('Image generation failed');

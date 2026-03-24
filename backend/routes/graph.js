@@ -18,6 +18,34 @@ router.get('/', (req, res) => {
   }
 });
 
+// GET /api/graph/nodes — Get all nodes for a workspace
+router.get('/nodes', (req, res) => {
+  try {
+    const { workspace_id } = req.query;
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    const nodes = db.prepare('SELECT id, workspace_id, type, title, content_summary, source_id, created_at FROM nodes WHERE workspace_id = ?').all(workspace_id);
+    res.json({ nodes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/graph/edges — Get all edges for a workspace
+router.get('/edges', (req, res) => {
+  try {
+    const { workspace_id } = req.query;
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    const edges = db.prepare(
+      'SELECT e.* FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+    ).all(workspace_id, workspace_id);
+    res.json({ edges });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/graph/nodes — Create a new node
 router.post('/nodes', async (req, res) => {
   try {

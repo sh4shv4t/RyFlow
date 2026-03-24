@@ -36,14 +36,15 @@ router.post('/transcribe', upload.single('audio'), async (req, res) => {
       return res.status(400).json({ error: 'No audio file provided' });
     }
 
-    // Rename to .wav if needed for whisper.cpp
-    const wavPath = req.file.path + '.wav';
-    fs.renameSync(req.file.path, wavPath);
+    // Preserve the original extension so whisper receives a real file format.
+    const ext = path.extname(req.file.originalname || '') || '.wav';
+    const tempPath = `${req.file.path}${ext}`;
+    fs.renameSync(req.file.path, tempPath);
 
-    const result = await transcribe(wavPath);
+    const result = await transcribe(tempPath);
 
     // Clean up temp file
-    try { fs.unlinkSync(wavPath); } catch {}
+    try { fs.unlinkSync(tempPath); } catch {}
 
     if (result.fallback) {
       return res.json({
@@ -57,9 +58,10 @@ router.post('/transcribe', upload.single('audio'), async (req, res) => {
     if (req.body.workspace_id && result.transcript) {
       const db = getDb();
       const logId = uuidv4();
+      // Persist transcript metadata while keeping deleted temp file paths out of SQLite.
       db.prepare(
-        'INSERT INTO voice_logs (id, workspace_id, transcript) VALUES (?, ?, ?)'
-      ).run(logId, req.body.workspace_id, result.transcript);
+        'INSERT INTO voice_logs (id, workspace_id, transcript, audio_path) VALUES (?, ?, ?, ?)'
+      ).run(logId, req.body.workspace_id, result.transcript, null);
 
       // Add to knowledge graph
       await createNode(req.body.workspace_id, 'voice', 'Voice Note', result.transcript.substring(0, 200), logId);

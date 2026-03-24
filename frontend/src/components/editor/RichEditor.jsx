@@ -2,6 +2,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -16,7 +18,7 @@ import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
 import AIAssistPanel from './AIAssistPanel';
 
-export default function RichEditor({ content, onSave, docId }) {
+export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [aiAction, setAiAction] = useState(null);
@@ -25,7 +27,24 @@ export default function RichEditor({ content, onSave, docId }) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // Disable history because Yjs collaboration manages undo/redo state.
+      StarterKit.configure({ history: !collabDoc }),
+      ...(collabDoc ? [
+        Collaboration.configure({ document: collabDoc, field: `doc-${docId}` }),
+        CollaborationCursor.configure({
+          provider: {
+            awareness: {
+              getStates: () => new Map(),
+              on: () => {},
+              off: () => {}
+            }
+          },
+          user: {
+            name: 'Collaborator',
+            color: '#E8000D'
+          }
+        })
+      ] : []),
       Highlight.configure({ multicolor: true }),
       Typography,
       Placeholder.configure({
@@ -139,11 +158,11 @@ export default function RichEditor({ content, onSave, docId }) {
         <ToolbarButton onClick={() => editor.chain().focus().redo().run()} icon={Redo} />
         <div className="w-px h-5 bg-white/10 mx-1" />
         <ToolbarButton onClick={handleSave} icon={Save} tooltip="Save" />
-        <div className="relative">
+        <div className="group relative">
           <ToolbarButton onClick={() => {}} icon={FileDown} tooltip="Export" />
-          <div className="absolute top-full left-0 mt-1 hidden group-hover:block">
-            <button onClick={() => handleExport('markdown')} className="text-xs">MD</button>
-            <button onClick={() => handleExport('text')} className="text-xs">TXT</button>
+          <div className="absolute top-full left-0 mt-1 hidden group-hover:block bg-amd-gray border border-white/10 rounded-lg overflow-hidden z-10">
+            <button onClick={() => handleExport('markdown')} className="block w-full text-left px-3 py-2 text-xs hover:bg-white/5">MD</button>
+            <button onClick={() => handleExport('text')} className="block w-full text-left px-3 py-2 text-xs hover:bg-white/5">TXT</button>
           </div>
         </div>
 

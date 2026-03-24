@@ -64,6 +64,8 @@ export default function WorkspaceSetup() {
       setWorkspace(workspace);
       setGlobalLang(language);
       if (amdStatus) setAiStatus(amdStatus);
+      // Persist first-run onboarding completion.
+      localStorage.setItem('ryflow_onboarded', 'true');
 
       toast.success('Welcome to RyFlow!');
     } catch (err) {

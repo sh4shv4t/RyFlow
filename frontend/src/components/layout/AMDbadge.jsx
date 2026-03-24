@@ -3,9 +3,18 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Monitor } from 'lucide-react';
 import useStore from '../../store/useStore';
+import { useEffect } from 'react';
+import { detectAMD } from '../../utils/amdDetect';
 
 export default function AMDbadge() {
-  const { aiStatus, aiActive } = useStore();
+  const { aiStatus, aiActive, setAiStatus } = useStore();
+
+  useEffect(() => {
+    // Refresh system acceleration status when the badge mounts.
+    detectAMD().then((status) => {
+      if (status) setAiStatus(status);
+    });
+  }, [setAiStatus]);
 
   const isROCm = aiStatus.rocmAvailable;
   const isGPU = aiStatus.gpuDetected;
@@ -25,7 +34,7 @@ export default function AMDbadge() {
       {isROCm ? (
         <>
           <Zap size={12} className="text-amd-green" />
-          <span>AMD ROCm — GPU Accelerated</span>
+          <span>⚡ AMD ROCm — GPU Accelerated</span>
         </>
       ) : (
         <>

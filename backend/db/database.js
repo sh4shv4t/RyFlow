@@ -3,13 +3,16 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', '..', 'ryflow.db');
+// Allow overriding DB location while keeping a sensible default for desktop builds.
+const DB_PATH = process.env.RYFLOW_DB_PATH || path.join(__dirname, '..', '..', 'ryflow.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db;
 
 // Initialize the database connection and create tables if needed
 function initDatabase() {
+  // Ensure parent directory exists when DB path is configured externally.
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

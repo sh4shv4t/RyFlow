@@ -1,14 +1,16 @@
 // Calls whisper.cpp subprocess for speech-to-text transcription
-const { execSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const WHISPER_PATH = process.env.WHISPER_PATH || path.join(__dirname, '..', '..', 'whisper.cpp', 'main');
+const WHISPER_PATH = process.env.WHISPER_PATH || path.join(__dirname, '..', '..', 'whisper.cpp', process.platform === 'win32' ? 'main.exe' : 'main');
 const WHISPER_MODEL = process.env.WHISPER_MODEL || path.join(__dirname, '..', '..', 'whisper.cpp', 'models', 'ggml-base.bin');
 
 // Checks if whisper.cpp binary and model are available
 function isWhisperAvailable() {
-  return fs.existsSync(WHISPER_PATH) && fs.existsSync(WHISPER_MODEL);
+  // Support both explicit executable path and extension-less override paths.
+  const fallbackWinPath = process.platform === 'win32' ? `${WHISPER_PATH}.exe` : WHISPER_PATH;
+  return (fs.existsSync(WHISPER_PATH) || fs.existsSync(fallbackWinPath)) && fs.existsSync(WHISPER_MODEL);
 }
 
 // Transcribes an audio file using whisper.cpp and returns the text
@@ -19,9 +21,18 @@ async function transcribe(audioFilePath) {
 
   try {
     const outputBase = audioFilePath.replace(/\.[^.]+$/, '');
-    const cmd = `"${WHISPER_PATH}" -m "${WHISPER_MODEL}" -f "${audioFilePath}" --output-txt -of "${outputBase}"`;
-    
-    execSync(cmd, { timeout: 60000, stdio: 'pipe' });
+    // Use direct argv invocation to avoid shell escaping issues on Windows paths.
+    const binaryPath = fs.existsSync(WHISPER_PATH) ? WHISPER_PATH : (process.platform === 'win32' ? `${WHISPER_PATH}.exe` : WHISPER_PATH);
+    const result = spawnSync(binaryPath, ['-m', WHISPER_MODEL, '-f', audioFilePath, '--output-txt', '-of', outputBase], {
+      timeout: 60000,
+      stdio: 'pipe'
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error((result.stderr || '').toString() || `Whisper exited with code ${result.status}`);
+    }
 
     const txtPath = outputBase + '.txt';
     if (fs.existsSync(txtPath)) {

@@ -20,12 +20,25 @@ async function semanticSearch(query, workspaceId, topK = 5) {
     'SELECT * FROM nodes WHERE workspace_id = ? AND embedding IS NOT NULL'
   ).all(workspaceId);
 
+  // Return an empty result set when there is no embedded content yet.
+  if (!nodes.length || !queryEmbedding.length) {
+    return [];
+  }
+
   return nodes
-    .map(node => ({
-      ...node,
-      embedding: undefined,
-      score: cosineSimilarity(queryEmbedding, JSON.parse(node.embedding))
-    }))
+    .map(node => {
+      let parsedEmbedding = [];
+      try {
+        parsedEmbedding = JSON.parse(node.embedding);
+      } catch {
+        parsedEmbedding = [];
+      }
+      return {
+        ...node,
+        embedding: undefined,
+        score: cosineSimilarity(queryEmbedding, parsedEmbedding)
+      };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }

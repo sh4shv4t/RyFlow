@@ -16,11 +16,13 @@ export default function useGraph() {
     if (!workspace) return;
     setLoading(true);
     try {
-      const res = await axios.get('/api/graph', {
-        params: { workspace_id: workspace.id }
-      });
-      setNodes(res.data.nodes || []);
-      setEdges(res.data.edges || []);
+      // Fetch nodes and edges explicitly to match graph API contract.
+      const [nodesRes, edgesRes] = await Promise.all([
+        axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/graph/edges', { params: { workspace_id: workspace.id } })
+      ]);
+      setNodes(nodesRes.data.nodes || []);
+      setEdges(edgesRes.data.edges || []);
     } catch (err) {
       toast.error('Failed to load knowledge graph');
     } finally {

@@ -15,9 +15,10 @@ import useStore from './store/useStore';
 
 export default function App() {
   const { user, workspace, theme } = useStore();
+  const isOnboarded = localStorage.getItem('ryflow_onboarded') === 'true';
 
-  // Show onboarding if no user/workspace configured
-  if (!user || !workspace) {
+  // Show onboarding only on first launch or when core profile data is missing.
+  if (!isOnboarded || !user || !workspace) {
     return (
       <div className={theme === 'light' ? 'light-mode' : ''}>
         <WorkspaceSetup />

@@ -2,10 +2,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users } from 'lucide-react';
-import usePeer from '../../hooks/usePeer';
 
-export default function CollabPresence() {
-  const { connected, presenceList } = usePeer();
+export default function CollabPresence({ connected = false, presenceList = [] }) {
 
   if (!connected || presenceList.length <= 1) {
     return null;
@@ -32,7 +30,7 @@ export default function CollabPresence() {
         </AnimatePresence>
       </div>
       <span className="text-xs text-amd-white/40">
-        {presenceList.length} editing
+        {presenceList.filter((p) => !!p?.socketId).length} editing
       </span>
     </div>
   );

@@ -64,9 +64,11 @@ export default function useVoice() {
         setRecording(false);
         setTranscribing(true);
 
-        const blob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        // Preserve recorder container format instead of relabeling as wav.
+        const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         const formData = new FormData();
-        formData.append('audio', blob, 'recording.wav');
+        formData.append('audio', blob, mimeType.includes('ogg') ? 'recording.ogg' : 'recording.webm');
         if (workspaceId) formData.append('workspace_id', workspaceId);
 
         try {

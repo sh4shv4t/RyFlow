@@ -21,8 +21,12 @@ async function chat(messages, model = 'phi3:mini', stream = false) {
     const data = await response.json();
     return data.message.content;
   } catch (err) {
-    console.error('[Ollama] Chat error:', err.message);
-    throw err;
+    const isOffline = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed/i.test(err.message || '');
+    const normalized = new Error(isOffline ? 'Ollama is offline or unreachable at http://localhost:11434' : err.message);
+    // Attach machine-readable details so routes can return clear API errors.
+    normalized.code = isOffline ? 'OLLAMA_OFFLINE' : 'OLLAMA_ERROR';
+    console.error('[Ollama] Chat error:', normalized.message);
+    throw normalized;
   }
 }
 
@@ -40,10 +44,14 @@ async function embed(text) {
     }
 
     const data = await response.json();
-    return data.embedding;
+    // Guarantee a numeric embedding vector for cosine similarity routines.
+    return Array.isArray(data.embedding) ? data.embedding.map((v) => Number(v)) : [];
   } catch (err) {
-    console.error('[Ollama] Embedding error:', err.message);
-    throw err;
+    const isOffline = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed/i.test(err.message || '');
+    const normalized = new Error(isOffline ? 'Ollama is offline or unreachable at http://localhost:11434' : err.message);
+    normalized.code = isOffline ? 'OLLAMA_OFFLINE' : 'OLLAMA_ERROR';
+    console.error('[Ollama] Embedding error:', normalized.message);
+    throw normalized;
   }
 }
 

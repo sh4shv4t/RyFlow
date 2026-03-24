@@ -58,7 +58,8 @@ io.on('connection', (socket) => {
   // User joins a workspace room
   socket.on('join-workspace', ({ workspaceId, userName, userId, avatarColor }) => {
     socket.join(workspaceId);
-    connectedUsers.set(socket.id, { workspaceId, userName, userId, avatarColor });
+    // Include socketId so peers can perform direct signaling.
+    connectedUsers.set(socket.id, { socketId: socket.id, workspaceId, userName, userId, avatarColor });
 
     // Broadcast presence to room
     const roomUsers = Array.from(connectedUsers.values())

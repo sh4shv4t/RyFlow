@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
+const { chat } = require('../services/ollamaService');
 const { v4: uuidv4 } = require('uuid');
 
 // POST /api/workspace — Create a new workspace
@@ -122,14 +123,16 @@ router.post('/sustainability', async (req, res) => {
     // Try to generate AI tip
     let ai_tip = null;
     try {
-      const { chat } = require('../services/ollamaService');
       ai_tip = await chat(
         [{ role: 'user', content: `Give a one-sentence energy saving tip for a college student who used their laptop for ${hours_used} hours today. Be practical and brief.` }],
         'phi3:mini',
         false
       );
       db.prepare('UPDATE sustainability_logs SET ai_tip = ? WHERE id = ?').run(ai_tip, id);
-    } catch {}
+    } catch (aiErr) {
+      // Keep logging resilient even when AI services are unavailable.
+      console.warn('[Workspace] Sustainability AI tip unavailable:', aiErr.message);
+    }
 
     const log = db.prepare('SELECT * FROM sustainability_logs WHERE id = ?').get(id);
     res.status(201).json(log);

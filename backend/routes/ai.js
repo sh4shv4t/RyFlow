@@ -91,6 +91,8 @@ router.post('/chat/stream', async (req, res) => {
 
     let buffer = '';
     stream.on('data', (chunk) => {
+      // Stop streaming work if the client is already gone.
+      if (res.writableEnded) return;
       buffer += chunk.toString();
       // Ollama streams newline-delimited JSON
       const lines = buffer.split('\n');
@@ -100,10 +102,10 @@ router.post('/chat/stream', async (req, res) => {
           try {
             const parsed = JSON.parse(line);
             const text = parsed.message?.content || '';
-            if (text) {
+            if (text && !res.writableEnded) {
               res.write(`data: ${JSON.stringify({ text })}\n\n`);
             }
-            if (parsed.done) {
+            if (parsed.done && !res.writableEnded) {
               res.write('data: [DONE]\n\n');
             }
           } catch {
@@ -119,17 +121,21 @@ router.post('/chat/stream', async (req, res) => {
         try {
           const parsed = JSON.parse(buffer);
           const text = parsed.message?.content || '';
-          if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
+          if (text && !res.writableEnded) res.write(`data: ${JSON.stringify({ text })}\n\n`);
         } catch {}
       }
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.writableEnded) {
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
     });
 
     stream.on('error', (err) => {
       console.error('[AI Stream] Error:', err.message);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        res.end();
+      }
     });
 
     req.on('close', () => {
@@ -139,6 +145,21 @@ router.post('/chat/stream', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: 'AI service unavailable. Is Ollama running?', details: err.message });
     }
+  }
+});
+
+// POST /api/ai/embed — Generate an embedding using nomic-embed-text
+router.post('/embed', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'text is required' });
+    }
+    // Return a normalized numeric vector for downstream cosine similarity.
+    const embedding = await ollamaService.embed(text);
+    res.json({ embedding });
+  } catch (err) {
+    res.status(500).json({ error: 'Embedding service unavailable. Is Ollama running?', details: err.message });
   }
 });
 
@@ -157,9 +178,21 @@ router.get('/image', async (req, res) => {
   try {
     const { prompt, width, height } = req.query;
     if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+    // Proxy the image bytes so frontend can consume a blob offline-first style.
+    const result = await generateImage(prompt, parseInt(width) || 1024, parseInt(height) || 768);
+    res.set('Content-Type', result.contentType);
+    res.send(result.buffer);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    const url = getImageUrl(prompt, parseInt(width) || 1024, parseInt(height) || 768);
-    res.json({ url });
+// GET /api/ai/image/url — Return direct Pollinations URL for optional client-side linking
+router.get('/image/url', async (req, res) => {
+  try {
+    const { prompt, width, height } = req.query;
+    if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+    res.json({ url: getImageUrl(prompt, parseInt(width) || 1024, parseInt(height) || 768) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

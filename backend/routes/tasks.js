@@ -110,7 +110,8 @@ router.post('/nl-create', async (req, res) => {
       return res.status(400).json({ error: 'text and workspace_id are required' });
     }
 
-    const prompt = `Parse this into tasks. Return ONLY valid JSON array with no markdown formatting: [{title, description, assignee, due_date, priority}]. Priority must be "low", "medium", or "high". If no due date, use null. If no assignee, use empty string. Input: "${text}"`;
+    // Use a strict prompt format so task extraction stays deterministic.
+    const prompt = `Parse this into actionable tasks. Return ONLY a valid JSON array, no explanation, no markdown:\n[{title, description, assignee, due_date, priority}]\nInput: ${text}`;
 
     const response = await chat(
       [{ role: 'user', content: prompt }],
@@ -119,9 +120,11 @@ router.post('/nl-create', async (req, res) => {
     );
 
     // Extract JSON from response
-    const jsonMatch = response.match(/\[[\s\S]*?\]/);
+    // Strip markdown fences before JSON extraction to avoid parse failures.
+    const sanitized = String(response || '').replace(/```json|```/gi, '').trim();
+    const jsonMatch = sanitized.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      return res.status(422).json({ error: 'Could not parse AI response into tasks', raw: response });
+      return res.status(422).json({ error: 'Could not parse AI response into tasks', raw: sanitized });
     }
 
     const parsedTasks = JSON.parse(jsonMatch[0]);

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
+const { generateAndStoreEmbedding } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
 
 // GET /api/docs — List all documents in a workspace
@@ -58,7 +59,7 @@ router.get('/:id', (req, res) => {
 });
 
 // PUT /api/docs/:id — Update a document's content and/or title
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { title, content } = req.body;
     const db = getDb();
@@ -75,6 +76,8 @@ router.put('/:id', (req, res) => {
     if (node) {
       db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?')
         .run(title || existing.title, (content || '').substring(0, 200), node.id);
+      // Refresh semantic embedding whenever document content changes.
+      await generateAndStoreEmbedding(node.id, `${title || existing.title}. ${content !== undefined ? content : existing.content || ''}`);
     }
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);

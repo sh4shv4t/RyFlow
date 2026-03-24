@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RichEditor from '../components/editor/RichEditor';
 import CollabPresence from '../components/editor/CollabPresence';
+import usePeer from '../hooks/usePeer';
 
 export default function Editor() {
   const { id } = useParams();
@@ -17,6 +18,7 @@ export default function Editor() {
   const [currentDoc, setCurrentDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
+  const { connected, presenceList, sharedDoc } = usePeer();
 
   // Fetch all documents
   const fetchDocuments = useCallback(async () => {
@@ -197,7 +199,7 @@ export default function Editor() {
                 }}
                 className="font-heading font-semibold text-amd-white bg-transparent outline-none text-lg"
               />
-              <CollabPresence />
+              <CollabPresence connected={connected} presenceList={presenceList} />
             </div>
 
             {/* TipTap editor */}
@@ -206,6 +208,7 @@ export default function Editor() {
                 content={getEditorContent()}
                 onSave={handleSave}
                 docId={currentDoc.id}
+                collabDoc={sharedDoc}
               />
             </div>
           </>

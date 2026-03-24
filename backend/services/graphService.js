@@ -47,12 +47,15 @@ async function autoCreateRelationships(newNodeId, workspaceId, newTitle) {
     );
 
     // Parse the JSON response from LLM
-    const jsonMatch = response.match(/\[[\s\S]*?\]/);
+    // Remove markdown fences so malformed model wrappers do not break parsing.
+    const clean = String(response || '').replace(/```json|```/gi, '').trim();
+    const jsonMatch = clean.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return;
 
     const relations = JSON.parse(jsonMatch[0]);
     for (const rel of relations.slice(0, 3)) {
-      if (rel.id && rel.relationship_label) {
+      const targetExists = db.prepare('SELECT id FROM nodes WHERE id = ? AND workspace_id = ?').get(rel.id, workspaceId);
+      if (rel.id && rel.relationship_label && targetExists) {
         const edgeId = uuidv4();
         db.prepare(
           'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
