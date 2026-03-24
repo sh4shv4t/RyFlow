@@ -9,7 +9,8 @@
 
 ---
 
-[![GitHub last commit](https://img.shields.io/github/last-commit/sh4shv4t/LLM-Visibility-Optimization-Tool/main)](https://github.com/sh4shv4t/RyFlow)   
+[![GitHub last commit](https://img.shields.io/github/last-commit/sh4shv4t/RyFlow/main
+)](https://github.com/sh4shv4t/RyFlow)   
 [![GitHub issues](https://img.shields.io/github/issues/sh4shv4t/LLM-Visibility-Optimization-Tool)](https://github.com/sh4shv4t/RyFlow/issues) 
 
 ## Features
