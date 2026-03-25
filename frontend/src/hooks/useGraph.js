@@ -9,22 +9,48 @@ export default function useGraph() {
   const [edges, setEdges] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isNeighborhoodMode, setIsNeighborhoodMode] = useState(false);
+  const [centerNodeId, setCenterNodeId] = useState(null);
   const { workspace, setAiActive } = useStore();
 
   // Fetches the full knowledge graph for the current workspace
-  const fetchGraph = useCallback(async () => {
+  const fetchGraph = useCallback(async (options = {}) => {
     if (!workspace) return;
     setLoading(true);
     try {
+      const loadAll = Boolean(options.all);
+      const limit = Number(options.limit || 200);
       // Fetch nodes and edges explicitly to match graph API contract.
       const [nodesRes, edgesRes] = await Promise.all([
-        axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit } }),
         axios.get('/api/graph/edges', { params: { workspace_id: workspace.id } })
       ]);
       setNodes(nodesRes.data.nodes || []);
       setEdges(edgesRes.data.edges || []);
+      setIsNeighborhoodMode(false);
+      setCenterNodeId(null);
     } catch (err) {
       toast.error('Failed to load knowledge graph');
+    } finally {
+      setLoading(false);
+    }
+  }, [workspace]);
+
+  const fetchNeighborhood = useCallback(async (nodeId, hops = 2) => {
+    if (!workspace || !nodeId) return;
+    setLoading(true);
+    try {
+      const res = await axios.get('/api/graph/neighborhood', {
+        params: { workspace_id: workspace.id, node_id: nodeId, hops }
+      });
+      setNodes(res.data.nodes || []);
+      setEdges(res.data.edges || []);
+      setIsNeighborhoodMode(true);
+      setCenterNodeId(res.data.center || nodeId);
+      return res.data;
+    } catch (err) {
+      toast.error('Failed to load neighborhood graph');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -70,5 +96,16 @@ export default function useGraph() {
     }
   }, [workspace, fetchGraph]);
 
-  return { nodes, edges, searchResults, loading, fetchGraph, search, addNode };
+  return {
+    nodes,
+    edges,
+    searchResults,
+    loading,
+    isNeighborhoodMode,
+    centerNodeId,
+    fetchGraph,
+    fetchNeighborhood,
+    search,
+    addNode
+  };
 }

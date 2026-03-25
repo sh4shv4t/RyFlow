@@ -4,14 +4,16 @@ import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Home, FileText, CheckSquare, GitBranch, Cpu,
-  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler
+  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler, CalendarDays, Tags
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { APP_VERSION } from '../../constants/appVersion';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
+  { to: '/editor?daily=today', icon: CalendarDays, label: "Today's Note" },
   { to: '/editor', icon: FileText, label: 'Editor' },
+  { to: '/tags', icon: Tags, label: 'Tags' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/graph', icon: GitBranch, label: 'Graph' },
   { to: '/ai', icon: Cpu, label: 'AI Studio' },
@@ -43,6 +45,9 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 space-y-1">
+        {!sidebarCollapsed && (
+          <div className="px-3 py-1 text-[10px] text-amd-white/30">Quick Search: Ctrl/Cmd+K</div>
+        )}
         {navItems.map((item) => (
           <NavLink
             key={item.to}

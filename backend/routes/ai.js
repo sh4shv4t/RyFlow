@@ -10,18 +10,18 @@ const { semanticSearch } = require('../services/embeddingService');
 async function buildRagMessages(messages, workspaceId) {
   const safeMessages = Array.isArray(messages) ? [...messages] : [];
   if (!workspaceId || !safeMessages.length) {
-    return { finalMessages: safeMessages, ragUsed: false };
+    return { finalMessages: safeMessages, ragUsed: false, citations: [] };
   }
 
   const lastUser = [...safeMessages].reverse().find((m) => m.role === 'user' && m.content);
   if (!lastUser) {
-    return { finalMessages: safeMessages, ragUsed: false };
+    return { finalMessages: safeMessages, ragUsed: false, citations: [] };
   }
 
   const matches = await semanticSearch(lastUser.content, workspaceId, 5);
   const strongMatches = matches.filter((m) => Number(m.score || 0) > 0.3);
   if (!strongMatches.length) {
-    return { finalMessages: safeMessages, ragUsed: false };
+    return { finalMessages: safeMessages, ragUsed: false, citations: [] };
   }
 
   const ragContext = strongMatches
@@ -32,7 +32,14 @@ async function buildRagMessages(messages, workspaceId) {
 
   return {
     finalMessages: [{ role: 'system', content: ragSystemPrompt }, ...safeMessages],
-    ragUsed: true
+    ragUsed: true,
+    citations: strongMatches.map((m) => ({
+      id: m.id,
+      source_id: m.source_id,
+      type: m.type,
+      title: m.title,
+      score: Number(m.score || 0)
+    }))
   };
 }
 
@@ -106,9 +113,9 @@ router.post('/chat', async (req, res) => {
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages array is required' });
     }
-    const { finalMessages, ragUsed } = await buildRagMessages(messages, workspace_id);
+    const { finalMessages, ragUsed, citations } = await buildRagMessages(messages, workspace_id);
     const response = await ollamaService.chat(finalMessages, model || 'phi3:mini', false);
-    res.json({ content: response, ragUsed });
+    res.json({ content: response, ragUsed, citations });
   } catch (err) {
     res.status(500).json({ error: 'AI service unavailable. Is Ollama running?', details: err.message });
   }
@@ -156,12 +163,12 @@ router.post('/chat/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const { finalMessages, ragUsed } = await buildRagMessages(messages, workspace_id);
+    const { finalMessages, ragUsed, citations } = await buildRagMessages(messages, workspace_id);
     const stream = await ollamaService.chat(finalMessages, model || 'phi3:mini', true);
 
     // Send a metadata event first so frontend can show RAG usage indicator.
     if (!res.writableEnded) {
-      res.write(`data: ${JSON.stringify({ ragUsed })}\n\n`);
+      res.write(`data: ${JSON.stringify({ ragUsed, citations })}\n\n`);
     }
 
     let buffer = '';

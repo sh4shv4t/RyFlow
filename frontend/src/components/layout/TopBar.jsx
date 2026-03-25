@@ -1,7 +1,7 @@
 // TopBar — shows workspace name, AMD status badge, and peer count
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Users, Wifi, WifiOff } from 'lucide-react';
+import { Cpu, Users, Wifi, WifiOff, Command } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import { startPeerPolling, stopPeerPolling } from '../../utils/lanDiscovery';
@@ -9,7 +9,7 @@ import AMDbadge from './AMDbadge';
 import ThemeToggle from './ThemeToggle';
 
 export default function TopBar() {
-  const { aiStatus, setAiStatus, peers, setPeers, user, workspace, aiActive } = useStore();
+  const { aiStatus, setAiStatus, peers, setPeers, user, workspace, aiActive, setCommandPaletteOpen } = useStore();
 
   // Fetch AMD/system status on mount
   useEffect(() => {
@@ -39,6 +39,13 @@ export default function TopBar() {
 
       {/* Right: status indicators */}
       <div className="flex items-center gap-4">
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-white/10 text-amd-white/60 hover:text-amd-white hover:bg-white/5 text-xs"
+        >
+          <Command size={12} /> Search
+        </button>
+
         {/* Ollama status */}
         {!aiStatus.ollamaRunning && (
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amd-orange/10 text-amd-orange text-xs">

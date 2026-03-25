@@ -4,7 +4,8 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
+const { buildEmbedText } = require('../services/embeddingService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 
 // Builds task metadata for graph node storage.
@@ -58,7 +59,7 @@ router.post('/', async (req, res) => {
     const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
     const metadata = buildTaskMetadata({ priority, assignee, due_date, status: status || 'todo' });
     const node = await createNode(workspace_id, 'task', title, summary, id, metadata);
-    await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title, content_summary: summary, metadata }));
+    enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title, content_summary: summary, metadata }));
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     res.status(201).json(task);
@@ -96,7 +97,7 @@ router.patch('/:id', async (req, res) => {
       const metadata = buildTaskMetadata(task);
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(task.title, summary, JSON.stringify(metadata), node.id);
-      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title: task.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title: task.title, content_summary: summary, metadata }));
     }
 
     res.json(task);
@@ -171,7 +172,7 @@ router.post('/nl-create', async (req, res) => {
         status: 'todo'
       });
       const node = await createNode(workspace_id, 'task', t.title, summary, id, metadata);
-      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title: t.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title: t.title, content_summary: summary, metadata }));
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
       createdTasks.push(task);

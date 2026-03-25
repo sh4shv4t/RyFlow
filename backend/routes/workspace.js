@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
+const { semanticSearch } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
 
 // Parses JSON metadata safely for aggregate statistics.
@@ -116,6 +117,38 @@ router.get('/', (req, res) => {
     res.json({ workspaces });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/workspace/search?workspace_id=...&q=...
+router.get('/search', async (req, res) => {
+  try {
+    const { workspace_id, q } = req.query;
+    const query = String(q || '').trim();
+    if (!workspace_id || !query) {
+      return res.status(400).json({ error: 'workspace_id and q are required' });
+    }
+
+    const semantic = await semanticSearch(query, workspace_id, 8);
+    const db = getDb();
+    const lexical = db.prepare(
+      `SELECT id, type, title, content_summary, source_id, created_at
+       FROM nodes
+       WHERE workspace_id = ?
+         AND (lower(title) LIKE lower(?) OR lower(content_summary) LIKE lower(?))
+       ORDER BY created_at DESC
+       LIMIT 8`
+    ).all(workspace_id, `%${query}%`, `%${query}%`);
+
+    const merged = new Map();
+    semantic.forEach((item) => merged.set(item.id, { ...item, reason: 'semantic' }));
+    lexical.forEach((item) => {
+      if (!merged.has(item.id)) merged.set(item.id, { ...item, score: 0.2, reason: 'lexical' });
+    });
+
+    return res.json({ results: Array.from(merged.values()).slice(0, 10) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

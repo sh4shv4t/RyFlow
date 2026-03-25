@@ -1,5 +1,6 @@
 // ChatPanel — Local LLM chat interface with streaming, persistence, and prompt templates
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Zap, Loader2, Trash2, ChevronDown } from 'lucide-react';
 import useOllama from '../../hooks/useOllama';
@@ -23,15 +24,32 @@ const LANGUAGES = [
 ];
 
 export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewChat }) {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [runtimeTemplates, setRuntimeTemplates] = useState(PROMPT_TEMPLATES);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [chatTitle, setChatTitle] = useState('New Chat');
   const [titleGenerated, setTitleGenerated] = useState(false);
   const messagesEndRef = useRef(null);
   const { chatStream, loading, streamingText } = useOllama();
   const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace, setAiActive } = useStore();
+
+  useEffect(() => {
+    if (!workspace?.id) return;
+    axios.get('/api/templates', { params: { workspace_id: workspace.id, type: 'chat' } })
+      .then((res) => {
+        const fromApi = (res.data.templates || []).map((tpl) => ({
+          label: `🧩 ${tpl.name}`,
+          prompt: tpl.content
+        }));
+        setRuntimeTemplates([...PROMPT_TEMPLATES, ...fromApi]);
+      })
+      .catch(() => {
+        setRuntimeTemplates(PROMPT_TEMPLATES);
+      });
+  }, [workspace?.id]);
 
   // Builds a fallback chat title from first user text.
   const fallbackTitle = useCallback((text) => {
@@ -158,8 +176,9 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
 
       const fullResponse = typeof streamResult === 'string' ? streamResult : streamResult?.content || '';
       const ragUsed = typeof streamResult === 'object' ? Boolean(streamResult?.ragUsed) : false;
+      const citations = typeof streamResult === 'object' ? (streamResult?.citations || []) : [];
 
-      const finalMessages = [...newMessages, { role: 'assistant', content: fullResponse, ragUsed }];
+      const finalMessages = [...newMessages, { role: 'assistant', content: fullResponse, ragUsed, citations }];
       setMessages(finalMessages);
       setCurrentChatId(workingChatId || null);
       await persistChat(finalMessages, { ragUsed });
@@ -234,7 +253,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
             </p>
             {/* Prompt templates */}
             <div className="grid grid-cols-2 gap-2 w-full max-w-md">
-              {PROMPT_TEMPLATES.map((t, i) => (
+              {runtimeTemplates.map((t, i) => (
                 <button
                   key={i}
                   onClick={() => useTemplate(t)}
@@ -270,6 +289,25 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
                   {msg.ragUsed && (
                     <div className="mt-1 text-[11px] italic text-amd-orange/90">
                       📚 Answered using your workspace knowledge
+                    </div>
+                  )}
+                  {Array.isArray(msg.citations) && msg.citations.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {msg.citations.map((c, idx) => (
+                        <button
+                          key={`${c.id}-${idx}`}
+                          onClick={() => {
+                            if (c.type === 'doc') navigate(c.source_id ? `/editor/${c.source_id}` : '/editor');
+                            else if (c.type === 'code') navigate(c.source_id ? `/code/${c.source_id}` : '/code');
+                            else if (c.type === 'canvas') navigate(c.source_id ? `/canvas/${c.source_id}` : '/canvas');
+                            else if (c.type === 'task') navigate('/tasks');
+                            else navigate('/graph');
+                          }}
+                          className="text-[10px] px-2 py-1 rounded-full bg-amd-orange/20 text-amd-orange hover:bg-amd-orange/30"
+                        >
+                          {c.title}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </>
@@ -343,7 +381,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
               exit={{ opacity: 0, y: -10 }}
               className="mt-2 glass-card p-2 space-y-1"
             >
-              {PROMPT_TEMPLATES.map((t, i) => (
+              {runtimeTemplates.map((t, i) => (
                 <button
                   key={i}
                   onClick={() => useTemplate(t)}

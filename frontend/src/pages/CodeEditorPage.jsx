@@ -6,6 +6,7 @@ import { Code2, FilePlus2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
+import TagPicker from '../components/common/TagPicker';
 
 const LANGUAGE_LABELS = {
   javascript: 'JavaScript',
@@ -56,6 +57,7 @@ export default function CodeEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [fileTags, setFileTags] = useState([]);
 
   // Fetches all saved code files for current workspace.
   const fetchFiles = useCallback(async () => {
@@ -80,12 +82,18 @@ export default function CodeEditorPage() {
       const res = await axios.get(`/api/code/${fileId}`);
       const file = res.data;
       setActiveFile(file);
+      if (workspace?.id) {
+        const tagsRes = await axios.get('/api/tags/by-source', {
+          params: { workspace_id: workspace.id, type: 'code', source_id: file.id }
+        });
+        setFileTags(tagsRes.data.tags || []);
+      }
       setLastSavedAt(file.updated_at || file.created_at || null);
       navigate(`/code/${file.id}`);
     } catch (err) {
       toast.error('Failed to load file');
     }
-  }, [navigate]);
+  }, [navigate, workspace?.id]);
 
   useEffect(() => {
     if (!id || !files.length) return;
@@ -127,6 +135,14 @@ export default function CodeEditorPage() {
       const saved = res.data;
       setActiveFile(saved);
       setLastSavedAt(saved.updated_at || saved.created_at || new Date().toISOString());
+      if (workspace?.id && saved.id) {
+        await axios.post('/api/tags/by-source', {
+          workspace_id: workspace.id,
+          type: 'code',
+          source_id: saved.id,
+          tag_ids: fileTags.map((t) => t.id || t)
+        });
+      }
       await fetchFiles();
       if (saved.id) navigate(`/code/${saved.id}`);
       toast.success('Code file saved');
@@ -136,7 +152,22 @@ export default function CodeEditorPage() {
       setSaving(false);
       setAiActive(false);
     }
-  }, [workspace?.id, activeFile, user?.id, fetchFiles, navigate, setAiActive]);
+  }, [workspace?.id, activeFile, user?.id, fetchFiles, navigate, setAiActive, fileTags]);
+
+  const saveTags = async (nextTags) => {
+    setFileTags(nextTags);
+    if (!workspace?.id || !activeFile?.id) return;
+    try {
+      await axios.post('/api/tags/by-source', {
+        workspace_id: workspace.id,
+        type: 'code',
+        source_id: activeFile.id,
+        tag_ids: nextTags.map((t) => t.id || t)
+      });
+    } catch {
+      toast.error('Failed to save code tags');
+    }
+  };
 
   // Updates local file title and infers language from extension when possible.
   const handleTitleChange = useCallback((title) => {
@@ -205,6 +236,10 @@ export default function CodeEditorPage() {
             <Save size={14} /> {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
+
+        {activeFile && (
+          <TagPicker value={fileTags} onChange={saveTags} compact />
+        )}
 
         {!activeFile ? (
           <div className="flex-1 glass-card flex items-center justify-center text-amd-white/40">

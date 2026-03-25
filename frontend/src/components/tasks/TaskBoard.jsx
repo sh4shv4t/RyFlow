@@ -5,6 +5,7 @@ import { Plus, Trash2, Edit3, Calendar, User, GripVertical } from 'lucide-react'
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import TagPicker from '../common/TagPicker';
 
 const COLUMNS = [
   { id: 'todo', label: 'Todo', color: '#F5F5F0' },
@@ -227,13 +228,37 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
 
 // Task card with inline editing and new-item animation.
 function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStart, onDragEnd }) {
+  const { workspace } = useStore();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
+  const [tags, setTags] = useState([]);
 
   useEffect(() => {
     setTitle(task.title || '');
     setDescription(task.description || '');
   }, [task.title, task.description]);
+
+  useEffect(() => {
+    if (!workspace?.id || !task?.id) return;
+    axios.get('/api/tags/by-source', {
+      params: { workspace_id: workspace.id, type: 'task', source_id: task.id }
+    }).then((res) => setTags(res.data.tags || [])).catch(() => setTags([]));
+  }, [workspace?.id, task?.id]);
+
+  const saveTags = async (nextTags) => {
+    if (!workspace?.id || !task?.id) return;
+    setTags(nextTags);
+    try {
+      await axios.post('/api/tags/by-source', {
+        workspace_id: workspace.id,
+        type: 'task',
+        source_id: task.id,
+        tag_ids: nextTags.map((t) => t.id || t)
+      });
+    } catch {
+      toast.error('Failed to save task tags');
+    }
+  };
 
   return (
     <motion.div
@@ -337,6 +362,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 className="text-xs bg-black/20 rounded px-2 py-1 text-amd-white outline-none"
               />
             </div>
+            <TagPicker value={tags} onChange={saveTags} compact />
           </motion.div>
         )}
       </AnimatePresence>

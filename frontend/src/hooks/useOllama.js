@@ -10,6 +10,7 @@ export default function useOllama() {
   const [response, setResponse] = useState('');
   const [error, setError] = useState(null);
   const [ragUsed, setRagUsed] = useState(false);
+  const [citations, setCitations] = useState([]);
   const { selectedModel, setAiActive, language, workspace } = useStore();
   const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
     ? 'http://localhost:3001'
@@ -58,6 +59,7 @@ export default function useOllama() {
     setAiActive(true);
     setError(null);
     setRagUsed(false);
+    setCitations([]);
     try {
       const finalMessages = buildLanguageLockedMessages(messages);
 
@@ -69,7 +71,12 @@ export default function useOllama() {
       // Expose latest response for consumers that use stateful API shape.
       setResponse(res.data.content || '');
       setRagUsed(Boolean(res.data.ragUsed));
-      return { content: res.data.content || '', ragUsed: Boolean(res.data.ragUsed) };
+      setCitations(Array.isArray(res.data.citations) ? res.data.citations : []);
+      return {
+        content: res.data.content || '',
+        ragUsed: Boolean(res.data.ragUsed),
+        citations: Array.isArray(res.data.citations) ? res.data.citations : []
+      };
     } catch (err) {
       setError(err.message || 'AI service unavailable');
       toast.error('AI service unavailable. Is Ollama running?');
@@ -87,6 +94,7 @@ export default function useOllama() {
     setStreamingText('');
     setError(null);
     setRagUsed(false);
+    setCitations([]);
 
     try {
       const finalMessages = buildLanguageLockedMessages(messages);
@@ -109,6 +117,7 @@ export default function useOllama() {
       const decoder = new TextDecoder();
       let fullText = '';
       let localRagUsed = false;
+      let localCitations = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -127,18 +136,22 @@ export default function useOllama() {
                 localRagUsed = parsed.ragUsed;
                 setRagUsed(localRagUsed);
               }
+              if (Array.isArray(parsed.citations)) {
+                localCitations = parsed.citations;
+                setCitations(localCitations);
+              }
               if (parsed.text) {
                 fullText += parsed.text;
                 setStreamingText(fullText);
                 setResponse(fullText);
-                onChunk && onChunk(parsed.text, fullText, localRagUsed);
+                onChunk && onChunk(parsed.text, fullText, localRagUsed, localCitations);
               }
             } catch {}
           }
         }
       }
 
-      return { content: fullText, ragUsed: localRagUsed };
+      return { content: fullText, ragUsed: localRagUsed, citations: localCitations };
     } catch (err) {
       setError(err.message || 'AI streaming failed');
       toast.error('AI streaming failed. Is Ollama running?');
@@ -172,6 +185,7 @@ export default function useOllama() {
     response,
     error,
     ragUsed,
+    citations,
     isLoading: loading,
     loading,
     streamingText

@@ -4,7 +4,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
+const { buildEmbedText } = require('../services/embeddingService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Parses serialized messages defensively.
 function parseMessages(messagesText) {
@@ -51,22 +52,12 @@ async function upsertChatNode(chat) {
   if (existing) {
     db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
       .run(title, summary, JSON.stringify(metadata), existing.id);
-    await generateAndStoreEmbedding(existing.id, buildEmbedText({
-      type: 'ai_chat',
-      title,
-      content_summary: summary,
-      metadata
-    }));
+    enqueueEmbeddingJob(existing.id, buildEmbedText({ type: 'ai_chat', title, content_summary: summary, metadata }));
     return existing.id;
   }
 
   const created = await createNode(chat.workspace_id, 'ai_chat', title, summary, chat.id, metadata);
-  await generateAndStoreEmbedding(created.id, buildEmbedText({
-    type: 'ai_chat',
-    title,
-    content_summary: summary,
-    metadata
-  }));
+  enqueueEmbeddingJob(created.id, buildEmbedText({ type: 'ai_chat', title, content_summary: summary, metadata }));
   return created.id;
 }
 

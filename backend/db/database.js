@@ -14,6 +14,8 @@ function runMigrations(database) {
   const statements = [
     'ALTER TABLE nodes ADD COLUMN metadata TEXT;',
     'ALTER TABLE tasks ADD COLUMN updated_at DATETIME;',
+    'ALTER TABLE documents ADD COLUMN is_daily_note INTEGER DEFAULT 0;',
+    'ALTER TABLE documents ADD COLUMN daily_note_date TEXT;',
     'UPDATE tasks SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP);',
     `
     CREATE TABLE IF NOT EXISTS ai_chats (
@@ -28,7 +30,83 @@ function runMigrations(database) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
     );
-  `
+  `,
+    `
+    CREATE TABLE IF NOT EXISTS document_versions (
+      id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL,
+      title TEXT,
+      content TEXT,
+      version_number INTEGER NOT NULL,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `,
+    `
+    CREATE TABLE IF NOT EXISTS tags (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#64748b',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+  `,
+    `
+    CREATE TABLE IF NOT EXISTS node_tags (
+      node_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (node_id, tag_id),
+      FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+  `,
+    `
+    CREATE TABLE IF NOT EXISTS templates (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_by TEXT,
+      shared INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `,
+    `
+    CREATE TABLE IF NOT EXISTS embedding_jobs (
+      id TEXT PRIMARY KEY,
+      node_id TEXT NOT NULL,
+      payload TEXT,
+      status TEXT DEFAULT 'pending',
+      retries INTEGER DEFAULT 0,
+      error TEXT,
+      next_run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+    );
+  `,
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_document_versions_doc_version ON document_versions(document_id, version_number);',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_workspace_name ON tags(workspace_id, name);',
+    'CREATE INDEX IF NOT EXISTS idx_documents_workspace_updated ON documents(workspace_id, updated_at);',
+    'CREATE INDEX IF NOT EXISTS idx_documents_daily_lookup ON documents(workspace_id, is_daily_note, daily_note_date);',
+    'CREATE INDEX IF NOT EXISTS idx_tasks_workspace_status_updated ON tasks(workspace_id, status, updated_at);',
+    'CREATE INDEX IF NOT EXISTS idx_nodes_workspace_type_created ON nodes(workspace_id, type, created_at);',
+    'CREATE INDEX IF NOT EXISTS idx_nodes_source_type ON nodes(source_id, type);',
+    'CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);',
+    'CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);',
+    'CREATE INDEX IF NOT EXISTS idx_ai_chats_workspace_updated ON ai_chats(workspace_id, updated_at);',
+    'CREATE INDEX IF NOT EXISTS idx_code_workspace_updated ON code_files(workspace_id, updated_at);',
+    'CREATE INDEX IF NOT EXISTS idx_canvas_workspace_updated ON canvases(workspace_id, updated_at);',
+    'CREATE INDEX IF NOT EXISTS idx_document_versions_doc_created ON document_versions(document_id, created_at);',
+    'CREATE INDEX IF NOT EXISTS idx_node_tags_tag_node ON node_tags(tag_id, node_id);',
+    'CREATE INDEX IF NOT EXISTS idx_embedding_jobs_status_next ON embedding_jobs(status, next_run_at);'
   ];
 
   statements.forEach((sql) => {

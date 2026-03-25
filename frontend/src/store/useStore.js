@@ -56,6 +56,10 @@ const useStore = create((set, get) => ({
   sidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
+  // Global command palette visibility
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: Boolean(open) }),
+
   // Selected language for AI responses
   language: localStorage.getItem('ryflow_language') || 'en',
   setLanguage: (lang) => {

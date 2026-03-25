@@ -8,6 +8,7 @@ const path = require('path');
 const { Server } = require('socket.io');
 const { initDatabase, closeDatabase } = require('./db/database');
 const { startDiscovery, getPeers, stopDiscovery } = require('./p2p/discovery');
+const { startEmbeddingWorker, stopEmbeddingWorker } = require('./services/embeddingQueue');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +42,8 @@ app.use('/api/workspace', require('./routes/workspace'));
 app.use('/api/code', require('./routes/code'));
 app.use('/api/canvas', require('./routes/canvas'));
 app.use('/api/chats', require('./routes/chats'));
+app.use('/api/tags', require('./routes/tags'));
+app.use('/api/templates', require('./routes/templates'));
 
 // GET /api/peers — Return discovered LAN peers
 app.get('/api/peers', (req, res) => {
@@ -118,6 +121,7 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   console.log(`\n⚡ RyFlow Backend running on http://localhost:${PORT}`);
   console.log(`📡 Socket.io signaling active`);
+  startEmbeddingWorker();
 
   // Start LAN peer discovery
   try {
@@ -130,6 +134,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down RyFlow...');
+  stopEmbeddingWorker();
   stopDiscovery();
   closeDatabase();
   server.close();

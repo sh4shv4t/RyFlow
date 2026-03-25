@@ -34,13 +34,14 @@ export default function KnowledgeGraph() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
-  const { nodes, edges, searchResults, loading, fetchGraph, search } = useGraph();
+  const [showAllNodes, setShowAllNodes] = useState(false);
+  const { nodes, edges, searchResults, loading, fetchGraph, fetchNeighborhood, isNeighborhoodMode, centerNodeId, search } = useGraph();
   const { setAiActive } = useStore();
 
   // Fetch graph data on mount
   useEffect(() => {
-    fetchGraph();
-  }, [fetchGraph]);
+    fetchGraph({ all: showAllNodes, limit: 240 });
+  }, [fetchGraph, showAllNodes]);
 
   // Renders the D3 force-directed graph
   useEffect(() => {
@@ -165,6 +166,7 @@ export default function KnowledgeGraph() {
       })
       .on('click', (event, d) => {
         setSelectedNode(d);
+        fetchNeighborhood(d.id, 2).catch(() => {});
       });
 
     // Update positions on simulation tick
@@ -245,6 +247,20 @@ export default function KnowledgeGraph() {
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
             Search
           </button>
+          <button
+            onClick={() => setShowAllNodes((prev) => !prev)}
+            className={`px-3 py-2.5 rounded-xl text-xs border ${showAllNodes ? 'border-amd-red/40 text-amd-red bg-amd-red/10' : 'border-white/10 text-amd-white/70 hover:bg-white/5'}`}
+          >
+            {showAllNodes ? 'All Nodes' : 'Fast Mode'}
+          </button>
+          {isNeighborhoodMode && (
+            <button
+              onClick={() => fetchGraph({ all: showAllNodes, limit: 240 })}
+              className="px-3 py-2.5 rounded-xl text-xs border border-amd-orange/40 text-amd-orange bg-amd-orange/10"
+            >
+              Exit Neighborhood
+            </button>
+          )}
         </div>
 
         {/* Legend */}
@@ -259,6 +275,9 @@ export default function KnowledgeGraph() {
             <div className="flex items-center gap-1 text-xs text-amd-red ml-auto">
               <Zap size={10} className="animate-pulse" /> AMD Inference
             </div>
+          )}
+          {isNeighborhoodMode && centerNodeId && (
+            <div className="text-xs text-amd-orange ml-auto">2-hop neighborhood view</div>
           )}
         </div>
 

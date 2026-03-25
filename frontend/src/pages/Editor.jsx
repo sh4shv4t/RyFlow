@@ -1,22 +1,28 @@
 // Editor page — Document listing and TipTap editor view
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, FileText, Trash2, Clock } from 'lucide-react';
+import { Plus, FileText, Trash2, Clock, CalendarDays, History } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RichEditor from '../components/editor/RichEditor';
 import CollabPresence from '../components/editor/CollabPresence';
+import TagPicker from '../components/common/TagPicker';
+import HistoryPanel from '../components/editor/HistoryPanel';
 
 export default function Editor() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { workspace, user } = useStore();
   const [documents, setDocuments] = useState([]);
   const [currentDoc, setCurrentDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
+  const [docTags, setDocTags] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [templates, setTemplates] = useState([]);
 
   // Fetch all documents
   const fetchDocuments = useCallback(async () => {
@@ -37,6 +43,30 @@ export default function Editor() {
     fetchDocuments();
   }, [fetchDocuments]);
 
+  useEffect(() => {
+    if (!workspace?.id) return;
+    axios.get('/api/templates', { params: { workspace_id: workspace.id, type: 'document' } })
+      .then((res) => setTemplates(res.data.templates || []))
+      .catch(() => setTemplates([]));
+  }, [workspace?.id]);
+
+  const openDailyNote = useCallback(async () => {
+    if (!workspace?.id) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const res = await axios.get('/api/docs/daily', {
+      params: { workspace_id: workspace.id, date: today, created_by: user?.id || null }
+    });
+    navigate(`/editor/${res.data.id}`);
+  }, [workspace?.id, user?.id, navigate]);
+
+  useEffect(() => {
+    if (searchParams.get('daily') === 'today') {
+      openDailyNote().catch(() => {
+        toast.error('Failed to open daily note');
+      });
+    }
+  }, [searchParams, openDailyNote]);
+
   // Load specific document if ID in URL
   useEffect(() => {
     if (id) {
@@ -44,6 +74,10 @@ export default function Editor() {
         try {
           const res = await axios.get(`/api/docs/${id}`);
           setCurrentDoc(res.data);
+          const tagsRes = await axios.get('/api/tags/by-source', {
+            params: { workspace_id: workspace?.id, type: 'doc', source_id: id }
+          });
+          setDocTags(tagsRes.data.tags || []);
         } catch {
           toast.error('Document not found');
           navigate('/editor');
@@ -52,8 +86,9 @@ export default function Editor() {
       fetchDoc();
     } else {
       setCurrentDoc(null);
+      setDocTags([]);
     }
-  }, [id, navigate]);
+  }, [id, navigate, workspace?.id]);
 
   // Creates a new document
   const createDocument = async () => {
@@ -71,6 +106,37 @@ export default function Editor() {
       toast.success('Document created');
     } catch (err) {
       toast.error('Failed to create document');
+    }
+  };
+
+  const createFromTemplate = async (template) => {
+    if (!workspace || !template) return;
+    try {
+      const res = await axios.post('/api/docs', {
+        workspace_id: workspace.id,
+        title: template.name,
+        content: template.content,
+        created_by: user?.id
+      });
+      await fetchDocuments();
+      navigate(`/editor/${res.data.id}`);
+    } catch {
+      toast.error('Failed to create from template');
+    }
+  };
+
+  const saveDocTags = async (nextTags) => {
+    if (!workspace?.id || !currentDoc?.id) return;
+    setDocTags(nextTags);
+    try {
+      await axios.post('/api/tags/by-source', {
+        workspace_id: workspace.id,
+        type: 'doc',
+        source_id: currentDoc.id,
+        tag_ids: nextTags.map((t) => t.id || t)
+      });
+    } catch {
+      toast.error('Failed to save tags');
     }
   };
 
@@ -143,7 +209,12 @@ export default function Editor() {
       <div className="w-64 flex-shrink-0 flex flex-col">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-heading font-semibold text-amd-white">Documents</h2>
-          <span className="text-xs text-amd-white/40">{documents.length}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-amd-white/40">{documents.length}</span>
+            <button onClick={openDailyNote} className="text-xs px-2 py-1 rounded bg-amd-orange/20 text-amd-orange flex items-center gap-1">
+              <CalendarDays size={12} /> Today
+            </button>
+          </div>
         </div>
 
         {/* New document input */}
@@ -163,6 +234,19 @@ export default function Editor() {
             <Plus size={14} />
           </button>
         </div>
+
+        {templates.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[10px] uppercase tracking-wide text-amd-white/30 mb-1">Templates</div>
+            <div className="grid grid-cols-1 gap-1">
+              {templates.slice(0, 4).map((tpl) => (
+                <button key={tpl.id} onClick={() => createFromTemplate(tpl)} className="text-left text-xs px-2 py-1.5 rounded bg-white/5 hover:bg-white/10 text-amd-white/70">
+                  {tpl.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Document list */}
         <div className="flex-1 overflow-auto space-y-1">
@@ -190,6 +274,7 @@ export default function Editor() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-amd-white truncate">{doc.title}</p>
+                  {doc.is_daily_note ? <p className="text-[10px] text-amd-orange">Daily Note</p> : null}
                   <p className="text-[10px] text-amd-white/30 flex items-center gap-1 mt-0.5">
                     <Clock size={8} />
                     {new Date(doc.updated_at || doc.created_at).toLocaleDateString()}
@@ -219,12 +304,19 @@ export default function Editor() {
                 onBlur={handleTitleBlur}
                 className="font-heading font-semibold text-amd-white bg-transparent outline-none text-lg"
               />
+              <button onClick={() => setShowHistory((prev) => !prev)} className="text-xs px-2 py-1 rounded bg-white/10 text-amd-white/70 hover:bg-white/15 flex items-center gap-1">
+                <History size={12} /> History
+              </button>
               {/* Hide presence until collaboration provider is fully wired for this route. */}
               <CollabPresence connected={false} presenceList={[]} />
             </div>
 
+            <div className="p-2 border-b border-white/5">
+              <TagPicker value={docTags} onChange={saveDocTags} compact />
+            </div>
+
             {/* TipTap editor */}
-            <div className="flex-1 overflow-hidden relative">
+            <div className="flex-1 overflow-hidden relative flex">
               <RichEditor
                 key={currentDoc.id}
                 content={getEditorContent()}
@@ -232,6 +324,16 @@ export default function Editor() {
                 docId={currentDoc.id}
                 collabDoc={null}
               />
+              {showHistory && (
+                <HistoryPanel
+                  docId={currentDoc.id}
+                  onRestored={async () => {
+                    const refreshed = await axios.get(`/api/docs/${currentDoc.id}`);
+                    setCurrentDoc(refreshed.data);
+                    fetchDocuments();
+                  }}
+                />
+              )}
             </div>
           </>
         ) : (

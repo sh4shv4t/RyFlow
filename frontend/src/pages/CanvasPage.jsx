@@ -6,6 +6,7 @@ import { Plus, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RyCanvas from '../components/canvas/RyCanvas';
+import TagPicker from '../components/common/TagPicker';
 
 // Renders the full-page canvas workspace with saved-canvas sidebar.
 export default function CanvasPage() {
@@ -17,6 +18,7 @@ export default function CanvasPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Idle');
+  const [canvasTags, setCanvasTags] = useState([]);
 
   // Fetches saved canvas list for the active workspace.
   const fetchCanvases = useCallback(async () => {
@@ -45,11 +47,17 @@ export default function CanvasPage() {
         elements: JSON.parse(c.elements || '[]'),
         app_state: JSON.parse(c.app_state || '{}')
       });
+      if (workspace?.id) {
+        const tagsRes = await axios.get('/api/tags/by-source', {
+          params: { workspace_id: workspace.id, type: 'canvas', source_id: c.id }
+        });
+        setCanvasTags(tagsRes.data.tags || []);
+      }
       navigate(`/canvas/${c.id}`);
     } catch (err) {
       toast.error('Failed to load canvas');
     }
-  }, [navigate]);
+  }, [navigate, workspace?.id]);
 
   useEffect(() => {
     if (!id || activeCanvas?.id === id) return;
@@ -91,6 +99,14 @@ export default function CanvasPage() {
         app_state: JSON.parse(saved.app_state || '{}')
       });
       setSaveStatus('Saved');
+      if (workspace?.id && saved.id) {
+        await axios.post('/api/tags/by-source', {
+          workspace_id: workspace.id,
+          type: 'canvas',
+          source_id: saved.id,
+          tag_ids: canvasTags.map((t) => t.id || t)
+        });
+      }
       await fetchCanvases();
       if (saved.id) navigate(`/canvas/${saved.id}`);
       toast.success('Canvas saved');
@@ -100,7 +116,22 @@ export default function CanvasPage() {
     } finally {
       setSaving(false);
     }
-  }, [activeCanvas, fetchCanvases, navigate, user?.id, workspace?.id]);
+  }, [activeCanvas, fetchCanvases, navigate, user?.id, workspace?.id, canvasTags]);
+
+  const saveTags = async (nextTags) => {
+    setCanvasTags(nextTags);
+    if (!workspace?.id || !activeCanvas?.id) return;
+    try {
+      await axios.post('/api/tags/by-source', {
+        workspace_id: workspace.id,
+        type: 'canvas',
+        source_id: activeCanvas.id,
+        tag_ids: nextTags.map((t) => t.id || t)
+      });
+    } catch {
+      toast.error('Failed to save canvas tags');
+    }
+  };
 
   // Updates active canvas title in local state.
   const handleTitleChange = useCallback((title) => {
@@ -152,6 +183,8 @@ export default function CanvasPage() {
             <Save size={14} /> Save
           </button>
         </div>
+
+        {activeCanvas && <TagPicker value={canvasTags} onChange={saveTags} compact />}
 
         {!activeCanvas ? (
           <div className="flex-1 glass-card flex items-center justify-center text-amd-white/40">Create or select a canvas.</div>

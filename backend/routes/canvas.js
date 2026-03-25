@@ -4,7 +4,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
+const { buildEmbedText } = require('../services/embeddingService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Builds canonical graph summary for a saved canvas.
 function buildCanvasSummary(canvas) {
@@ -75,10 +76,10 @@ router.post('/save', async (req, res) => {
     if (node) {
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(saved.title, summary, JSON.stringify(metadata), node.id);
-      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
     } else {
       const createdNode = await createNode(workspace_id, 'canvas', saved.title, summary, canvasId, metadata);
-      await generateAndStoreEmbedding(createdNode.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(createdNode.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
     }
 
     res.json(saved);

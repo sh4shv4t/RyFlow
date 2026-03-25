@@ -1,7 +1,7 @@
 // Knowledge graph logic — auto-relationship creation using LLM
 const { getDb } = require('../db/database');
 const { chat } = require('./ollamaService');
-const { generateAndStoreEmbedding } = require('./embeddingService');
+const { enqueueEmbeddingJob } = require('./embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 
 // Serializes node metadata safely for database storage.
@@ -35,11 +35,9 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
     'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(id, workspaceId, type, title, contentSummary || '', metadataText, sourceId);
 
-  // Generate embedding asynchronously (don't block)
+  // Queue embedding generation asynchronously (don't block writes).
   const textForEmbedding = { type, title, content_summary: contentSummary || '', metadata: metadataText };
-  generateAndStoreEmbedding(id, textForEmbedding).catch(err => {
-    console.error('[Graph] Embedding generation failed for node', id, err.message);
-  });
+  enqueueEmbeddingJob(id, textForEmbedding);
 
   // Auto-create relationships asynchronously
   autoCreateRelationships({ id, type, title, content_summary: contentSummary || '', metadata: metadataText }, workspaceId).catch(err => {

@@ -47,10 +47,34 @@ function buildEmbedText(node = {}) {
   if (node.type === 'doc') {
     if (metadata.word_count !== undefined) parts.push(`Word Count: ${metadata.word_count}`);
     if (metadata.last_editor) parts.push(`Last Editor: ${metadata.last_editor}`);
+    if (metadata.is_daily_note) parts.push('Daily Note: true');
+    if (metadata.daily_note_date) parts.push(`Daily Note Date: ${metadata.daily_note_date}`);
+  }
+
+  if (Array.isArray(metadata.tags) && metadata.tags.length > 0) {
+    parts.push(`Tags: ${metadata.tags.join(', ')}`);
   }
 
   if (node.created_at) parts.push(`Created: ${node.created_at}`);
   return parts.join('. ');
+}
+
+function loadNodeTagsMap(db, nodeIds = []) {
+  if (!nodeIds.length) return new Map();
+  const placeholders = nodeIds.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT nt.node_id, t.id AS tag_id, t.name, t.color
+     FROM node_tags nt
+     JOIN tags t ON t.id = nt.tag_id
+     WHERE nt.node_id IN (${placeholders})`
+  ).all(...nodeIds);
+
+  const map = new Map();
+  rows.forEach((row) => {
+    if (!map.has(row.node_id)) map.set(row.node_id, []);
+    map.get(row.node_id).push({ id: row.tag_id, name: row.name, color: row.color });
+  });
+  return map;
 }
 
 // Builds and embeds combined title/content text.
@@ -82,6 +106,8 @@ async function semanticSearch(query, workspaceId, topK = 5) {
     return [];
   }
 
+  const tagsMap = loadNodeTagsMap(db, nodes.map((n) => n.id));
+
   return nodes
     .map(node => {
       let parsedEmbedding = [];
@@ -90,12 +116,17 @@ async function semanticSearch(query, workspaceId, topK = 5) {
       } catch {
         parsedEmbedding = [];
       }
+      const tags = tagsMap.get(node.id) || [];
+      const parsedMetadata = parseMetadata(node.metadata);
+      if (tags.length) parsedMetadata.tags = tags.map((t) => t.name);
       return {
         id: node.id,
         type: node.type,
         title: node.title,
         content_summary: node.content_summary,
-        metadata: parseMetadata(node.metadata),
+        metadata: parsedMetadata,
+        tags,
+        source_id: node.source_id,
         created_at: node.created_at,
         score: cosineSimilarity(queryEmbedding, parsedEmbedding)
       };
