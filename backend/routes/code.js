@@ -4,11 +4,14 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding } = require('../services/embeddingService');
+const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
 
-// Builds canonical embedding text for saved code files.
-function buildCodeEmbeddingText(file) {
-  return `${file.title || 'Untitled'} (${file.language || 'javascript'}). ${(file.content || '').slice(0, 500)}`;
+// Builds code metadata for graph node storage.
+function buildCodeMetadata(file) {
+  return {
+    language: file.language || 'javascript',
+    line_count: String(file.content || '').split(/\r?\n/).length
+  };
 }
 
 // GET /api/code/list?workspace_id={} — list saved code files for a workspace
@@ -52,14 +55,15 @@ router.post('/save', async (req, res) => {
     const saved = db.prepare('SELECT * FROM code_files WHERE id = ?').get(fileId);
 
     const summary = (saved.content || '').slice(0, 300);
+    const metadata = buildCodeMetadata(saved);
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(fileId, 'code');
     if (node) {
-      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?')
-        .run(`${saved.title} (${saved.language})`, summary, node.id);
-      await generateAndStoreEmbedding(node.id, buildCodeEmbeddingText(saved));
+      db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
+        .run(`${saved.title} (${saved.language})`, summary, JSON.stringify(metadata), node.id);
+      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'code', title: `${saved.title} (${saved.language})`, content_summary: summary, metadata }));
     } else {
-      const createdNode = await createNode(workspace_id, 'code', `${saved.title} (${saved.language})`, summary, fileId);
-      await generateAndStoreEmbedding(createdNode.id, buildCodeEmbeddingText(saved));
+      const createdNode = await createNode(workspace_id, 'code', `${saved.title} (${saved.language})`, summary, fileId, metadata);
+      await generateAndStoreEmbedding(createdNode.id, buildEmbedText({ type: 'code', title: `${saved.title} (${saved.language})`, content_summary: summary, metadata }));
     }
 
     res.json(saved);

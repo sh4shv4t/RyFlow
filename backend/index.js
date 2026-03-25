@@ -40,6 +40,7 @@ app.use('/api/voice', require('./routes/voice'));
 app.use('/api/workspace', require('./routes/workspace'));
 app.use('/api/code', require('./routes/code'));
 app.use('/api/canvas', require('./routes/canvas'));
+app.use('/api/chats', require('./routes/chats'));
 
 // GET /api/peers — Return discovered LAN peers
 app.get('/api/peers', (req, res) => {

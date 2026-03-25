@@ -20,6 +20,14 @@ const NODE_COLORS = {
   canvas: '#00BCD4',
 };
 
+// Formats snake_case metadata keys into readable labels.
+function formatMetadataKey(key) {
+  return String(key || '')
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export default function KnowledgeGraph() {
   const navigate = useNavigate();
   const svgRef = useRef(null);
@@ -308,8 +316,22 @@ export default function KnowledgeGraph() {
               </div>
             )}
 
+            {selectedNode.metadata && Object.keys(selectedNode.metadata).length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-xs uppercase tracking-wide text-amd-white/40 mb-2">Metadata</h4>
+                <div className="space-y-2">
+                  {Object.entries(selectedNode.metadata).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between text-xs bg-white/5 rounded px-2 py-1.5">
+                      <span className="text-amd-white/50">{formatMetadataKey(key)}</span>
+                      <span className="text-amd-white font-medium text-right">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 text-xs text-amd-white/30">
-              Created: {new Date(selectedNode.created_at).toLocaleDateString()}
+              Created: {selectedNode.created_at ? new Date(selectedNode.created_at).toLocaleString() : 'Unknown'}
             </div>
 
             <button

@@ -1,6 +1,6 @@
 {
   "name": "ryflow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "RyFlow — Your Campus. Your GPU. Your AI. Offline-first P2P AI collaboration workspace.",
   "main": "electron/main.js",
   "scripts": {

@@ -1,10 +1,11 @@
-// ChatPanel — Local LLM chat interface with streaming and prompt templates
+// ChatPanel — Local LLM chat interface with streaming, persistence, and prompt templates
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Zap, Loader2, Trash2, ChevronDown } from 'lucide-react';
 import useOllama from '../../hooks/useOllama';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 
 const PROMPT_TEMPLATES = [
   { label: '📋 Draft a fest poster description', prompt: 'Draft a creative and engaging poster description for a college tech fest.' },
@@ -21,23 +22,122 @@ const LANGUAGES = [
   { code: 'mr', label: 'Marathi' },
 ];
 
-export default function ChatPanel() {
+export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewChat }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState(null);
+  const [chatTitle, setChatTitle] = useState('New Chat');
+  const [titleGenerated, setTitleGenerated] = useState(false);
   const messagesEndRef = useRef(null);
   const { chatStream, loading, streamingText } = useOllama();
-  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace } = useStore();
+  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace, setAiActive } = useStore();
+
+  // Builds a fallback chat title from first user text.
+  const fallbackTitle = useCallback((text) => {
+    const value = String(text || '').trim();
+    if (!value) return 'New Chat';
+    return value.length > 50 ? `${value.slice(0, 50)}...` : value;
+  }, []);
+
+  // Persists current chat session by creating or updating chat row.
+  const persistChat = useCallback(async (nextMessages, options = {}) => {
+    if (!workspace?.id || !Array.isArray(nextMessages) || nextMessages.length === 0) return null;
+    const payload = {
+      workspace_id: workspace.id,
+      title: options.title || chatTitle,
+      messages: nextMessages,
+      model: selectedModel,
+      rag_used: options.ragUsed ? 1 : 0
+    };
+
+    if (!currentChatId) {
+      const created = await axios.post('/api/chats', payload);
+      setCurrentChatId(created.data.id);
+      setChatTitle(created.data.title || payload.title);
+      onChatPersisted && onChatPersisted();
+      return created.data.id;
+    }
+
+    await axios.put(`/api/chats/${currentChatId}`, payload);
+    onChatPersisted && onChatPersisted();
+    return currentChatId;
+  }, [workspace?.id, chatTitle, selectedModel, currentChatId, onChatPersisted]);
+
+  // Loads a selected chat session into the panel.
+  const loadChat = useCallback(async (chatId) => {
+    if (!chatId) {
+      setMessages([]);
+      setCurrentChatId(null);
+      setChatTitle('New Chat');
+      setTitleGenerated(false);
+      return;
+    }
+    try {
+      const res = await axios.get(`/api/chats/${chatId}`);
+      setMessages(Array.isArray(res.data.messages) ? res.data.messages : []);
+      setCurrentChatId(res.data.id);
+      setChatTitle(res.data.title || 'New Chat');
+      setTitleGenerated(true);
+    } catch {
+      toast.error('Failed to load chat');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadChat(activeChatId || null);
+  }, [activeChatId, loadChat]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText]);
 
+  // Persists pending chat state when this panel unmounts.
+  useEffect(() => () => {
+    if (messages.length > 0) {
+      persistChat(messages).catch(() => {});
+    }
+  }, [messages, persistChat]);
+
+  // Auto-generates a concise chat title after first full exchange.
+  useEffect(() => {
+    const generateTitle = async () => {
+      if (titleGenerated || messages.length < 2 || !currentChatId) return;
+      const firstUser = messages.find((m) => m.role === 'user' && m.content);
+      if (!firstUser) return;
+      try {
+        setAiActive(true);
+        const res = await axios.post('/api/ai/chat', {
+          messages: [{
+            role: 'user',
+            content: `Generate a 4-6 word title for a conversation that starts with: '${firstUser.content}'. Return only the title, nothing else.`
+          }],
+          model: selectedModel,
+          workspace_id: null
+        });
+        const title = String(res.data.content || '').trim().replace(/^"|"$/g, '') || fallbackTitle(firstUser.content);
+        setChatTitle(title);
+        await axios.put(`/api/chats/${currentChatId}`, {
+          title,
+          messages,
+          model: selectedModel
+        });
+        setTitleGenerated(true);
+        onChatPersisted && onChatPersisted();
+      } catch {
+        setTitleGenerated(true);
+      } finally {
+        setAiActive(false);
+      }
+    };
+    generateTitle();
+  }, [messages, titleGenerated, currentChatId, selectedModel, fallbackTitle, onChatPersisted, setAiActive]);
+
   // Sends a message to the LLM and streams the response
   const sendMessage = useCallback(async (text = null) => {
     const msgText = text || input.trim();
-    if (!msgText) return;
+    if (!msgText || !workspace?.id) return;
 
     const userMsg = { role: 'user', content: msgText };
     const newMessages = [...messages, userMsg];
@@ -45,6 +145,12 @@ export default function ChatPanel() {
     setInput('');
 
     try {
+      let workingChatId = currentChatId;
+      if (!workingChatId) {
+        const firstTitle = fallbackTitle(msgText);
+        workingChatId = await persistChat(newMessages, { title: firstTitle, ragUsed: false });
+      }
+
       const streamResult = await chatStream(
         newMessages.map(m => ({ role: m.role, content: m.content })),
         () => {} // streaming updates handled by hook
@@ -53,14 +159,17 @@ export default function ChatPanel() {
       const fullResponse = typeof streamResult === 'string' ? streamResult : streamResult?.content || '';
       const ragUsed = typeof streamResult === 'object' ? Boolean(streamResult?.ragUsed) : false;
 
-      setMessages(prev => [...prev, { role: 'assistant', content: fullResponse, ragUsed }]);
+      const finalMessages = [...newMessages, { role: 'assistant', content: fullResponse, ragUsed }];
+      setMessages(finalMessages);
+      setCurrentChatId(workingChatId || null);
+      await persistChat(finalMessages, { ragUsed });
     } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: '⚠️ Could not reach Ollama. Please make sure it\'s running on localhost:11434'
       }]);
     }
-  }, [input, messages, chatStream]);
+  }, [input, messages, chatStream, workspace?.id, currentChatId, fallbackTitle, persistChat]);
 
   // Handles template selection
   const useTemplate = (template) => {
@@ -98,7 +207,13 @@ export default function ChatPanel() {
           </select>
         </div>
         <button
-          onClick={() => setMessages([])}
+          onClick={() => {
+            setMessages([]);
+            setCurrentChatId(null);
+            setChatTitle('New Chat');
+            setTitleGenerated(false);
+            onRequestNewChat && onRequestNewChat();
+          }}
           className="text-amd-white/40 hover:text-amd-red transition-colors"
           title="Clear chat"
         >

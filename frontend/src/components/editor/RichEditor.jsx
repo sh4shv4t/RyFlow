@@ -5,6 +5,8 @@ import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
+import Tesseract from 'tesseract.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bold, Italic, Strikethrough, Code, List, ListOrdered,
@@ -20,9 +22,128 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const [aiAction, setAiAction] = useState(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const saveTimerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const editorRef = useRef(null);
   const latestDocRef = useRef({ json: null, text: '' });
-  const { selectedModel } = useStore();
+  const { selectedModel, setAiActive } = useStore();
+  const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
+    ? 'http://localhost:3001'
+    : '';
+
+  // Converts a browser File into a base64 payload plus MIME type.
+  const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const [prefix = '', imageBase64 = ''] = dataUrl.split(',');
+      const mimeType = (prefix.match(/data:(.*?);base64/) || [])[1] || file.type || 'image/png';
+      resolve({ imageBase64, mimeType });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  }), []);
+
+  // Converts an embedded image URL/data URL into a File for OCR processing.
+  const imageSrcToFile = useCallback(async (src) => {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    const extension = (blob.type || 'image/png').split('/')[1] || 'png';
+    return new File([blob], `embedded-image.${extension}`, { type: blob.type || 'image/png' });
+  }, []);
+
+  // Inserts OCR output at cursor with required label + blockquote structure.
+  const insertExtractedText = useCallback((filename, text) => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor) return;
+    const cleanText = String(text || '').trim();
+    activeEditor.chain().focus().insertContent([
+      { type: 'paragraph', content: [{ type: 'text', text: `[Extracted from image: ${filename}]` }] },
+      { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: cleanText }] }] }
+    ]).run();
+  }, []);
+
+  // Calls server-side vision fallback OCR endpoint when local OCR quality is low.
+  const runFallbackOCR = useCallback(async (file) => {
+    const { imageBase64, mimeType } = await fileToBase64(file);
+    try {
+      setAiActive(true);
+      const response = await fetch(`${API_BASE}/api/ai/ocr-fallback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64, mimeType })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'OCR fallback failed');
+      }
+      return String(data.text || '').trim();
+    } finally {
+      setAiActive(false);
+    }
+  }, [API_BASE, fileToBase64, setAiActive]);
+
+  // Runs OCR extraction flow and inserts the extracted text into the editor.
+  const processImageOCR = useCallback(async (file) => {
+    if (!file || !editorRef.current) return;
+    setOcrLoading(true);
+    toast.loading('Extracting text...', { id: 'ocr-status' });
+    try {
+      const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+        logger: (m) => console.log('[OCR]', m)
+      });
+      const cleaned = String(text || '').trim();
+      if (cleaned.length > 10) {
+        insertExtractedText(file.name, cleaned);
+        toast.success('✅ Text extracted and inserted', { id: 'ocr-status' });
+        return;
+      }
+
+      const fallbackText = await runFallbackOCR(file);
+      if (fallbackText.length > 10) {
+        insertExtractedText(file.name, fallbackText);
+        toast.success('⚡ AI-powered extraction used', { id: 'ocr-status' });
+        return;
+      }
+
+      toast.error('❌ No text found in image', { id: 'ocr-status' });
+    } catch {
+      toast.error('❌ No text found in image', { id: 'ocr-status' });
+    } finally {
+      setOcrLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [insertExtractedText, runFallbackOCR]);
+
+  // Handles toolbar OCR trigger for uploaded files and selected embedded images.
+  const handleExtractTextFromImage = useCallback(async () => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor) return;
+    const selectedImageSrc = activeEditor.getAttributes('image')?.src;
+    if (selectedImageSrc) {
+      const embeddedFile = await imageSrcToFile(selectedImageSrc);
+      await processImageOCR(embeddedFile);
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [imageSrcToFile, processImageOCR]);
+
+  // Embeds dropped image files directly into the TipTap document.
+  const handleImageDrop = useCallback((view, event) => {
+    const files = Array.from(event.dataTransfer?.files || []);
+    const imageFile = files.find((f) => f.type.startsWith('image/'));
+    if (!imageFile) return false;
+
+    event.preventDefault();
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      if (src) editorRef.current?.chain().focus().setImage({ src }).run();
+    };
+    reader.readAsDataURL(imageFile);
+    return true;
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -30,6 +151,7 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       StarterKit,
       Highlight.configure({ multicolor: true }),
       Typography,
+      Image,
       Placeholder.configure({
         placeholder: 'Start writing... Use the AI toolbar to enhance your text ✨',
       }),
@@ -39,6 +161,7 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       attributes: {
         class: 'prose prose-invert max-w-none focus:outline-none min-h-[400px] p-4',
       },
+      handleDrop: (view, event) => handleImageDrop(view, event),
     },
     onUpdate: ({ editor }) => {
       // Keep latest content snapshot so we can flush on unmount/doc switch.
@@ -56,6 +179,11 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       }, 2000);
     },
   });
+
+  // Keeps an imperative editor reference for async OCR handlers.
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
 
   // Update editor content when prop changes
   useEffect(() => {
@@ -140,6 +268,16 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="flex items-center gap-1 p-2 border-b border-white/5 bg-amd-gray/30 rounded-t-xl flex-wrap">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) processImageOCR(file);
+          }}
+        />
         {/* Formatting buttons */}
         <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} icon={Bold} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} icon={Italic} />
@@ -165,6 +303,13 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
             <button onClick={() => handleExport('text')} className="block w-full text-left px-3 py-2 text-xs hover:bg-white/5">TXT</button>
           </div>
         </div>
+        <button
+          onClick={handleExtractTextFromImage}
+          disabled={ocrLoading}
+          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10 disabled:opacity-50"
+        >
+          {ocrLoading ? 'Extracting text...' : '🖼 Extract Text from Image'}
+        </button>
 
         {/* AI Actions */}
         <div className="ml-auto flex items-center gap-1">

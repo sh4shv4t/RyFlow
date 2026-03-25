@@ -7,6 +7,7 @@ import {
   Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler
 } from 'lucide-react';
 import useStore from '../../store/useStore';
+import { APP_VERSION } from '../../constants/appVersion';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Home' },
@@ -34,7 +35,7 @@ export default function Sidebar() {
         </div>
         {!sidebarCollapsed && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-hidden">
-            <h1 className="font-heading font-bold text-lg text-amd-white leading-none">RyFlow</h1>
+            <h1 className="font-heading font-bold text-lg text-amd-white leading-none">RyFlow v{APP_VERSION}</h1>
             <p className="text-[10px] text-amd-white/40 leading-none mt-0.5">Your Campus. Your GPU.</p>
           </motion.div>
         )}

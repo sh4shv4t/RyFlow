@@ -1,10 +1,7 @@
-// TaskBoard — Kanban board with drag-and-drop columns (Todo, In Progress, Done)
+// TaskBoard — Kanban board with optimistic updates and animated new tasks.
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Plus, Trash2, Edit3, Calendar, User, AlertCircle,
-  ChevronUp, ChevronDown, GripVertical
-} from 'lucide-react';
+import { Plus, Trash2, Edit3, Calendar, User, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
@@ -21,55 +18,90 @@ const PRIORITY_COLORS = {
   low: '#666',
 };
 
-export default function TaskBoard() {
-  const [tasks, setTasks] = useState([]);
+// Normalizes status values between UI and backend variants.
+function normalizeStatus(status) {
+  return status === 'in-progress' ? 'in_progress' : (status || 'todo');
+}
+
+export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefresh }) {
+  const { workspace } = useStore();
+  const [localTasks, setLocalTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingTask, setEditingTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
-  const { workspace } = useStore();
+  const [newTaskIds, setNewTaskIds] = useState(new Set());
 
-  // Fetches all tasks for the current workspace
+  // Fetches initial tasks for the current workspace.
   const fetchTasks = useCallback(async () => {
     if (!workspace) return;
     try {
       const res = await axios.get('/api/tasks', {
         params: { workspace_id: workspace.id }
       });
-      setTasks(res.data.tasks || []);
-    } catch (err) {
+      const fetched = (res.data.tasks || []).map((task) => ({ ...task, status: normalizeStatus(task.status) }));
+      setLocalTasks(fetched);
+      onChange && onChange(fetched);
+    } catch {
       toast.error('Failed to load tasks');
     } finally {
       setLoading(false);
     }
-  }, [workspace]);
+  }, [workspace, onChange]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Updates a task's status (for drag-and-drop column changes)
-  const updateTaskStatus = useCallback(async (taskId, newStatus) => {
-    try {
-      await axios.patch(`/api/tasks/${taskId}`, { status: newStatus });
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
-      toast.success('Task updated');
-    } catch (err) {
-      toast.error('Failed to update task');
-    }
-  }, []);
+  // Merges new tasks from parent state into local board state.
+  useEffect(() => {
+    if (!Array.isArray(externalTasks)) return;
+    setLocalTasks((prev) => {
+      const existingIds = new Set(prev.map((t) => t.id));
+      const normalizedIncoming = externalTasks.map((task) => ({ ...task, status: normalizeStatus(task.status) }));
+      const genuinelyNew = normalizedIncoming.filter((task) => !existingIds.has(task.id));
+      if (genuinelyNew.length > 0) {
+        setNewTaskIds((ids) => new Set([...ids, ...genuinelyNew.map((t) => t.id)]));
+        setTimeout(() => {
+          setNewTaskIds((ids) => {
+            const next = new Set(ids);
+            genuinelyNew.forEach((task) => next.delete(task.id));
+            return next;
+          });
+        }, 2000);
+      }
+      const mergedMap = new Map(prev.map((task) => [task.id, task]));
+      normalizedIncoming.forEach((task) => mergedMap.set(task.id, { ...mergedMap.get(task.id), ...task }));
+      return Array.from(mergedMap.values());
+    });
+  }, [externalTasks]);
 
-  // Deletes a task
+  // Optimistically updates task status then syncs in background.
+  const updateTaskStatus = useCallback(async (taskId, newStatus) => {
+    const previous = [...localTasks];
+    const normalized = normalizeStatus(newStatus);
+    setLocalTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, status: normalized } : task));
+    try {
+      await axios.patch(`/api/tasks/${taskId}`, { status: normalized });
+    } catch {
+      setLocalTasks(previous);
+      toast.error('Failed to move task. Reverted.');
+    }
+  }, [localTasks]);
+
+  // Optimistically deletes a task card then syncs in background.
   const deleteTask = useCallback(async (taskId) => {
+    const previous = [...localTasks];
+    setLocalTasks((prev) => prev.filter((task) => task.id !== taskId));
     try {
       await axios.delete(`/api/tasks/${taskId}`);
-      setTasks(prev => prev.filter(t => t.id !== taskId));
-      toast.success('Task deleted');
-    } catch (err) {
-      toast.error('Failed to delete task');
+      onChange && onChange(previous.filter((task) => task.id !== taskId));
+    } catch {
+      setLocalTasks(previous);
+      toast.error('Failed to delete task. Reverted.');
     }
-  }, []);
+  }, [localTasks, onChange]);
 
-  // Creates a new blank task
+  // Creates a new blank task in todo column.
   const createTask = useCallback(async () => {
     if (!workspace) return;
     try {
@@ -79,41 +111,56 @@ export default function TaskBoard() {
         status: 'todo',
         priority: 'medium'
       });
-      setTasks(prev => [res.data, ...prev]);
-      setEditingTask(res.data.id);
+      const created = { ...res.data, status: normalizeStatus(res.data.status) };
+      setLocalTasks((prev) => [created, ...prev]);
+      setNewTaskIds((ids) => new Set([...ids, created.id]));
+      setTimeout(() => {
+        setNewTaskIds((ids) => {
+          const next = new Set(ids);
+          next.delete(created.id);
+          return next;
+        });
+      }, 2000);
+      setEditingTask(created.id);
+      onChange && onChange([created, ...localTasks]);
       toast.success('Task created');
-    } catch (err) {
+    } catch {
       toast.error('Failed to create task');
     }
-  }, [workspace]);
+  }, [workspace, onChange, localTasks]);
 
-  // Updates a task's fields inline
+  // Optimistically patches a task locally and syncs with backend.
   const updateTask = useCallback(async (taskId, updates) => {
+    const previous = [...localTasks];
+    const normalizedUpdates = {
+      ...updates,
+      ...(updates.status ? { status: normalizeStatus(updates.status) } : {})
+    };
+    setLocalTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, ...normalizedUpdates } : task));
     try {
-      await axios.patch(`/api/tasks/${taskId}`, updates);
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
-    } catch (err) {
-      toast.error('Failed to update task');
+      await axios.patch(`/api/tasks/${taskId}`, normalizedUpdates);
+    } catch {
+      setLocalTasks(previous);
+      toast.error('Failed to update task. Reverted.');
     }
-  }, []);
+  }, [localTasks]);
 
-  // Simple drag and drop handlers
-  const handleDragStart = (task) => setDraggedTask(task);
-  const handleDragEnd = () => setDraggedTask(null);
-  const handleDrop = (status) => {
-    if (draggedTask && draggedTask.status !== status) {
-      updateTaskStatus(draggedTask.id, status);
+  // Handles drop target status updates.
+  const handleDrop = useCallback((status) => {
+    const normalized = normalizeStatus(status);
+    if (draggedTask && normalizeStatus(draggedTask.status) !== normalized) {
+      updateTaskStatus(draggedTask.id, normalized);
     }
     setDraggedTask(null);
-  };
+  }, [draggedTask, updateTaskStatus]);
 
   if (loading) {
     return (
       <div className="grid grid-cols-3 gap-4 h-full">
-        {[1, 2, 3].map(i => (
+        {[1, 2, 3].map((i) => (
           <div key={i} className="glass-card p-4">
             <div className="skeleton-loader h-6 w-24 mb-4" />
-            {[1, 2, 3].map(j => (
+            {[1, 2, 3].map((j) => (
               <div key={j} className="skeleton-loader-red h-24 w-full mb-3 rounded-lg" />
             ))}
           </div>
@@ -125,24 +172,19 @@ export default function TaskBoard() {
   return (
     <div className="grid grid-cols-3 gap-4 h-full">
       {COLUMNS.map((col) => {
-        const columnTasks = tasks.filter(t => t.status === col.id);
+        const columnTasks = localTasks.filter((task) => normalizeStatus(task.status) === col.id);
         return (
           <div
             key={col.id}
-            className={`glass-card p-4 flex flex-col ${
-              draggedTask ? 'border-dashed border-2 border-white/10' : ''
-            }`}
+            className={`glass-card p-4 flex flex-col ${draggedTask ? 'border-dashed border-2 border-white/10' : ''}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => handleDrop(col.id)}
           >
-            {/* Column header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />
                 <h3 className="font-heading font-semibold text-sm text-amd-white">{col.label}</h3>
-                <span className="text-xs text-amd-white/40 bg-white/5 px-2 py-0.5 rounded-full">
-                  {columnTasks.length}
-                </span>
+                <span className="text-xs text-amd-white/40 bg-white/5 px-2 py-0.5 rounded-full">{columnTasks.length}</span>
               </div>
               {col.id === 'todo' && (
                 <button
@@ -154,24 +196,22 @@ export default function TaskBoard() {
               )}
             </div>
 
-            {/* Task cards */}
             <div className="flex-1 overflow-auto space-y-2">
               <AnimatePresence>
                 {columnTasks.map((task) => (
                   <TaskCard
                     key={task.id}
                     task={task}
+                    isNew={newTaskIds.has(task.id)}
                     editing={editingTask === task.id}
                     onEdit={() => setEditingTask(task.id === editingTask ? null : task.id)}
                     onUpdate={updateTask}
                     onDelete={deleteTask}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
+                    onDragStart={setDraggedTask}
+                    onDragEnd={() => setDraggedTask(null)}
                   />
                 ))}
               </AnimatePresence>
-
-              {/* Empty state */}
               {columnTasks.length === 0 && (
                 <div className="text-center py-8 text-amd-white/20 text-xs">
                   {col.id === 'todo' ? 'Add a task to get started' : 'Drag tasks here'}
@@ -185,20 +225,28 @@ export default function TaskBoard() {
   );
 }
 
-// Individual task card component with inline editing
-function TaskCard({ task, editing, onEdit, onUpdate, onDelete, onDragStart, onDragEnd }) {
+// Task card with inline editing and new-item animation.
+function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStart, onDragEnd }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
 
+  useEffect(() => {
+    setTitle(task.title || '');
+    setDescription(task.description || '');
+  }, [task.title, task.description]);
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3 }}
       exit={{ opacity: 0, scale: 0.95 }}
       draggable
       onDragStart={() => onDragStart(task)}
       onDragEnd={onDragEnd}
-      className="glass-card glass-card-hover p-3 cursor-grab active:cursor-grabbing"
+      className={`glass-card glass-card-hover p-3 cursor-grab active:cursor-grabbing border ${
+        isNew ? 'border-amd-red' : 'border-transparent'
+      } transition-colors duration-700`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-1">
@@ -226,27 +274,23 @@ function TaskCard({ task, editing, onEdit, onUpdate, onDelete, onDragStart, onDr
         </div>
       </div>
 
-      {/* Task metadata */}
       <div className="flex items-center gap-2 mt-2 flex-wrap">
-        {/* Priority badge */}
         <span
           className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
           style={{
-            backgroundColor: PRIORITY_COLORS[task.priority] + '20',
-            color: PRIORITY_COLORS[task.priority]
+            backgroundColor: `${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}20`,
+            color: PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium
           }}
         >
-          {task.priority}
+          {task.priority || 'medium'}
         </span>
 
-        {/* Assignee */}
         {task.assignee && (
           <span className="flex items-center gap-1 text-[10px] text-amd-white/40">
             <User size={10} /> {task.assignee}
           </span>
         )}
 
-        {/* Due date */}
         {task.due_date && (
           <span className="flex items-center gap-1 text-[10px] text-amd-white/40">
             <Calendar size={10} /> {task.due_date}
@@ -254,7 +298,6 @@ function TaskCard({ task, editing, onEdit, onUpdate, onDelete, onDragStart, onDr
         )}
       </div>
 
-      {/* Expanded editing mode */}
       <AnimatePresence>
         {editing && (
           <motion.div
@@ -272,7 +315,7 @@ function TaskCard({ task, editing, onEdit, onUpdate, onDelete, onDragStart, onDr
             />
             <div className="flex gap-2">
               <select
-                value={task.priority}
+                value={task.priority || 'medium'}
                 onChange={(e) => onUpdate(task.id, { priority: e.target.value })}
                 className="text-xs bg-black/20 rounded px-2 py-1 text-amd-white outline-none"
               >

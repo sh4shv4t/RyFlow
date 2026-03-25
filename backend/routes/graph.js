@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode, getGraph, addEdge, deleteNode } = require('../services/graphService');
-const { semanticSearch } = require('../services/embeddingService');
+const { semanticSearch, parseMetadata } = require('../services/embeddingService');
 
 // GET /api/graph — Get full knowledge graph for a workspace
 router.get('/', (req, res) => {
@@ -24,7 +24,8 @@ router.get('/nodes', (req, res) => {
     const { workspace_id } = req.query;
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
-    const nodes = db.prepare('SELECT id, workspace_id, type, title, content_summary, source_id, created_at FROM nodes WHERE workspace_id = ?').all(workspace_id);
+    const nodes = db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ?').all(workspace_id)
+      .map((node) => ({ ...node, metadata: parseMetadata(node.metadata) }));
     res.json({ nodes });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -97,7 +98,9 @@ router.post('/search', async (req, res) => {
       type: r.type,
       title: r.title,
       content_summary: r.content_summary,
-      score: r.score
+      metadata: parseMetadata(r.metadata),
+      score: r.score,
+      created_at: r.created_at
     })) });
   } catch (err) {
     res.status(500).json({ error: 'Semantic search failed. Is Ollama running with nomic-embed-text?', details: err.message });

@@ -4,7 +4,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding } = require('../services/embeddingService');
+const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
 
 // Builds canonical graph summary for a saved canvas.
 function buildCanvasSummary(canvas) {
@@ -17,6 +17,16 @@ function buildCanvasSummary(canvas) {
   }
   const dateText = canvas.updated_at || canvas.created_at || new Date().toISOString();
   return `Visual canvas with ${elementCount} elements. Created: ${new Date(dateText).toISOString()}`;
+}
+
+// Extracts canvas metadata used by semantic search and detail UI.
+function buildCanvasMetadata(elements) {
+  try {
+    const parsed = JSON.parse(elements || '[]');
+    return { element_count: Array.isArray(parsed) ? parsed.length : 0 };
+  } catch {
+    return { element_count: 0 };
+  }
 }
 
 // GET /api/canvas/list?workspace_id={} — list saved canvases for a workspace
@@ -59,14 +69,16 @@ router.post('/save', async (req, res) => {
 
     const saved = db.prepare('SELECT * FROM canvases WHERE id = ?').get(canvasId);
     const summary = buildCanvasSummary(saved);
+    const metadata = buildCanvasMetadata(saved.elements);
 
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(canvasId, 'canvas');
     if (node) {
-      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?').run(saved.title, summary, node.id);
-      await generateAndStoreEmbedding(node.id, `${saved.title}. ${summary}`);
+      db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
+        .run(saved.title, summary, JSON.stringify(metadata), node.id);
+      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
     } else {
-      const createdNode = await createNode(workspace_id, 'canvas', saved.title, summary, canvasId);
-      await generateAndStoreEmbedding(createdNode.id, `${saved.title}. ${summary}`);
+      const createdNode = await createNode(workspace_id, 'canvas', saved.title, summary, canvasId, metadata);
+      await generateAndStoreEmbedding(createdNode.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
     }
 
     res.json(saved);

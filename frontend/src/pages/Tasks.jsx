@@ -31,14 +31,23 @@ export default function Tasks() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // Merges newly created tasks into page-level task state immediately.
+  const handleTasksCreated = useCallback((newTasks = []) => {
+    setTasks((prev) => {
+      const existingIds = new Set(prev.map((t) => t.id));
+      const genuinelyNew = (newTasks || []).filter((t) => !existingIds.has(t.id));
+      return [...genuinelyNew, ...prev];
+    });
+  }, []);
+
   // Status counts
   const counts = tasks.reduce(
     (acc, t) => {
-      const s = t.status || 'todo';
+      const s = (t.status === 'in-progress' ? 'in_progress' : t.status) || 'todo';
       acc[s] = (acc[s] || 0) + 1;
       return acc;
     },
-    { todo: 0, 'in-progress': 0, done: 0 }
+    { todo: 0, in_progress: 0, done: 0 }
   );
 
   return (
@@ -52,7 +61,7 @@ export default function Tasks() {
         <div>
           <h1 className="font-heading text-2xl font-bold text-amd-white">Tasks</h1>
           <p className="text-sm text-amd-white/40 mt-0.5">
-            {tasks.length} total &middot; {counts.todo} to-do &middot; {counts['in-progress']} in progress &middot; {counts.done} done
+            {tasks.length} total &middot; {counts.todo} to-do &middot; {counts.in_progress} in progress &middot; {counts.done} done
           </p>
         </div>
         <button
@@ -64,7 +73,7 @@ export default function Tasks() {
       </div>
 
       {/* NL input */}
-      <NLTaskInput onTasksCreated={fetchTasks} />
+      <NLTaskInput onTasksCreated={handleTasksCreated} />
 
       {/* Board */}
       <div className="flex-1 overflow-auto">

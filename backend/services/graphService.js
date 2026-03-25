@@ -4,40 +4,69 @@ const { chat } = require('./ollamaService');
 const { generateAndStoreEmbedding } = require('./embeddingService');
 const { v4: uuidv4 } = require('uuid');
 
+// Serializes node metadata safely for database storage.
+function stringifyMetadata(metadata) {
+  if (!metadata) return null;
+  try {
+    return JSON.stringify(metadata);
+  } catch {
+    return null;
+  }
+}
+
+// Parses JSON metadata safely for prompt construction.
+function safeParseMetadata(metadataText) {
+  if (!metadataText) return {};
+  if (typeof metadataText === 'object') return metadataText;
+  try {
+    return JSON.parse(metadataText);
+  } catch {
+    return {};
+  }
+}
+
 // Creates a new node in the knowledge graph and generates its embedding
-async function createNode(workspaceId, type, title, contentSummary, sourceId = null) {
+async function createNode(workspaceId, type, title, contentSummary, sourceId = null, metadata = null) {
   const db = getDb();
   const id = uuidv4();
+  const metadataText = stringifyMetadata(metadata);
 
   db.prepare(
-    'INSERT INTO nodes (id, workspace_id, type, title, content_summary, source_id) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, workspaceId, type, title, contentSummary || '', sourceId);
+    'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, workspaceId, type, title, contentSummary || '', metadataText, sourceId);
 
   // Generate embedding asynchronously (don't block)
-  const textForEmbedding = `${title}. ${contentSummary || ''}`;
+  const textForEmbedding = { type, title, content_summary: contentSummary || '', metadata: metadataText };
   generateAndStoreEmbedding(id, textForEmbedding).catch(err => {
     console.error('[Graph] Embedding generation failed for node', id, err.message);
   });
 
   // Auto-create relationships asynchronously
-  autoCreateRelationships({ id, title, content_summary: contentSummary || '' }, workspaceId).catch(err => {
+  autoCreateRelationships({ id, type, title, content_summary: contentSummary || '', metadata: metadataText }, workspaceId).catch(err => {
     console.error('[Graph] Auto-relationship creation failed for node', id, err.message);
   });
 
-  return { id, workspaceId, type, title, contentSummary, sourceId };
+  return { id, workspaceId, type, title, contentSummary, metadata, sourceId };
 }
 
 // Uses LLM to find relationships between a new node and existing nodes
 async function autoCreateRelationships(newNode, workspaceId) {
   const db = getDb();
   const recentNodes = db.prepare(
-    'SELECT id, title, content_summary FROM nodes WHERE workspace_id = ? AND id != ? ORDER BY created_at DESC LIMIT 20'
+    'SELECT id, type, title, content_summary, metadata FROM nodes WHERE workspace_id = ? AND id != ? ORDER BY created_at DESC LIMIT 20'
   ).all(workspaceId, newNode.id);
 
   if (recentNodes.length === 0) return;
 
-  const existing = recentNodes.map((n) => ({ id: n.id, title: n.title, summary: n.content_summary || '' }));
-  const prompt = `Given this new item:\nTitle: ${newNode.title}\nContent: ${newNode.content_summary || ''}\n\nAnd these existing workspace items:\n${JSON.stringify(existing)}\n\nWhich items is this most semantically related to?\nReturn ONLY valid JSON array: [{id, relationship_label}] for the top 3 most related. No explanation.`;
+  const existing = recentNodes.map((n) => ({
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    content_summary: n.content_summary || '',
+    metadata: safeParseMetadata(n.metadata)
+  }));
+  const newNodeMetadata = safeParseMetadata(newNode.metadata);
+  const prompt = `Given this new item:\n${JSON.stringify({ type: newNode.type, title: newNode.title, content_summary: newNode.content_summary || '', metadata: newNodeMetadata })}\n\nAnd these existing workspace items:\n${JSON.stringify(existing)}\n\nWhich items are most semantically related? Return ONLY valid JSON array: [{id, relationship_label}] for the top 3 related items.`;
 
   try {
     const response = await chat(
@@ -71,7 +100,7 @@ async function autoCreateRelationships(newNode, workspaceId) {
 function getGraph(workspaceId) {
   const db = getDb();
   const nodes = db.prepare(
-    'SELECT id, workspace_id, type, title, content_summary, source_id, created_at FROM nodes WHERE workspace_id = ?'
+    'SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ?'
   ).all(workspaceId);
   
   const nodeIds = new Set(nodes.map(n => n.id));

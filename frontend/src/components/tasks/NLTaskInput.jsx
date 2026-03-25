@@ -11,6 +11,7 @@ export default function NLTaskInput({ onTasksCreated }) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [parsedTasks, setParsedTasks] = useState([]);
+  const [flashSuccess, setFlashSuccess] = useState(false);
   const { workspace, setAiActive } = useStore();
 
   // Sends natural language to the backend for AI parsing into tasks
@@ -26,10 +27,13 @@ export default function NLTaskInput({ onTasksCreated }) {
         workspace_id: workspace.id
       });
 
-      setParsedTasks(res.data.tasks || []);
+      const createdTasks = res.data.tasks || [];
+      setParsedTasks(createdTasks);
+      onTasksCreated && onTasksCreated(createdTasks);
       setText('');
-      toast.success(`${res.data.parsed || 0} task(s) created from your input!`);
-      onTasksCreated && onTasksCreated(res.data.tasks);
+      toast.success(`✅ ${createdTasks.length} tasks created`);
+      setFlashSuccess(true);
+      setTimeout(() => setFlashSuccess(false), 500);
 
       // Clear parsed tasks preview after 3 seconds
       setTimeout(() => setParsedTasks([]), 3000);
@@ -52,7 +56,9 @@ export default function NLTaskInput({ onTasksCreated }) {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder='e.g. "Remind design team to submit posters 2 days before Techfest and book the auditorium sound system"'
-            className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 pr-12 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors"
+            className={`w-full bg-amd-gray/50 border rounded-xl px-4 py-3 pr-12 text-sm text-amd-white placeholder:text-amd-white/30 outline-none transition-colors ${
+              flashSuccess ? 'border-amd-green bg-amd-green/10' : 'border-white/10 focus:border-amd-red/50'
+            }`}
             disabled={loading}
           />
           <Sparkles size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-amd-red/40" />

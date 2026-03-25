@@ -4,12 +4,17 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding } = require('../services/embeddingService');
+const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
 
-// Builds canonical task embedding text from task fields.
-function buildTaskEmbeddingText(task) {
-  return `${task.title || ''}. ${task.description || ''}. Priority: ${task.priority || 'medium'}. Due: ${task.due_date || 'none'}`;
+// Builds task metadata for graph node storage.
+function buildTaskMetadata(task) {
+  return {
+    priority: task.priority || 'medium',
+    assignee: task.assignee || '',
+    due_date: task.due_date || null,
+    status: task.status || 'todo'
+  };
 }
 
 // GET /api/tasks — List tasks for a workspace, optionally filtered by status
@@ -51,8 +56,9 @@ router.post('/', async (req, res) => {
 
     // Add to knowledge graph
     const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
-    const node = await createNode(workspace_id, 'task', title, summary, id);
-    await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText({ title, description, priority, due_date }));
+    const metadata = buildTaskMetadata({ priority, assignee, due_date, status: status || 'todo' });
+    const node = await createNode(workspace_id, 'task', title, summary, id, metadata);
+    await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title, content_summary: summary, metadata }));
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     res.status(201).json(task);
@@ -70,7 +76,7 @@ router.patch('/:id', async (req, res) => {
 
     const { title, description, assignee, status, priority, due_date } = req.body;
     db.prepare(
-      'UPDATE tasks SET title = ?, description = ?, assignee = ?, status = ?, priority = ?, due_date = ? WHERE id = ?'
+      'UPDATE tasks SET title = ?, description = ?, assignee = ?, status = ?, priority = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(
       title || existing.title,
       description !== undefined ? description : existing.description,
@@ -87,8 +93,10 @@ router.patch('/:id', async (req, res) => {
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'task');
     if (node) {
       const summary = `${task.description || ''} Priority: ${task.priority || 'medium'}. Due: ${task.due_date || 'none'}`;
-      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?').run(task.title, summary, node.id);
-      await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText(task));
+      const metadata = buildTaskMetadata(task);
+      db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
+        .run(task.title, summary, JSON.stringify(metadata), node.id);
+      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title: task.title, content_summary: summary, metadata }));
     }
 
     res.json(task);
@@ -156,13 +164,14 @@ router.post('/nl-create', async (req, res) => {
 
       // Add to knowledge graph
       const summary = `${t.description || ''} Priority: ${t.priority || 'medium'}. Due: ${t.due_date || 'none'}`;
-      const node = await createNode(workspace_id, 'task', t.title, summary, id);
-      await generateAndStoreEmbedding(node.id, buildTaskEmbeddingText({
-        title: t.title,
-        description: t.description || '',
+      const metadata = buildTaskMetadata({
         priority: t.priority || 'medium',
-        due_date: t.due_date || null
-      }));
+        assignee: t.assignee || '',
+        due_date: t.due_date || null,
+        status: 'todo'
+      });
+      const node = await createNode(workspace_id, 'task', t.title, summary, id, metadata);
+      await generateAndStoreEmbedding(node.id, buildEmbedText({ type: 'task', title: t.title, content_summary: summary, metadata }));
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
       createdTasks.push(task);

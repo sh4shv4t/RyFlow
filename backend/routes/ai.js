@@ -36,6 +36,14 @@ async function buildRagMessages(messages, workspaceId) {
   };
 }
 
+// Normalizes a data URL/base64 payload into raw base64 bytes for Ollama image input.
+function normalizeBase64Image(input) {
+  const raw = String(input || '');
+  if (!raw) return '';
+  const commaIndex = raw.indexOf(',');
+  return commaIndex > -1 ? raw.slice(commaIndex + 1) : raw;
+}
+
 // GET /api/ai/system-status — Returns GPU, ROCm, and model info
 router.get('/system-status', async (req, res) => {
   try {
@@ -103,6 +111,35 @@ router.post('/chat', async (req, res) => {
     res.json({ content: response, ragUsed });
   } catch (err) {
     res.status(500).json({ error: 'AI service unavailable. Is Ollama running?', details: err.message });
+  }
+});
+
+// POST /api/ai/ocr-fallback — Vision OCR fallback for hard-to-read images
+router.post('/ocr-fallback', async (req, res) => {
+  try {
+    const { imageBase64, mimeType } = req.body;
+    if (!imageBase64 || !mimeType) {
+      return res.status(400).json({ error: 'imageBase64 and mimeType are required' });
+    }
+
+    const models = await ollamaService.listModels();
+    const hasLlava = models.some((m) => String(m.name || '').toLowerCase().includes('llava'));
+    if (!hasLlava) {
+      return res.status(422).json({ error: 'Vision model not available', fallback: true });
+    }
+
+    const cleanImage = normalizeBase64Image(imageBase64);
+    const response = await ollamaService.chat([
+      {
+        role: 'user',
+        content: 'Extract all text from this image exactly as it appears.',
+        images: [cleanImage]
+      }
+    ], 'llava', false);
+
+    return res.json({ text: String(response || '').trim(), model: 'llava' });
+  } catch (err) {
+    return res.status(500).json({ error: 'OCR fallback failed', details: err.message });
   }
 });
 

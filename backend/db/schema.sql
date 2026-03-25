@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT DEFAULT 'todo',
   priority TEXT DEFAULT 'medium',
   due_date TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Keep task assignments and workspace links consistent.
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   type TEXT NOT NULL,
   title TEXT NOT NULL,
   content_summary TEXT,
+  metadata TEXT,
   embedding TEXT,
   source_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -119,4 +121,17 @@ CREATE TABLE IF NOT EXISTS canvases (
   -- Keep canvases scoped to workspace and optional creator lifecycle.
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS ai_chats (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  messages TEXT NOT NULL,
+  model TEXT DEFAULT 'phi3:mini',
+  message_count INTEGER DEFAULT 0,
+  rag_used INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
 );

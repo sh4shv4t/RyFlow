@@ -3,8 +3,15 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { generateAndStoreEmbedding } = require('../services/embeddingService');
+const { generateAndStoreEmbedding, buildEmbedText } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
+
+// Builds document node metadata for graph context.
+function buildDocMetadata(content, lastEditor) {
+  const text = String(content || '').replace(/<[^>]+>/g, ' ');
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  return { word_count: wordCount, last_editor: lastEditor || null };
+}
 
 // GET /api/docs — List all documents in a workspace
 router.get('/', (req, res) => {
@@ -37,7 +44,8 @@ router.post('/', async (req, res) => {
     ).run(id, workspace_id, title, content || '', created_by || null);
 
     // Add to knowledge graph
-    await createNode(workspace_id, 'doc', title, (content || '').substring(0, 500), id);
+    const metadata = buildDocMetadata(content || '', created_by || null);
+    await createNode(workspace_id, 'doc', title, (content || '').substring(0, 500), id, metadata);
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     res.status(201).json(doc);
@@ -61,7 +69,7 @@ router.get('/:id', (req, res) => {
 // PUT /api/docs/:id — Update a document's content and/or title
 router.put('/:id', async (req, res) => {
   try {
-    const { title, content } = req.body;
+    const { title, content, last_editor } = req.body;
     const db = getDb();
 
     const existing = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
@@ -74,10 +82,19 @@ router.put('/:id', async (req, res) => {
     // Update knowledge graph node
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'doc');
     if (node) {
+      const nextTitle = title || existing.title;
+      const nextContent = content !== undefined ? content : existing.content;
+      const metadata = buildDocMetadata(nextContent, last_editor || null);
       db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?')
-        .run(title || existing.title, (content || '').substring(0, 500), node.id);
+        .run(nextTitle, (nextContent || '').substring(0, 500), node.id);
+      db.prepare('UPDATE nodes SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), node.id);
       // Refresh semantic embedding whenever document content changes.
-      await generateAndStoreEmbedding(node.id, `${title || existing.title}. ${content !== undefined ? content : existing.content || ''}`);
+      await generateAndStoreEmbedding(node.id, buildEmbedText({
+        type: 'doc',
+        title: nextTitle,
+        content_summary: (nextContent || '').substring(0, 500),
+        metadata
+      }));
     }
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);

@@ -2,9 +2,55 @@
 const { getDb } = require('../db/database');
 const { embed } = require('./ollamaService');
 
-// Builds embedding text consistently from a node-like object.
-function buildEmbeddingText(node = {}) {
-  return `${node.title || ''}. ${node.content || node.content_summary || ''}`.trim();
+// Parses a JSON metadata payload safely.
+function parseMetadata(metadata) {
+  if (!metadata) return {};
+  if (typeof metadata === 'object') return metadata;
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return {};
+  }
+}
+
+// Builds the richest possible embedding text for every node type.
+function buildEmbedText(node = {}) {
+  const metadata = parseMetadata(node.metadata);
+  const parts = [];
+
+  parts.push(`Type: ${node.type || 'unknown'}`);
+  if (node.title) parts.push(`Title: ${node.title}`);
+  if (node.content_summary || node.content) parts.push(`Content: ${node.content_summary || node.content}`);
+
+  if (node.type === 'task') {
+    if (metadata.priority) parts.push(`Priority: ${metadata.priority}`);
+    if (metadata.assignee) parts.push(`Assignee: ${metadata.assignee}`);
+    if (metadata.due_date) parts.push(`Due: ${metadata.due_date}`);
+    if (metadata.status) parts.push(`Status: ${metadata.status}`);
+  }
+
+  if (node.type === 'code') {
+    if (metadata.language) parts.push(`Language: ${metadata.language}`);
+    if (metadata.line_count !== undefined) parts.push(`Line Count: ${metadata.line_count}`);
+  }
+
+  if (node.type === 'canvas') {
+    if (metadata.element_count !== undefined) parts.push(`Elements: ${metadata.element_count}`);
+  }
+
+  if (node.type === 'ai_chat') {
+    if (metadata.model) parts.push(`Model: ${metadata.model}`);
+    if (metadata.message_count !== undefined) parts.push(`Messages: ${metadata.message_count}`);
+    if (metadata.rag_used !== undefined) parts.push(`RAG Used: ${Boolean(metadata.rag_used)}`);
+  }
+
+  if (node.type === 'doc') {
+    if (metadata.word_count !== undefined) parts.push(`Word Count: ${metadata.word_count}`);
+    if (metadata.last_editor) parts.push(`Last Editor: ${metadata.last_editor}`);
+  }
+
+  if (node.created_at) parts.push(`Created: ${node.created_at}`);
+  return parts.join('. ');
 }
 
 // Builds and embeds combined title/content text.
@@ -49,6 +95,8 @@ async function semanticSearch(query, workspaceId, topK = 5) {
         type: node.type,
         title: node.title,
         content_summary: node.content_summary,
+        metadata: parseMetadata(node.metadata),
+        created_at: node.created_at,
         score: cosineSimilarity(queryEmbedding, parsedEmbedding)
       };
     })
@@ -59,7 +107,7 @@ async function semanticSearch(query, workspaceId, topK = 5) {
 // Generates and stores an embedding for a given node
 async function generateAndStoreEmbedding(nodeId, text) {
   try {
-    const textToEmbed = typeof text === 'object' ? buildEmbeddingText(text) : String(text || '').trim();
+    const textToEmbed = typeof text === 'object' ? buildEmbedText(text) : String(text || '').trim();
     const embedding = await embed(textToEmbed);
     const db = getDb();
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?')
@@ -71,4 +119,4 @@ async function generateAndStoreEmbedding(nodeId, text) {
   }
 }
 
-module.exports = { cosineSimilarity, semanticSearch, generateAndStoreEmbedding, embedText, buildEmbeddingText };
+module.exports = { cosineSimilarity, semanticSearch, generateAndStoreEmbedding, embedText, buildEmbedText, parseMetadata };
