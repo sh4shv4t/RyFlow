@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS nodes (
   title TEXT NOT NULL,
   content_summary TEXT,
   metadata TEXT,
-  embedding TEXT,
+  -- embedding stored as BLOB (Float32Array binary buffer)
+  -- was previously TEXT (JSON array string)
+  embedding BLOB,
   source_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Ensure nodes are cleaned when a workspace is deleted.
@@ -194,6 +196,23 @@ CREATE TABLE IF NOT EXISTS embedding_jobs (
   FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS doc_comments (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  author_name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  selected_text TEXT,
+  position_from INTEGER,
+  position_to INTEGER,
+  parent_id TEXT,
+  resolved INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (parent_id) REFERENCES doc_comments(id) ON DELETE CASCADE
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_document_versions_doc_version ON document_versions(document_id, version_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_workspace_name ON tags(workspace_id, name);
 CREATE INDEX IF NOT EXISTS idx_documents_workspace_updated ON documents(workspace_id, updated_at);
@@ -209,3 +228,5 @@ CREATE INDEX IF NOT EXISTS idx_canvas_workspace_updated ON canvases(workspace_id
 CREATE INDEX IF NOT EXISTS idx_document_versions_doc_created ON document_versions(document_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_node_tags_tag_node ON node_tags(tag_id, node_id);
 CREATE INDEX IF NOT EXISTS idx_embedding_jobs_status_next ON embedding_jobs(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_comments_document ON doc_comments(document_id);
+CREATE INDEX IF NOT EXISTS idx_comments_parent ON doc_comments(parent_id);

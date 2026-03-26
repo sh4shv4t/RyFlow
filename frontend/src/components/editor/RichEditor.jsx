@@ -1,23 +1,52 @@
 // TipTap rich text editor with collaboration and AI toolbar
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, ReactRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Typography from '@tiptap/extension-typography';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import Mention from '@tiptap/extension-mention';
+import { Mark } from '@tiptap/core';
 import Tesseract from 'tesseract.js';
+import * as Y from 'yjs';
+import tippy from 'tippy.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bold, Italic, Strikethrough, Code, List, ListOrdered,
   Quote, Heading1, Heading2, Heading3, Sparkles, FileDown,
-  Undo, Redo, Save
+  Undo, Redo, Save, Link as LinkIcon, MessageCircle
 } from 'lucide-react';
 import useOllama from '../../hooks/useOllama';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
 import AIAssistPanel from './AIAssistPanel';
 import { apiFetch } from '../../utils/apiClient';
+import MentionList from './MentionList';
+import BacklinksPanel from './BacklinksPanel';
+import CommentsPanel from './CommentsPanel';
+import axios from 'axios';
+
+// TipTap mark extension used to track comment-highlighted text spans.
+const CommentMark = Mark.create({
+  name: 'comment',
+  addAttributes() {
+    return {
+      commentId: { default: null },
+      resolved: { default: false }
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-comment-id]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', {
+      ...HTMLAttributes,
+      'data-comment-id': HTMLAttributes.commentId,
+      class: HTMLAttributes.resolved ? 'comment-highlight resolved' : 'comment-highlight active'
+    }, 0];
+  }
+});
 
 export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -28,7 +57,177 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const latestDocRef = useRef({ json: null, text: '' });
-  const { selectedModel, setAiActive } = useStore();
+  const saveCountRef = useRef(0);
+  const ydocRef = useRef(collabDoc || new Y.Doc());
+  const { selectedModel, setAiActive, workspace, user } = useStore();
+  const [docNodeId, setDocNodeId] = useState(null);
+  const [backlinksOpen, setBacklinksOpen] = useState(false);
+  const [backlinksLoading, setBacklinksLoading] = useState(false);
+  const [backlinks, setBacklinks] = useState({ incoming: [], outgoing: [], total: 0 });
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [commentDraftOpen, setCommentDraftOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+
+  // Compacts Yjs history by reapplying current state into a clean document.
+  const compactYDoc = useCallback(() => {
+    const ydoc = ydocRef.current;
+    const currentState = Y.encodeStateAsUpdate(ydoc);
+    const freshDoc = new Y.Doc();
+    Y.applyUpdate(freshDoc, currentState);
+    ydoc.transact(() => {
+      const snapshot = Y.encodeStateAsUpdate(freshDoc);
+      Y.applyUpdate(ydoc, snapshot);
+    });
+  }, []);
+
+  // Resolves graph node id associated with this document source id.
+  const resolveDocNodeId = useCallback(async () => {
+    if (!workspace?.id || !docId) {
+      setDocNodeId(null);
+      return null;
+    }
+    try {
+      const res = await axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: 1 } });
+      const node = (res.data.nodes || []).find((n) => n.type === 'doc' && n.source_id === docId);
+      setDocNodeId(node?.id || null);
+      return node?.id || null;
+    } catch {
+      setDocNodeId(null);
+      return null;
+    }
+  }, [docId, workspace?.id]);
+
+  // Fetches incoming/outgoing backlinks for current document graph node.
+  const loadBacklinks = useCallback(async (nodeIdOverride) => {
+    const nodeId = nodeIdOverride || docNodeId || await resolveDocNodeId();
+    if (!nodeId) {
+      setBacklinks({ incoming: [], outgoing: [], total: 0 });
+      return;
+    }
+    setBacklinksLoading(true);
+    try {
+      const res = await axios.get(`/api/graph/backlinks/${nodeId}`);
+      setBacklinks(res.data || { incoming: [], outgoing: [], total: 0 });
+    } catch {
+      setBacklinks({ incoming: [], outgoing: [], total: 0 });
+    } finally {
+      setBacklinksLoading(false);
+    }
+  }, [docNodeId, resolveDocNodeId]);
+
+  // Loads threaded comments for the current document.
+  const loadComments = useCallback(async () => {
+    if (!docId) return;
+    try {
+      const res = await axios.get(`/api/comments/${docId}`);
+      setComments(res.data.comments || []);
+    } catch {
+      setComments([]);
+    }
+  }, [docId]);
+
+  // Jumps editor selection to a comment's recorded selection range.
+  const jumpToComment = useCallback((comment) => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor || !comment) return;
+    const from = Number(comment.position_from || 0);
+    const to = Number(comment.position_to || from + 1);
+    if (from > 0 && to >= from) {
+      activeEditor.chain().focus().setTextSelection({ from, to }).run();
+    }
+  }, []);
+
+  // Posts a new top-level comment for the currently selected text range.
+  const postComment = useCallback(async () => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor || !docId || !workspace?.id || !commentDraft.trim()) return;
+    const { from, to } = activeEditor.state.selection;
+    const selectedText = activeEditor.state.doc.textBetween(from, to, ' ');
+    try {
+      const res = await axios.post('/api/comments', {
+        document_id: docId,
+        workspace_id: workspace.id,
+        author_name: user?.name || 'Teammate',
+        content: commentDraft.trim(),
+        selected_text: selectedText || null,
+        position_from: from,
+        position_to: to
+      });
+      activeEditor.chain().focus().setMark('comment', { commentId: res.data.id, resolved: false }).run();
+      setCommentDraft('');
+      setCommentDraftOpen(false);
+      loadComments();
+    } catch {
+      toast.error('Failed to add comment');
+    }
+  }, [commentDraft, docId, loadComments, user?.name, workspace?.id]);
+
+  // Creates mention extension configured with semantic search and keyboard popup list.
+  const MentionExtension = Mention.configure({
+    HTMLAttributes: {
+      class: 'ryflow-mention'
+    },
+    renderText({ node }) {
+      return `@ ${node.attrs.label || node.attrs.id}`;
+    },
+    renderHTML({ node, HTMLAttributes }) {
+      return ['span', {
+        ...HTMLAttributes,
+        'data-id': node.attrs.id,
+        'data-type': node.attrs.type,
+        class: 'ryflow-mention'
+      }, `@ ${node.attrs.label || node.attrs.id}`];
+    },
+    suggestion: {
+      char: '@',
+      items: async ({ query }) => {
+        if (query.length < 1 || !workspace?.id) return [];
+        const res = await apiFetch('/api/graph/search', {
+          method: 'POST',
+          body: JSON.stringify({ query, workspace_id: workspace.id })
+        });
+        const data = await res.json();
+        return (data.results || []).slice(0, 8);
+      },
+      render: () => {
+        let component;
+        let popup;
+        return {
+          onStart: (props) => {
+            component = new ReactRenderer(MentionList, {
+              props,
+              editor: props.editor
+            });
+            popup = tippy('body', {
+              getReferenceClientRect: props.clientRect,
+              appendTo: () => document.body,
+              content: component.element,
+              showOnCreate: true,
+              interactive: true,
+              trigger: 'manual',
+              placement: 'bottom-start'
+            });
+          },
+          onUpdate: (props) => {
+            component.updateProps(props);
+            popup[0].setProps({ getReferenceClientRect: props.clientRect });
+          },
+          onKeyDown: (props) => {
+            if (props.event.key === 'Escape') {
+              popup[0].hide();
+              return true;
+            }
+            return component.ref?.onKeyDown(props);
+          },
+          onExit: () => {
+            popup[0].destroy();
+            component.destroy();
+          }
+        };
+      }
+    }
+  });
 
   // Converts a browser File into a base64 payload plus MIME type.
   const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
@@ -150,6 +349,8 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       Highlight.configure({ multicolor: true }),
       Typography,
       Image,
+      MentionExtension,
+      CommentMark,
       Placeholder.configure({
         placeholder: 'Start writing... Use the AI toolbar to enhance your text ✨',
       }),
@@ -170,13 +371,19 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
 
       // Debounced autosave to avoid losing edits when users switch documents quickly.
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = setTimeout(async () => {
         if (onSave && latestDocRef.current.json) {
-          onSave(latestDocRef.current.json, latestDocRef.current.text);
+          await onSave(latestDocRef.current.json, latestDocRef.current.text);
+          saveCountRef.current += 1;
+          if (saveCountRef.current % 10 === 0) {
+            compactYDoc();
+          }
+          loadBacklinks();
+          loadComments();
         }
       }, 2000);
     },
-  });
+  }, [CommentMark, MentionExtension, compactYDoc, loadBacklinks, loadComments, onSave]);
 
   // Keeps an imperative editor reference for async OCR handlers.
   useEffect(() => {
@@ -194,6 +401,22 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       }
     }
   }, [content, editor]);
+
+  // Resolves graph node id and linked data whenever current document changes.
+  useEffect(() => {
+    resolveDocNodeId().then((nodeId) => {
+      if (nodeId) loadBacklinks(nodeId);
+    });
+    loadComments();
+  }, [resolveDocNodeId, loadBacklinks, loadComments]);
+
+  // Compacts large Yjs states on load if accumulated history exceeds threshold.
+  useEffect(() => {
+    const size = Y.encodeStateAsUpdate(ydocRef.current).length;
+    if (size > 500 * 1024) {
+      compactYDoc();
+    }
+  }, [compactYDoc, docId]);
 
   // Cleanup autosave timer
   useEffect(() => {
@@ -308,6 +531,19 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
         >
           {ocrLoading ? 'Extracting text...' : '🖼 Extract Text from Image'}
         </button>
+        <button
+          onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }}
+          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10 relative"
+        >
+          <LinkIcon size={12} className="inline mr-1" /> Backlinks
+          {Number(backlinks.total || 0) > 0 ? <span className="ml-1 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-amd-red text-white text-[10px] px-1">{backlinks.total}</span> : null}
+        </button>
+        <button
+          onClick={() => { setCommentsOpen((v) => !v); loadComments(); }}
+          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10"
+        >
+          <MessageCircle size={12} className="inline mr-1" /> 💬 {comments.length}
+        </button>
 
         {/* AI Actions */}
         <div className="ml-auto flex items-center gap-1">
@@ -336,6 +572,12 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
             ➕ Expand
           </button>
           <button
+            onClick={() => setCommentDraftOpen((v) => !v)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-orange/15 text-amd-orange hover:bg-amd-orange/25 transition-colors"
+          >
+            💬 Comment
+          </button>
+          <button
             onClick={() => handleExport('markdown')}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/5 text-amd-white/60 hover:bg-white/10 transition-colors"
           >
@@ -345,8 +587,43 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
       </div>
 
       {/* Editor area */}
-      <div className="flex-1 overflow-auto bg-amd-charcoal rounded-b-xl">
-        <EditorContent editor={editor} />
+      <div className="flex-1 overflow-hidden bg-amd-charcoal rounded-b-xl flex">
+        <div className="flex-1 overflow-auto">
+          {commentDraftOpen ? (
+            <div className="mx-3 mt-3 rounded border border-amd-orange/30 bg-amd-orange/10 p-2">
+              <div className="text-[11px] text-amd-white/50 mb-1">Selected text:</div>
+              <div className="text-xs italic text-amd-white/70 mb-2">{editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') || 'No selection'}</div>
+              <div className="flex gap-2">
+                <input value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} placeholder="Write a comment" className="flex-1 bg-amd-gray/60 border border-white/10 rounded px-2 py-1 text-xs text-amd-white" />
+                <button onClick={postComment} className="px-2 py-1 rounded bg-amd-red/20 text-amd-red text-xs">Post Comment</button>
+              </div>
+            </div>
+          ) : null}
+          <EditorContent editor={editor} />
+        </div>
+        <BacklinksPanel
+          open={backlinksOpen}
+          loading={backlinksLoading}
+          backlinks={backlinks}
+          onClose={() => setBacklinksOpen(false)}
+          onOpenNode={(entry) => {
+            const sid = entry?.source_id;
+            if (!sid) return;
+            if (entry.type === 'doc') window.location.href = `/editor/${sid}`;
+            else if (entry.type === 'task') window.location.href = '/tasks';
+            else if (entry.type === 'code') window.location.href = `/code/${sid}`;
+            else if (entry.type === 'canvas') window.location.href = `/canvas/${sid}`;
+          }}
+        />
+        <CommentsPanel
+          open={commentsOpen}
+          comments={comments}
+          onRefresh={loadComments}
+          documentId={docId}
+          workspaceId={workspace?.id}
+          authorName={user?.name || 'Teammate'}
+          onJumpTo={jumpToComment}
+        />
       </div>
 
       {/* AI Assist Panel */}

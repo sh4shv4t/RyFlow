@@ -59,6 +59,47 @@ function buildEmbedText(node = {}) {
   return parts.join('. ');
 }
 
+// Converts float arrays to compact binary buffers for SQLite BLOB storage.
+function floatArrayToBuffer(floatArray) {
+  const source = Array.isArray(floatArray) ? floatArray : [];
+  const buffer = Buffer.allocUnsafe(source.length * 4);
+  for (let i = 0; i < source.length; i += 1) {
+    buffer.writeFloatLE(Number(source[i] || 0), i * 4);
+  }
+  return buffer;
+}
+
+// Converts binary embedding buffers to numeric arrays used in cosine similarity.
+function bufferToFloatArray(buffer) {
+  const byteBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || []);
+  const count = Math.floor(byteBuffer.length / 4);
+  const values = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    values[i] = byteBuffer.readFloatLE(i * 4);
+  }
+  return Array.from(values);
+}
+
+// Parses either new binary embeddings or legacy JSON-string embeddings.
+function parseEmbedding(raw) {
+  if (!raw) return null;
+
+  if (Buffer.isBuffer(raw) || raw instanceof Uint8Array) {
+    try {
+      return bufferToFloatArray(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(raw.toString());
+    return Array.isArray(parsed) ? parsed.map((x) => Number(x || 0)) : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadNodeTagsMap(db, nodeIds = []) {
   if (!nodeIds.length) return new Map();
   const placeholders = nodeIds.map(() => '?').join(',');
@@ -110,12 +151,7 @@ async function semanticSearch(query, workspaceId, topK = 5) {
 
   return nodes
     .map(node => {
-      let parsedEmbedding = [];
-      try {
-        parsedEmbedding = JSON.parse(node.embedding);
-      } catch {
-        parsedEmbedding = [];
-      }
+      const parsedEmbedding = parseEmbedding(node.embedding) || [];
       const tags = tagsMap.get(node.id) || [];
       const parsedMetadata = parseMetadata(node.metadata);
       if (tags.length) parsedMetadata.tags = tags.map((t) => t.name);
@@ -141,8 +177,9 @@ async function generateAndStoreEmbedding(nodeId, text) {
     const textToEmbed = typeof text === 'object' ? buildEmbedText(text) : String(text || '').trim();
     const embedding = await embed(textToEmbed);
     const db = getDb();
+    const packed = floatArrayToBuffer(embedding || []);
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?')
-      .run(JSON.stringify(embedding), nodeId);
+      .run(packed, nodeId);
     return embedding;
   } catch (err) {
     console.error('[Embedding] Failed to generate embedding:', err.message);
@@ -150,4 +187,14 @@ async function generateAndStoreEmbedding(nodeId, text) {
   }
 }
 
-module.exports = { cosineSimilarity, semanticSearch, generateAndStoreEmbedding, embedText, buildEmbedText, parseMetadata };
+module.exports = {
+  cosineSimilarity,
+  semanticSearch,
+  generateAndStoreEmbedding,
+  embedText,
+  buildEmbedText,
+  parseMetadata,
+  floatArrayToBuffer,
+  bufferToFloatArray,
+  parseEmbedding
+};

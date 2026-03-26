@@ -26,7 +26,10 @@ const upload = multer({
 
 // GET /api/voice/status — Check if Whisper is available
 router.get('/status', (req, res) => {
-  res.json({ available: isWhisperAvailable() });
+  const configured = process.env.WHISPER_PATH || path.join(__dirname, '..', '..', 'whisper.cpp', process.platform === 'win32' ? 'main.exe' : 'main');
+  const fallbackWinPath = process.platform === 'win32' ? `${configured}.exe` : configured;
+  const resolvedPath = fs.existsSync(configured) ? configured : (fs.existsSync(fallbackWinPath) ? fallbackWinPath : null);
+  res.json({ available: isWhisperAvailable(), path: resolvedPath });
 });
 
 // POST /api/voice/transcribe — Transcribe an audio file via Whisper

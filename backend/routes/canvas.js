@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const LZString = require('lz-string');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
 const { buildEmbedText } = require('../services/embeddingService');
@@ -11,7 +12,9 @@ const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 function buildCanvasSummary(canvas) {
   let elementCount = 0;
   try {
-    const parsed = JSON.parse(canvas.elements || '[]');
+    const raw = String(canvas.elements || '');
+    const decompressed = LZString.decompress(raw);
+    const parsed = JSON.parse((decompressed || raw || '[]'));
     elementCount = Array.isArray(parsed) ? parsed.length : 0;
   } catch {
     elementCount = 0;
@@ -23,10 +26,32 @@ function buildCanvasSummary(canvas) {
 // Extracts canvas metadata used by semantic search and detail UI.
 function buildCanvasMetadata(elements) {
   try {
-    const parsed = JSON.parse(elements || '[]');
+    const raw = String(elements || '');
+    const decompressed = LZString.decompress(raw);
+    const parsed = JSON.parse((decompressed || raw || '[]'));
     return { element_count: Array.isArray(parsed) ? parsed.length : 0 };
   } catch {
     return { element_count: 0 };
+  }
+}
+
+// Compresses serializable values for compact SQLite storage.
+function compressJson(value, fallback) {
+  return LZString.compress(JSON.stringify(value ?? fallback));
+}
+
+// Decompresses canvas JSON with compatibility for old uncompressed rows.
+function decodeCanvasJSON(raw, fallback) {
+  try {
+    const str = String(raw || '');
+    const decompressed = LZString.decompress(str);
+    return JSON.parse((decompressed || str || fallback));
+  } catch {
+    try {
+      return JSON.parse(String(raw || fallback));
+    } catch {
+      return JSON.parse(fallback);
+    }
   }
 }
 
@@ -57,15 +82,17 @@ router.post('/save', async (req, res) => {
     const db = getDb();
     const canvasId = id || uuidv4();
     const existing = db.prepare('SELECT id FROM canvases WHERE id = ?').get(canvasId);
+    const compressedElements = compressJson(req.body.elements || [], []);
+    const compressedAppState = compressJson(req.body.app_state || {}, {});
 
     if (existing) {
       db.prepare(
         'UPDATE canvases SET title = ?, elements = ?, app_state = ?, thumbnail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-      ).run(title, elements || '[]', app_state || '{}', thumbnail || null, canvasId);
+      ).run(title, compressedElements, compressedAppState, thumbnail || null, canvasId);
     } else {
       db.prepare(
         'INSERT INTO canvases (id, workspace_id, title, elements, app_state, thumbnail, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(canvasId, workspace_id, title, elements || '[]', app_state || '{}', thumbnail || null, created_by || null);
+      ).run(canvasId, workspace_id, title, compressedElements, compressedAppState, thumbnail || null, created_by || null);
     }
 
     const saved = db.prepare('SELECT * FROM canvases WHERE id = ?').get(canvasId);
@@ -94,6 +121,8 @@ router.get('/:id', (req, res) => {
     const db = getDb();
     const canvas = db.prepare('SELECT * FROM canvases WHERE id = ?').get(req.params.id);
     if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+    canvas.elements = decodeCanvasJSON(canvas.elements, '[]');
+    canvas.app_state = decodeCanvasJSON(canvas.app_state, '{}');
     res.json(canvas);
   } catch (err) {
     res.status(500).json({ error: err.message });

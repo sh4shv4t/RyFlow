@@ -54,6 +54,7 @@ export default function Settings() {
   const [stats, setStats] = useState(null);
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [storage, setStorage] = useState(null);
 
   // Fetches backend status, models, and workspace stats.
   const fetchAll = useCallback(async () => {
@@ -68,6 +69,8 @@ export default function Settings() {
       setStatus(statusRes.data);
       setModels(modelsRes.data.models || []);
       setStats(statsRes.data);
+      const storageRes = await axios.get('/api/workspace/storage', { params: { workspace_id: workspace.id } });
+      setStorage(storageRes.data || null);
 
       setAiActive(true);
       const insightRes = await axios.post('/api/ai/chat', {
@@ -104,6 +107,27 @@ export default function Settings() {
   const completionRate = stats?.tasks?.count
     ? Math.round((Number(stats.tasks.completed || 0) / Number(stats.tasks.count || 1)) * 100)
     : 0;
+
+  // Converts bytes to compact human-readable units.
+  const formatBytes = (bytes = 0) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
+  };
+
+  // Clears embeddings for current workspace after explicit confirmation.
+  const clearEmbeddings = async () => {
+    if (!workspace?.id || !storage?.breakdown?.embeddings?.bytes) return;
+    const ok = window.confirm(`Clear embeddings and free ${formatBytes(storage.breakdown.embeddings.bytes)}? They will regenerate as content is reopened.`);
+    if (!ok) return;
+    try {
+      await axios.post('/api/workspace/clear-embeddings', { workspace_id: workspace.id });
+      toast.success('Embeddings cleared');
+      fetchAll();
+    } catch {
+      toast.error('Failed to clear embeddings');
+    }
+  };
 
   return (
     <motion.div
@@ -235,6 +259,50 @@ export default function Settings() {
             </div>
           </>
         )}
+      </section>
+
+      <section className="glass-card p-5 space-y-3">
+        <h2 className="font-heading font-semibold text-amd-white">Storage Usage</h2>
+        {storage ? (
+          <div className="space-y-3">
+            <div>
+              <div className="text-xs text-amd-white/60 mb-1">Total: {formatBytes(storage.total_bytes || 0)}</div>
+              <div className="h-2 rounded bg-white/10 overflow-hidden">
+                <div
+                  className={`h-full ${storage.total_bytes > 1024 * 1024 * 1024 ? 'bg-amd-red' : storage.total_bytes > 500 * 1024 * 1024 ? 'bg-amd-orange' : 'bg-amd-green'}`}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+
+            {[
+              ['Documents', storage.breakdown?.documents?.bytes || 0],
+              ['Embeddings', storage.breakdown?.embeddings?.bytes || 0],
+              ['Canvases', storage.breakdown?.canvases?.bytes || 0],
+              ['AI Chats', storage.breakdown?.ai_chats?.bytes || 0],
+              ['Uploads', storage.breakdown?.uploads?.bytes || 0]
+            ].map(([label, value]) => (
+              <div key={label} className="grid grid-cols-[120px_1fr_80px] items-center gap-2 text-xs">
+                <span className="text-amd-white/70">{label}</span>
+                <div className="h-2 rounded bg-white/10 overflow-hidden">
+                  <div className="h-full bg-amd-red/70" style={{ width: `${Math.max(2, (Number(value) / Math.max(1, Number(storage.total_bytes || 1))) * 100)}%` }} />
+                </div>
+                <span className="text-amd-white/60 text-right">{formatBytes(Number(value))}</span>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <button onClick={() => { window.location.href = '/workspaces'; }} className="px-3 py-2 rounded bg-white/10 text-amd-white/75 text-xs">
+                Export Workspace
+              </button>
+              <button onClick={clearEmbeddings} className="px-3 py-2 rounded bg-amd-orange/20 text-amd-orange text-xs">
+                Clear Embeddings ({formatBytes(storage.breakdown?.embeddings?.bytes || 0)})
+              </button>
+            </div>
+
+            <div className="text-[11px] text-amd-white/50">Estimated .ryflow size: {formatBytes(Math.round(Number(storage.total_bytes || 0) * 0.7))}</div>
+          </div>
+        ) : <div className="text-sm text-amd-white/45">Storage data unavailable.</div>}
       </section>
 
       <section className="glass-card p-5 space-y-3">

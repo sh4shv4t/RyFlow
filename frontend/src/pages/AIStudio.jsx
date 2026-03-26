@@ -7,10 +7,12 @@ import toast from 'react-hot-toast';
 import ChatPanel from '../components/ai/ChatPanel';
 import ImageGen from '../components/ai/ImageGen';
 import VoiceInput from '../components/ai/VoiceInput';
+import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
+  { key: 'study', label: 'Study Guide', icon: MessageSquare },
   { key: 'image', label: 'Image Gen', icon: Image },
   { key: 'voice', label: 'Voice', icon: Mic },
 ];
@@ -194,6 +196,18 @@ export default function AIStudio() {
                 onChatPersisted={() => fetchChats()}
                 onRequestNewChat={handleNewChat}
               />
+            </motion.div>
+          )}
+
+          {activeTab === 'study' && (
+            <motion.div
+              key="study"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="h-full"
+            >
+              <StudyGuidePanel />
             </motion.div>
           )}
 

@@ -6,6 +6,7 @@ const { createNode } = require('../services/graphService');
 const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 // Builds document node metadata for graph context.
 function buildDocMetadata(content, lastEditor) {
@@ -81,6 +82,52 @@ function updateDocNode(db, documentId, title, content, metadata) {
     metadata: mergedMetadata
   }));
   return node.id;
+}
+
+// Safely parses stored TipTap JSON payloads.
+function parseDocContentJSON(content) {
+  if (!content) return null;
+  if (typeof content === 'object') return content;
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+// Walks TipTap JSON tree and collects mention node ids.
+function extractMentions(content) {
+  const mentions = [];
+  function walk(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'mention' && node.attrs?.id) {
+      mentions.push(String(node.attrs.id));
+    }
+    if (Array.isArray(node.content)) node.content.forEach(walk);
+  }
+  if (Array.isArray(content?.content)) content.content.forEach(walk);
+  return Array.from(new Set(mentions));
+}
+
+// Ensures graph edges exist from current doc node to each mentioned node.
+function upsertMentionEdges(db, docNodeId, mentionNodeIds = []) {
+  if (!docNodeId || !mentionNodeIds.length) return;
+
+  mentionNodeIds.forEach((mentionedId) => {
+    const target = db.prepare('SELECT id FROM nodes WHERE id = ?').get(mentionedId);
+    if (!target || target.id === docNodeId) return;
+
+    const existing = db.prepare(
+      'SELECT id FROM edges WHERE source_id = ? AND target_id = ?'
+    ).get(docNodeId, mentionedId);
+
+    if (!existing) {
+      db.prepare(
+        `INSERT INTO edges (id, source_id, target_id, relationship_label, weight)
+         VALUES (?, ?, ?, 'mentions', 1.0)`
+      ).run(crypto.randomUUID(), docNodeId, mentionedId);
+    }
+  });
 }
 
 // GET /api/docs — List all documents in a workspace
@@ -265,7 +312,11 @@ router.put('/:id', async (req, res) => {
       is_daily_note: Boolean(existing.is_daily_note),
       daily_note_date: existing.daily_note_date || null
     };
-    updateDocNode(db, req.params.id, nextTitle, nextContent, metadata);
+    const docNodeId = updateDocNode(db, req.params.id, nextTitle, nextContent, metadata);
+
+    const jsonContent = parseDocContentJSON(nextContent);
+    const mentionedIds = extractMentions(jsonContent);
+    upsertMentionEdges(db, docNodeId, mentionedIds);
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
     appendTagsToDocuments(db, [doc]);

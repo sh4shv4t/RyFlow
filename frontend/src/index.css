@@ -135,6 +135,31 @@ h1, h2, h3, h4, h5, h6 {
 .ProseMirror pre code { background: none; padding: 0; }
 .ProseMirror mark { background-color: rgba(232, 0, 13, 0.3); border-radius: 2px; }
 
+.ryflow-mention {
+  background: rgba(232, 0, 13, 0.15);
+  border: 1px solid #E8000D;
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: #E8000D;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.ryflow-mention:hover {
+  background: rgba(232, 0, 13, 0.3);
+}
+
+.comment-highlight.active {
+  background: rgba(255, 107, 0, 0.25);
+  border-bottom: 2px solid #FF6B00;
+  cursor: pointer;
+}
+
+.comment-highlight.resolved {
+  background: transparent;
+  border-bottom: 2px solid #555;
+}
+
 /* Collaboration cursor styles */
 .collaboration-cursor__caret {
   position: relative;

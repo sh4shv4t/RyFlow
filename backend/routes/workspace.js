@@ -1,10 +1,14 @@
 // Workspace management routes — CRUD + user registration + activity + sustainability
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
 const { semanticSearch } = require('../services/embeddingService');
 const { v4: uuidv4 } = require('uuid');
+const { getWorkspaceDbPath, DATA_DIR } = require('../db/database');
+const { getPeers } = require('../p2p/discovery');
 
 // Parses JSON metadata safely for aggregate statistics.
 function parseMetadata(metadata) {
@@ -14,6 +18,18 @@ function parseMetadata(metadata) {
   } catch {
     return {};
   }
+}
+
+// Recursively computes directory size in bytes.
+function getDirSize(dirPath) {
+  if (!fs.existsSync(dirPath)) return 0;
+  let total = 0;
+  for (const file of fs.readdirSync(dirPath)) {
+    const filePath = path.join(dirPath, file);
+    const stat = fs.statSync(filePath);
+    total += stat.isDirectory() ? getDirSize(filePath) : stat.size;
+  }
+  return total;
 }
 
 // Builds full workspace statistics payload across feature areas.
@@ -155,7 +171,7 @@ router.get('/search', async (req, res) => {
 // GET /api/workspace/:id — Get workspace details
 router.get('/:id', (req, res, next) => {
   try {
-    if (req.params.id === 'stats' || req.params.id === 'activity') {
+    if (['stats', 'activity', 'storage', 'briefing', 'clear-embeddings'].includes(req.params.id)) {
       return next();
     }
     const db = getDb();
@@ -268,6 +284,117 @@ router.get('/activity', (req, res) => {
     `).all(workspace_id, workspace_id, workspace_id, workspace_id, workspace_id, workspace_id);
 
     return res.json({ activity });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/workspace/storage?workspace_id={} — Returns per-feature storage usage.
+router.get('/storage', (req, res) => {
+  try {
+    const { workspace_id } = req.query;
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+
+    const db = getDb();
+    const dbPath = getWorkspaceDbPath(workspace_id);
+    const dbSize = fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0;
+    const uploadsSize = getDirSize(path.join(DATA_DIR, '..', 'uploads', workspace_id));
+
+    const docSize = db.prepare(
+      'SELECT COUNT(*) as count, COALESCE(SUM(LENGTH(content)), 0) as bytes FROM documents WHERE workspace_id = ?'
+    ).get(workspace_id);
+    const embeddingSize = db.prepare(
+      'SELECT COUNT(*) as count, COALESCE(SUM(LENGTH(embedding)), 0) as bytes FROM nodes WHERE workspace_id = ? AND embedding IS NOT NULL'
+    ).get(workspace_id);
+    const canvasSize = db.prepare(
+      'SELECT COUNT(*) as count, COALESCE(SUM(LENGTH(elements)), 0) as bytes FROM canvases WHERE workspace_id = ?'
+    ).get(workspace_id);
+    const chatSize = db.prepare(
+      'SELECT COUNT(*) as count, COALESCE(SUM(LENGTH(messages)), 0) as bytes FROM ai_chats WHERE workspace_id = ?'
+    ).get(workspace_id);
+
+    return res.json({
+      total_db_bytes: dbSize,
+      total_uploads_bytes: uploadsSize,
+      total_bytes: dbSize + uploadsSize,
+      breakdown: {
+        documents: { count: Number(docSize.count || 0), bytes: Number(docSize.bytes || 0) },
+        embeddings: { count: Number(embeddingSize.count || 0), bytes: Number(embeddingSize.bytes || 0) },
+        canvases: { count: Number(canvasSize.count || 0), bytes: Number(canvasSize.bytes || 0) },
+        ai_chats: { count: Number(chatSize.count || 0), bytes: Number(chatSize.bytes || 0) },
+        uploads: { bytes: uploadsSize }
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/workspace/clear-embeddings — Clears stored node embedding blobs for a workspace.
+router.post('/clear-embeddings', (req, res) => {
+  try {
+    const { workspace_id } = req.body || {};
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    const impacted = db.prepare('SELECT COUNT(*) as count, COALESCE(SUM(LENGTH(embedding)), 0) as bytes FROM nodes WHERE workspace_id = ? AND embedding IS NOT NULL').get(workspace_id);
+    db.prepare('UPDATE nodes SET embedding = NULL WHERE workspace_id = ?').run(workspace_id);
+    return res.json({ success: true, cleared_count: Number(impacted.count || 0), cleared_bytes: Number(impacted.bytes || 0) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/workspace/briefing — Generates a 60-second spoken briefing script for workspace activity.
+router.post('/briefing', async (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+
+    const workspace = db.prepare('SELECT id, name FROM workspaces WHERE id = ?').get(workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+
+    const typeCounts = db.prepare(
+      `SELECT type, COUNT(*) as count FROM nodes WHERE workspace_id = ? GROUP BY type`
+    ).all(workspaceId).reduce((acc, row) => {
+      acc[row.type] = Number(row.count || 0);
+      return acc;
+    }, {});
+
+    const recentDocs = db.prepare(
+      'SELECT id, title, updated_at FROM documents WHERE workspace_id = ? ORDER BY datetime(updated_at) DESC LIMIT 3'
+    ).all(workspaceId);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const overdueTasks = db.prepare(
+      `SELECT id, title, due_date FROM tasks
+       WHERE workspace_id = ? AND due_date IS NOT NULL AND due_date < ? AND status != 'done'
+       ORDER BY datetime(due_date) ASC LIMIT 5`
+    ).all(workspaceId, today);
+
+    const recentChat = db.prepare(
+      'SELECT id, title, updated_at FROM ai_chats WHERE workspace_id = ? ORDER BY datetime(updated_at) DESC LIMIT 1'
+    ).get(workspaceId);
+
+    const teammates = db.prepare(
+      'SELECT DISTINCT name, created_at FROM users WHERE workspace_id = ? ORDER BY datetime(created_at) DESC LIMIT 5'
+    ).all(workspaceId).map((u) => u.name);
+    const peerNames = (await getPeers()).map((p) => p.name).filter(Boolean);
+
+    const summary = {
+      workspace_name: workspace.name,
+      counts: typeCounts,
+      recent_documents: recentDocs.map((d) => d.title),
+      overdue_tasks_count: overdueTasks.length,
+      overdue_tasks: overdueTasks.map((t) => t.title),
+      recent_ai_chat: recentChat?.title || null,
+      active_teammates: Array.from(new Set([...teammates, ...peerNames])).slice(0, 6)
+    };
+
+    const prompt = `You are reading a daily briefing for a college team workspace. Write a natural, conversational 60-second spoken briefing (about 130 words) based on this workspace data. Sound like a friendly assistant doing a morning standup.\n\nData: ${JSON.stringify(summary)}\n\nRules:\n- Start with a greeting using the workspace name\n- Mention recent document activity\n- Call out any overdue tasks by name\n- End with an encouraging line\n- Write for speaking, not reading (no bullet points, no markdown, flowing sentences only)`;
+
+    const briefingText = await chat([{ role: 'user', content: prompt }], 'phi3:mini', false);
+    return res.json({ briefing_text: String(briefingText || '').trim() });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

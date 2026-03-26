@@ -7,6 +7,7 @@ import { Eraser, ImageDown, Save, Sparkles, X, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
+import LZString from 'lz-string';
 
 // Creates initial Excalidraw data with RyFlow watermark text.
 function initialCanvasData(title) {
@@ -64,13 +65,25 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
 
   const draftKey = useMemo(() => `ryflow_canvas_draft_${canvasId || 'new'}`, [canvasId]);
 
+  // Restores compressed local draft if available.
+  const initialDraft = useMemo(() => {
+    try {
+      const compressed = localStorage.getItem(draftKey);
+      if (!compressed) return null;
+      const json = LZString.decompress(compressed) || compressed;
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }, [draftKey]);
+
   // Persists local draft in localStorage whenever canvas content changes.
   const handleCanvasChange = useCallback((nextElements, nextAppState) => {
     const draft = {
       elements: nextElements || [],
       appState: nextAppState || {}
     };
-    localStorage.setItem(draftKey, JSON.stringify(draft));
+    localStorage.setItem(draftKey, LZString.compress(JSON.stringify(draft)));
   }, [draftKey]);
 
   // Saves current canvas state through page-level callback.
@@ -200,8 +213,8 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
             }}
             initialData={{
               ...(initialCanvasData(title)),
-              elements: Array.isArray(elements) ? elements : initialCanvasData(title).elements,
-              appState: appState || initialCanvasData(title).appState
+              elements: Array.isArray(elements) ? elements : (Array.isArray(initialDraft?.elements) ? initialDraft.elements : initialCanvasData(title).elements),
+              appState: appState || initialDraft?.appState || initialCanvasData(title).appState
             }}
             onChange={handleCanvasChange}
           />

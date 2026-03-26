@@ -21,6 +21,7 @@
     "@tiptap/extension-collaboration-cursor": "^2.1.16",
     "@tiptap/extension-highlight": "^2.1.16",
     "@tiptap/extension-image": "^2.27.2",
+    "@tiptap/extension-mention": "^2.27.2",
     "@tiptap/extension-placeholder": "^2.1.16",
     "@tiptap/extension-typography": "^2.1.16",
     "@tiptap/react": "^2.1.16",
@@ -30,6 +31,7 @@
     "events": "^3.3.0",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.303.0",
+    "lz-string": "^1.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
@@ -37,6 +39,7 @@
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.7.4",
     "tesseract.js": "^7.0.0",
+    "tippy.js": "^6.3.7",
     "y-webrtc": "^10.3.0",
     "yjs": "^13.6.10",
     "zustand": "^4.5.0"

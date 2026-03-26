@@ -2,11 +2,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Code2, FilePlus2, Save } from 'lucide-react';
+import { Code2, FilePlus2, Save, Link as LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
 import TagPicker from '../components/common/TagPicker';
+import BacklinksPanel from '../components/editor/BacklinksPanel';
 
 const LANGUAGE_LABELS = {
   javascript: 'JavaScript',
@@ -58,6 +59,10 @@ export default function CodeEditorPage() {
   const [error, setError] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [fileTags, setFileTags] = useState([]);
+  const [codeNodeId, setCodeNodeId] = useState(null);
+  const [backlinks, setBacklinks] = useState({ incoming: [], outgoing: [], total: 0 });
+  const [backlinksOpen, setBacklinksOpen] = useState(false);
+  const [backlinksLoading, setBacklinksLoading] = useState(false);
 
   // Fetches all saved code files for current workspace.
   const fetchFiles = useCallback(async () => {
@@ -90,10 +95,37 @@ export default function CodeEditorPage() {
       }
       setLastSavedAt(file.updated_at || file.created_at || null);
       navigate(`/code/${file.id}`);
+
+      if (workspace?.id) {
+        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: 1 } });
+        const node = (nodesRes.data.nodes || []).find((n) => n.type === 'code' && n.source_id === file.id);
+        setCodeNodeId(node?.id || null);
+      }
     } catch (err) {
       toast.error('Failed to load file');
     }
   }, [navigate, workspace?.id]);
+
+  // Loads backlinks for current code graph node.
+  const loadBacklinks = useCallback(async () => {
+    if (!codeNodeId) {
+      setBacklinks({ incoming: [], outgoing: [], total: 0 });
+      return;
+    }
+    setBacklinksLoading(true);
+    try {
+      const res = await axios.get(`/api/graph/backlinks/${codeNodeId}`);
+      setBacklinks(res.data || { incoming: [], outgoing: [], total: 0 });
+    } catch {
+      setBacklinks({ incoming: [], outgoing: [], total: 0 });
+    } finally {
+      setBacklinksLoading(false);
+    }
+  }, [codeNodeId]);
+
+  useEffect(() => {
+    loadBacklinks();
+  }, [loadBacklinks]);
 
   useEffect(() => {
     if (!id || !files.length) return;
@@ -145,6 +177,12 @@ export default function CodeEditorPage() {
       }
       await fetchFiles();
       if (saved.id) navigate(`/code/${saved.id}`);
+      if (workspace?.id) {
+        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: 1 } });
+        const node = (nodesRes.data.nodes || []).find((n) => n.type === 'code' && n.source_id === saved.id);
+        setCodeNodeId(node?.id || null);
+      }
+      loadBacklinks();
       toast.success('Code file saved');
     } catch (err) {
       toast.error('Failed to save code file');
@@ -152,7 +190,7 @@ export default function CodeEditorPage() {
       setSaving(false);
       setAiActive(false);
     }
-  }, [workspace?.id, activeFile, user?.id, fetchFiles, navigate, setAiActive, fileTags]);
+  }, [workspace?.id, activeFile, user?.id, fetchFiles, navigate, setAiActive, fileTags, loadBacklinks]);
 
   const saveTags = async (nextTags) => {
     setFileTags(nextTags);
@@ -231,6 +269,10 @@ export default function CodeEditorPage() {
             className="flex-1 bg-amd-gray/50 border border-white/10 rounded px-3 py-2 text-amd-white outline-none"
           />
           <span className="text-xs px-2 py-1 rounded-full border border-white/10 text-amd-white/70">{languageBadge}</span>
+          <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} className="text-xs px-2 py-1 rounded bg-white/10 text-amd-white/70 relative">
+            <LinkIcon size={12} className="inline mr-1" /> Backlinks
+            {Number(backlinks.total || 0) > 0 ? <span className="ml-1 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-amd-red text-white text-[10px]">{backlinks.total}</span> : null}
+          </button>
           <span className="text-xs text-amd-white/40">Last saved: {lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : 'Not saved yet'}</span>
           <button onClick={saveActiveFile} disabled={!activeFile || saving} className="px-3 py-2 rounded-lg bg-amd-red text-white disabled:opacity-50 flex items-center gap-2">
             <Save size={14} /> {saving ? 'Saving...' : 'Save'}
@@ -249,13 +291,27 @@ export default function CodeEditorPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 flex">
             <CodeEditor
               fileName={activeFile.title}
               language={activeFile.language || 'javascript'}
               content={activeFile.content || ''}
               onContentChange={handleContentChange}
               onLanguageChange={handleLanguageChange}
+            />
+            <BacklinksPanel
+              open={backlinksOpen}
+              loading={backlinksLoading}
+              backlinks={backlinks}
+              onClose={() => setBacklinksOpen(false)}
+              onOpenNode={(entry) => {
+                const sid = entry?.source_id;
+                if (!sid) return;
+                if (entry.type === 'doc') window.location.href = `/editor/${sid}`;
+                else if (entry.type === 'task') window.location.href = '/tasks';
+                else if (entry.type === 'code') window.location.href = `/code/${sid}`;
+                else if (entry.type === 'canvas') window.location.href = `/canvas/${sid}`;
+              }}
             />
           </div>
         )}

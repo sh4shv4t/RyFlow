@@ -167,4 +167,37 @@ router.post('/search', async (req, res) => {
   }
 });
 
+// GET /api/graph/backlinks/:node_id — Returns incoming and outgoing graph links for a node.
+router.get('/backlinks/:node_id', (req, res) => {
+  try {
+    const nodeId = req.params.node_id;
+    if (!nodeId) return res.status(400).json({ error: 'node_id is required' });
+    const db = getDb();
+
+    const incoming = db.prepare(
+      `SELECT e.*, n.id as source_node_id, n.source_id, n.title, n.type, n.content_summary
+       FROM edges e
+       JOIN nodes n ON e.source_id = n.id
+       WHERE e.target_id = ?
+       ORDER BY e.created_at DESC`
+    ).all(nodeId);
+
+    const outgoing = db.prepare(
+      `SELECT e.*, n.id as target_node_id, n.source_id, n.title, n.type, n.content_summary
+       FROM edges e
+       JOIN nodes n ON e.target_id = n.id
+       WHERE e.source_id = ?
+       ORDER BY e.created_at DESC`
+    ).all(nodeId);
+
+    return res.json({
+      incoming,
+      outgoing,
+      total: Number(incoming.length) + Number(outgoing.length)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

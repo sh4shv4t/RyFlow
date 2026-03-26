@@ -8,6 +8,7 @@ import {
   GitBranch, ArrowRight, AlertCircle, Mic
 } from 'lucide-react';
 import axios from 'axios';
+import { apiFetch } from '../utils/apiClient';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
 import AMDbadge from '../components/layout/AMDbadge';
@@ -45,12 +46,63 @@ export default function Home() {
   const [codeFiles, setCodeFiles] = useState([]);
   const [canvases, setCanvases] = useState([]);
   const [graphPreview, setGraphPreview] = useState({ nodes: [], edges: [] });
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  const [briefingSpeaking, setBriefingSpeaking] = useState(false);
+  const [briefingText, setBriefingText] = useState('');
+  const [showTranscript, setShowTranscript] = useState(false);
 
   // Updates the live clock every minute.
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Cancels active speech output when leaving page.
+  useEffect(() => () => {
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  // Speaks the provided briefing text using the Web Speech API voice list.
+  const speakBriefing = useCallback((text) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find((v) => v.name.includes('Google') || v.name.includes('Natural') || v.lang === 'en-IN');
+    if (preferred) utterance.voice = preferred;
+    utterance.onend = () => setBriefingSpeaking(false);
+    utterance.onerror = () => setBriefingSpeaking(false);
+    setBriefingSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // Requests and plays a generated workspace briefing transcript.
+  const handlePlayBriefing = useCallback(async () => {
+    if (!workspace?.id) return;
+    if (briefingSpeaking) {
+      window.speechSynthesis.cancel();
+      setBriefingSpeaking(false);
+      return;
+    }
+
+    setBriefingLoading(true);
+    try {
+      const res = await apiFetch('/api/workspace/briefing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_id: workspace.id })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate briefing');
+      setBriefingText(data.briefing_text || '');
+      speakBriefing(data.briefing_text || '');
+    } catch {
+      // Keep UX non-blocking if speech generation fails.
+    } finally {
+      setBriefingLoading(false);
+    }
+  }, [briefingSpeaking, speakBriefing, workspace?.id]);
 
   // Loads all dashboard data in one batch.
   const fetchDashboard = useCallback(async () => {
@@ -137,8 +189,26 @@ export default function Home() {
           <h1 className="font-heading text-3xl font-bold text-amd-white">Welcome back, {user?.name || 'Teammate'}</h1>
           <p className="text-amd-white/60 mt-1">{workspace?.name || 'Workspace'} • {clock.toLocaleString()}</p>
         </div>
-        <AMDbadge />
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col items-end gap-1">
+            <button onClick={handlePlayBriefing} className="px-3 py-2 rounded bg-amd-red/20 text-amd-red text-sm">
+              {briefingSpeaking ? '⏹ Stop Briefing' : (briefingLoading ? 'Generating...' : '🎙 Play Briefing')}
+            </button>
+            {briefingText ? (
+              <button onClick={() => setShowTranscript((v) => !v)} className="text-xs text-amd-white/55 hover:text-amd-white/75">
+                📄 {showTranscript ? 'Hide transcript' : 'Show transcript'}
+              </button>
+            ) : null}
+          </div>
+          <AMDbadge />
+        </div>
       </section>
+
+      {showTranscript && briefingText ? (
+        <section className="glass-card p-4 text-sm text-amd-white/75">
+          {briefingText}
+        </section>
+      ) : null}
 
       {!aiStatus.ollamaRunning && (
         <div className="glass-card p-3 border border-amd-orange/30 text-amd-orange text-sm flex items-center gap-2">

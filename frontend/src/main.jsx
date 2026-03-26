@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
 import App from './App';
 import './index.css';
+import 'tippy.js/dist/tippy.css';
 import { configureApiClient } from './utils/apiClient';
 
 // Use an explicit backend origin when running from Electron/file protocol.

@@ -17,6 +17,7 @@ import CodeEditorPage from './pages/CodeEditorPage';
 import CanvasPage from './pages/CanvasPage';
 import Tags from './pages/Tags';
 import WorkspaceManager from './pages/WorkspaceManager';
+import SetupWizard from './pages/SetupWizard';
 import useStore from './store/useStore';
 
 export default function App() {
@@ -24,6 +25,17 @@ export default function App() {
   const [sessionReady, setSessionReady] = useState(false);
   const [hasActiveSession, setHasActiveSession] = useState(false);
   const isOnboarded = localStorage.getItem('ryflow_onboarded') === 'true';
+  const setupComplete = localStorage.getItem('ryflow_setup_complete') === 'true';
+
+  // Shows setup wizard only on first launch.
+  if (!setupComplete) {
+    return (
+      <Routes>
+        <Route path="/setup" element={<SetupWizard />} />
+        <Route path="*" element={<Navigate to="/setup" />} />
+      </Routes>
+    );
+  }
 
   // Restores active local/remote session from backend so app starts in correct mode.
   useEffect(() => {

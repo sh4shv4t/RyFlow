@@ -2,9 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const { execSync } = require('child_process');
+const crypto = require('crypto');
 const ollamaService = require('../services/ollamaService');
 const { getImageUrl, generateImage, createVariations } = require('../services/imageService');
 const { semanticSearch } = require('../services/embeddingService');
+const { buildEmbedText } = require('../services/embeddingService');
+const { getDb } = require('../db/database');
+const { createNode } = require('../services/graphService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Builds optional RAG-augmented message list and metadata for AI responses.
 async function buildRagMessages(messages, workspaceId) {
@@ -49,6 +54,14 @@ function normalizeBase64Image(input) {
   if (!raw) return '';
   const commaIndex = raw.indexOf(',');
   return commaIndex > -1 ? raw.slice(commaIndex + 1) : raw;
+}
+
+// Extracts pure JSON from model output that may include markdown fences.
+function cleanJsonBlock(text) {
+  return String(text || '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
 }
 
 // GET /api/ai/system-status — Returns GPU, ROCm, and model info
@@ -227,6 +240,78 @@ router.post('/chat/stream', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: 'AI service unavailable. Is Ollama running?', details: err.message });
     }
+  }
+});
+
+// POST /api/ai/study-guide — Generates summary, key terms, and quiz for selected docs.
+router.post('/study-guide', async (req, res) => {
+  try {
+    const { doc_ids, workspace_id } = req.body || {};
+    if (!Array.isArray(doc_ids) || doc_ids.length === 0 || !workspace_id) {
+      return res.status(400).json({ error: 'doc_ids and workspace_id are required' });
+    }
+
+    const db = getDb();
+    const docs = doc_ids.map((id) => db.prepare(
+      'SELECT id, title, content FROM documents WHERE id = ? AND workspace_id = ?'
+    ).get(id, workspace_id)).filter(Boolean);
+
+    if (!docs.length) {
+      return res.status(404).json({ error: 'No matching documents found' });
+    }
+
+    const combinedContent = docs.map((d) => `Document: ${d.title}\n${d.content || ''}`).join('\n\n---\n\n');
+    const prompt = `Generate a study guide for the following content.\nReturn ONLY valid JSON with this exact structure:\n{\n  "summary": "A 3-4 sentence overview of all content",\n  "key_terms": [\n    { "term": string, "definition": string }\n  ],\n  "key_points": [string, string, string],\n  "quiz": [\n    {\n      "question": string,\n      "options": [string, string, string, string],\n      "correct": number,\n      "explanation": string\n    }\n  ]\n}\nGenerate 8-10 key terms, 5 key points, 5 quiz questions.\nContent: ${combinedContent}`;
+
+    const raw = await ollamaService.chat([{ role: 'user', content: prompt }], 'phi3:mini', false);
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanJsonBlock(raw));
+    } catch {
+      return res.status(500).json({ error: 'Failed to parse study guide JSON' });
+    }
+
+    const safeGuide = {
+      summary: String(parsed?.summary || '').trim(),
+      key_terms: Array.isArray(parsed?.key_terms) ? parsed.key_terms : [],
+      key_points: Array.isArray(parsed?.key_points) ? parsed.key_points : [],
+      quiz: Array.isArray(parsed?.quiz) ? parsed.quiz : []
+    };
+
+    const title = `Study Guide — ${docs.map((d) => d.title).slice(0, 3).join(', ')}`;
+    const chatId = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO ai_chats (id, workspace_id, title, messages, model, message_count, rag_used)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      chatId,
+      workspace_id,
+      title,
+      JSON.stringify([
+        { role: 'user', content: `Study guide generated for ${docs.length} documents.` },
+        { role: 'assistant', content: safeGuide.summary }
+      ]),
+      'phi3:mini',
+      2,
+      0
+    );
+
+    const summary = String(safeGuide.summary || '').slice(0, 500);
+    const createdNode = await createNode(workspace_id, 'ai_chat', title, summary, chatId, {
+      model: 'phi3:mini',
+      message_count: 2,
+      rag_used: 0
+    });
+    enqueueEmbeddingJob(createdNode.id, buildEmbedText({
+      type: 'ai_chat',
+      title,
+      content_summary: summary,
+      metadata: { model: 'phi3:mini', message_count: 2, rag_used: 0 }
+    }));
+
+    return res.json(safeGuide);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 
