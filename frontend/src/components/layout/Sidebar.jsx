@@ -4,8 +4,10 @@ import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Home, FileText, CheckSquare, GitBranch, Cpu,
-  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler, CalendarDays, Tags
+  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler, CalendarDays, Tags, FolderKanban, PlugZap
 } from 'lucide-react';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { APP_VERSION } from '../../constants/appVersion';
 
@@ -23,7 +25,21 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, workspace } = useStore();
+  const { sidebarCollapsed, toggleSidebar, workspace, remoteMode, setRemoteMode } = useStore();
+
+  // Disconnects remote session and falls back to best available local workspace.
+  const disconnectRemote = async () => {
+    try {
+      await axios.post('/api/workspaces/disconnect-remote');
+      localStorage.removeItem('ryflow_remote_join_code');
+      localStorage.removeItem('ryflow_remote_host');
+      localStorage.removeItem('ryflow_remote_port');
+      setRemoteMode(false);
+      window.location.reload();
+    } catch {
+      toast.error('Unable to disconnect remote session');
+    }
+  };
 
   return (
     <motion.aside
@@ -77,8 +93,28 @@ export default function Sidebar() {
       {/* Workspace info */}
       {!sidebarCollapsed && workspace && (
         <div className="px-4 py-3 mx-2 mb-2 glass-card">
-          <p className="text-xs text-amd-white/40">Workspace</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-amd-white/40">Workspace</p>
+            <button
+              onClick={() => { window.location.href = '/workspaces'; }}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/70 hover:bg-white/20 flex items-center gap-1"
+              title="Open workspace manager"
+            >
+              <FolderKanban size={10} /> Switch
+            </button>
+          </div>
           <p className="text-sm font-medium text-amd-white truncate">{workspace.name}</p>
+          {remoteMode && (
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amd-orange/20 text-amd-orange">LIVE Remote</span>
+              <button
+                onClick={disconnectRemote}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-amd-red/20 text-amd-red hover:bg-amd-red/30 flex items-center gap-1"
+              >
+                <PlugZap size={10} /> Disconnect
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -5,10 +5,14 @@ const http = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const os = require('os');
 const { Server } = require('socket.io');
-const { initDatabase, closeDatabase } = require('./db/database');
+const registry = require('./db/registry');
+const { switchWorkspace, clearActiveWorkspace } = require('./db/database');
 const { startDiscovery, getPeers, stopDiscovery } = require('./p2p/discovery');
 const { startEmbeddingWorker, stopEmbeddingWorker } = require('./services/embeddingQueue');
+const joinCodeAuth = require('./middleware/joinCodeAuth');
+const remoteProxy = require('./middleware/remoteProxy');
 
 const app = express();
 const server = http.createServer(app);
@@ -20,6 +24,19 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
+// Detects primary LAN IPv4 address for discoverability endpoints.
+function getLocalIP() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+const LOCAL_IP = getLocalIP();
+
 // Middleware
 app.use(cors());
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -29,8 +46,29 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Initialize database
-initDatabase();
+// Restores the last active local workspace on startup if available.
+try {
+  const active = registry.prepare('SELECT * FROM active_session WHERE id = 1').get();
+  if (active?.workspace_id && !active?.is_remote) {
+    switchWorkspace(active.workspace_id);
+  }
+} catch (err) {
+  console.warn('[Workspace] No local workspace restored on startup:', err.message);
+}
+
+// Proxy remote workspace traffic before route handlers.
+app.use(remoteProxy);
+
+// Protect workspace data routes for non-local clients.
+app.use('/api/docs', joinCodeAuth);
+app.use('/api/tasks', joinCodeAuth);
+app.use('/api/graph', joinCodeAuth);
+app.use('/api/chats', joinCodeAuth);
+app.use('/api/code', joinCodeAuth);
+app.use('/api/canvas', joinCodeAuth);
+app.use('/api/voice', joinCodeAuth);
+app.use('/api/tags', joinCodeAuth);
+app.use('/api/workspace', joinCodeAuth);
 
 // Mount API routes
 app.use('/api/ai', require('./routes/ai'));
@@ -44,10 +82,21 @@ app.use('/api/canvas', require('./routes/canvas'));
 app.use('/api/chats', require('./routes/chats'));
 app.use('/api/tags', require('./routes/tags'));
 app.use('/api/templates', require('./routes/templates'));
+app.use('/api/workspaces', require('./routes/workspaces'));
+
+// GET /api/system/info — Exposes host network info for LAN joins.
+app.get('/api/system/info', (req, res) => {
+  res.json({
+    localIP: LOCAL_IP,
+    port: Number(PORT),
+    version: require('../package.json').version
+  });
+});
 
 // GET /api/peers — Return discovered LAN peers
-app.get('/api/peers', (req, res) => {
-  res.json({ peers: getPeers() });
+app.get('/api/peers', async (req, res) => {
+  const peers = await getPeers();
+  res.json({ peers });
 });
 
 // Health check endpoint
@@ -118,9 +167,10 @@ io.on('connection', (socket) => {
 });
 
 // Start the server
-server.listen(PORT, () => {
-  console.log(`\n⚡ RyFlow Backend running on http://localhost:${PORT}`);
-  console.log(`📡 Socket.io signaling active`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('RyFlow backend listening on port 3001');
+  console.log('LAN access enabled');
+  console.log(`📡 Socket.io signaling active at ${LOCAL_IP}:${PORT}`);
   startEmbeddingWorker();
 
   // Start LAN peer discovery
@@ -136,7 +186,7 @@ process.on('SIGINT', () => {
   console.log('\nShutting down RyFlow...');
   stopEmbeddingWorker();
   stopDiscovery();
-  closeDatabase();
+  clearActiveWorkspace();
   server.close();
   process.exit(0);
 });

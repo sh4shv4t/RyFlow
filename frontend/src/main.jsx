@@ -6,11 +6,15 @@ import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
 import App from './App';
 import './index.css';
+import { configureApiClient } from './utils/apiClient';
 
 // Use an explicit backend origin when running from Electron/file protocol.
 if (window.location.protocol === 'file:' || window.electronAPI?.isElectron) {
   axios.defaults.baseURL = 'http://localhost:3001';
 }
+
+// Configures API auth/disconnect interceptors once at startup.
+configureApiClient();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

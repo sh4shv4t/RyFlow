@@ -28,6 +28,13 @@ const useStore = create((set, get) => ({
     set({ workspace });
   },
 
+  // Tracks whether active session is local or proxied remote.
+  remoteMode: localStorage.getItem('ryflow_is_remote') === 'true',
+  setRemoteMode: (remoteMode) => {
+    localStorage.setItem('ryflow_is_remote', remoteMode ? 'true' : 'false');
+    set({ remoteMode: Boolean(remoteMode) });
+  },
+
   // AI system status
   aiStatus: {
     gpuDetected: false,
@@ -91,7 +98,11 @@ const useStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('ryflow_user');
     localStorage.removeItem('ryflow_workspace');
-    set({ user: null, workspace: null });
+    localStorage.removeItem('ryflow_remote_join_code');
+    localStorage.removeItem('ryflow_remote_host');
+    localStorage.removeItem('ryflow_remote_port');
+    localStorage.setItem('ryflow_is_remote', 'false');
+    set({ user: null, workspace: null, remoteMode: false });
   }
 }));
 

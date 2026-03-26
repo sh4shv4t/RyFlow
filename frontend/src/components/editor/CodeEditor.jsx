@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Bug, Copy, Download, Languages, MessageSquareText, MessageSquareWarning, Sparkles, WrapText, X, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import { apiFetch } from '../../utils/apiClient';
 
 const LANGUAGE_OPTIONS = [
   { label: 'JavaScript', value: 'javascript', ext: 'js' },
@@ -72,10 +73,6 @@ export default function CodeEditor({
   const [aiText, setAiText] = useState('');
   const { selectedModel, workspace, setAiActive } = useStore();
 
-  const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
-    ? 'http://localhost:3001'
-    : '';
-
   const monacoThemeName = 'ryflow-dark';
 
   // Configures custom Monaco theme to match RyFlow colors.
@@ -126,7 +123,7 @@ export default function CodeEditor({
       setAiLoading(true);
       setAiActive(true);
 
-      const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+      const response = await apiFetch('/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -170,7 +167,7 @@ export default function CodeEditor({
       setAiLoading(false);
       setAiActive(false);
     }
-  }, [API_BASE, getActiveCode, selectedModel, setAiActive, workspace?.id]);
+  }, [getActiveCode, selectedModel, setAiActive, workspace?.id]);
 
   // Copies current code content to clipboard.
   const handleCopy = useCallback(async () => {

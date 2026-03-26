@@ -6,6 +6,7 @@ import '@excalidraw/excalidraw/index.css';
 import { Eraser, ImageDown, Save, Sparkles, X, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import { apiFetch } from '../../utils/apiClient';
 
 // Creates initial Excalidraw data with RyFlow watermark text.
 function initialCanvasData(title) {
@@ -61,10 +62,6 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
   const [aiLoading, setAiLoading] = useState(false);
   const { workspace, selectedModel, setAiActive } = useStore();
 
-  const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
-    ? 'http://localhost:3001'
-    : '';
-
   const draftKey = useMemo(() => `ryflow_canvas_draft_${canvasId || 'new'}`, [canvasId]);
 
   // Persists local draft in localStorage whenever canvas content changes.
@@ -117,7 +114,7 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
       setAiLoading(true);
       setAiActive(true);
 
-      const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+      const response = await apiFetch('/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -157,7 +154,7 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
       setAiLoading(false);
       setAiActive(false);
     }
-  }, [API_BASE, selectedModel, setAiActive, workspace?.id]);
+  }, [selectedModel, setAiActive, workspace?.id]);
 
   // Clears canvas content after a user confirmation.
   const handleClear = useCallback(() => {

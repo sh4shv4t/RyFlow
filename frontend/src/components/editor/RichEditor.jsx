@@ -17,6 +17,7 @@ import useOllama from '../../hooks/useOllama';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
 import AIAssistPanel from './AIAssistPanel';
+import { apiFetch } from '../../utils/apiClient';
 
 export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -28,9 +29,6 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   const editorRef = useRef(null);
   const latestDocRef = useRef({ json: null, text: '' });
   const { selectedModel, setAiActive } = useStore();
-  const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
-    ? 'http://localhost:3001'
-    : '';
 
   // Converts a browser File into a base64 payload plus MIME type.
   const fileToBase64 = useCallback((file) => new Promise((resolve, reject) => {
@@ -69,7 +67,7 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
     const { imageBase64, mimeType } = await fileToBase64(file);
     try {
       setAiActive(true);
-      const response = await fetch(`${API_BASE}/api/ai/ocr-fallback`, {
+      const response = await apiFetch('/api/ai/ocr-fallback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64, mimeType })
@@ -82,7 +80,7 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
     } finally {
       setAiActive(false);
     }
-  }, [API_BASE, fileToBase64, setAiActive]);
+  }, [fileToBase64, setAiActive]);
 
   // Runs OCR extraction flow and inserts the extracted text into the editor.
   const processImageOCR = useCallback(async (file) => {

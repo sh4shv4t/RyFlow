@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import axios from 'axios';
 import useStore from '../store/useStore';
 import toast from 'react-hot-toast';
+import { apiFetch } from '../utils/apiClient';
 
 export default function useOllama() {
   const [loading, setLoading] = useState(false);
@@ -12,9 +13,6 @@ export default function useOllama() {
   const [ragUsed, setRagUsed] = useState(false);
   const [citations, setCitations] = useState([]);
   const { selectedModel, setAiActive, language, workspace } = useStore();
-  const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
-    ? 'http://localhost:3001'
-    : '';
 
   // Enforce selected language on every turn with stable system constraints.
   const buildLanguageLockedMessages = useCallback((messages) => {
@@ -99,7 +97,7 @@ export default function useOllama() {
     try {
       const finalMessages = buildLanguageLockedMessages(messages);
 
-      const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+      const response = await apiFetch('/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
