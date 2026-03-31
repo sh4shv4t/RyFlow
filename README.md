@@ -1,202 +1,141 @@
 # RyFlow
 
-**Offline-first, peer-to-peer AI collaboration workspace for college students — powered by AMD's open-source AI stack.**
+Think together. Build locally. Stay private.
 
-<p align="center">
-  <strong style="color:#E8000D;">Ry</strong><strong>Flow</strong><br/>
-  <em>Think together. Build locally. Stay private.</em>
-</p>
+RyFlow is an offline-first AI collaboration workspace designed for student teams, builders, and local-first communities. It combines docs, tasks, code, canvas, voice, and graph intelligence in one desktop-ready product.
 
----
+[![Last Commit](https://img.shields.io/github/last-commit/sh4shv4t/RyFlow/main)](https://github.com/sh4shv4t/RyFlow)
+[![Open Issues](https://img.shields.io/github/issues/sh4shv4t/RyFlow)](https://github.com/sh4shv4t/RyFlow/issues)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[![GitHub last commit](https://img.shields.io/github/last-commit/sh4shv4t/RyFlow/main
-)](https://github.com/sh4shv4t/RyFlow)   
-[![GitHub issues](https://img.shields.io/github/issues/sh4shv4t/LLM-Visibility-Optimization-Tool)](https://github.com/sh4shv4t/RyFlow/issues) 
+## Why RyFlow
 
-## Features
+- Private by default: runs locally with your own models
+- Built for collaboration: shared workspace patterns for campus teams
+- Fast and practical: lightweight stack with strong developer ergonomics
+- Offline-first experience: keep working even without internet
 
-| Feature | Description |
-|---------|-------------|
-| **Rich Editor** | TipTap-based collaborative document editor with AI-assisted writing (improve, summarize, translate, expand) |
-| **AI Chat** | Local LLM chat powered by Ollama (phi3:mini default), fully streaming, multi-language |
-| **Image Generation** | Text-to-image via Pollinations.ai — artistic, photorealistic, abstract, and minimal styles |
-| **Voice Input** | Speech-to-text with Whisper.cpp — entirely offline on AMD GPUs |
-| **Knowledge Graph** | D3.js force-directed graph connecting documents, tasks, and AI conversations with semantic search |
-| **Task Board** | Kanban board with natural-language task creation via LLM parsing |
-| **P2P Collaboration** | LAN peer discovery (mDNS/Bonjour), WebRTC signaling, real-time cursor presence |
-| **Sustainability Tracker** | Monitors local inference energy savings vs cloud APIs |
-| **Electron Desktop App** | Runs as a native desktop app on Windows, macOS, and Linux |
+## What You Can Do
 
----
+- Rich AI writing with backlinks, mentions, comments, and history
+- Local AI chat with streaming responses and reusable chat sessions
+- Study guide generation from your own notes and documents
+- Visual canvas workflows with compressed save/load support
+- Knowledge graph search with semantic context and linked nodes
+- Task management and cross-content workspace intelligence
+- Voice transcription support via Whisper integration
+- Workspace portability: export, import, and LAN collaboration
+
+## Product Highlights
+
+### Workspace-native Knowledge
+
+Your notes, tasks, code files, and canvases are linked in a single graph so context never gets lost.
+
+### Local AI, Real Productivity
+
+Use local models for chat, summarization, extraction, and study support without handing your data to external services.
+
+### Built for Teams
+
+Designed for student projects and collaborative squads with practical workflows, not toy demos.
 
 ## Tech Stack
 
 | Layer | Technologies |
-|-------|-------------|
-| **Frontend** | React 18, Vite, TailwindCSS, Zustand, TipTap, D3.js, Framer Motion |
-| **Backend** | Node.js, Express, better-sqlite3, Socket.io |
-| **AI** | Ollama (phi3:mini), nomic-embed-text, Whisper.cpp, Pollinations.ai |
-| **P2P** | simple-peer (WebRTC), bonjour-service (mDNS), Yjs (CRDT) |
-| **Desktop** | Electron |
+|---|---|
+| Frontend | React, Vite, Tailwind CSS, TipTap, D3, Zustand, Framer Motion |
+| Backend | Node.js, Express, better-sqlite3, Socket.io |
+| AI | Ollama, phi3:mini, nomic-embed-text, Whisper.cpp |
+| Collaboration | WebRTC, mDNS discovery, Yjs |
+| Desktop | Electron |
 
----
+## Requirements
 
-## Prerequisites
-
-- **Node.js** ≥ 18
-- **Ollama** — <https://ollama.com>
-- (Optional) **AMD GPU** with ROCm drivers for GPU-accelerated inference
-- (Optional) **Whisper.cpp** binary + `base.en` model for voice transcription
-
----
+- Node.js 18+
+- Ollama installed and running
+- Optional: AMD GPU with ROCm for acceleration
+- Optional: Whisper.cpp for voice transcription
 
 ## Quick Start
 
-### 1. Install Ollama & pull models
+### 1) Install dependencies
 
 ```bash
-# Install Ollama (see https://ollama.com for your OS)
+npm install
+cd backend && npm install && cd ..
+cd frontend && npm install && cd ..
+```
+
+### 2) Pull local models
+
+```bash
 ollama pull phi3:mini
 ollama pull nomic-embed-text
 ```
 
-### 2. Clone & install
-
-```bash
-cd Ryflow
-
-# Install root deps (concurrently, electron)
-npm install
-
-# Install backend deps
-cd backend && npm install && cd ..
-
-# Install frontend deps
-cd frontend && npm install && cd ..
-```
-
-### 3. Run in development
+### 3) Run in development
 
 ```bash
 npm run dev
 ```
 
-This starts **backend** (port 3001) and **frontend** (port 5173) concurrently.
+Frontend runs on port 5173 and backend on port 3001.
 
-Open <http://localhost:5173> in your browser.
-
-### 4. Run as Electron app
+### 4) Launch desktop app
 
 ```bash
 npm run electron
 ```
 
----
+## Setup Flow
 
-## Project Structure
+On first launch, RyFlow opens a guided setup wizard that helps you:
 
-```
-Ryflow/
-├── backend/
-│   ├── db/
-│   │   ├── schema.sql           # SQLite tables
-│   │   └── database.js          # better-sqlite3 wrapper
-│   ├── services/
-│   │   ├── ollamaService.js     # LLM chat & embeddings
-│   │   ├── embeddingService.js  # Semantic search
-│   │   ├── whisperService.js    # Voice transcription
-│   │   ├── imageService.js      # Pollinations.ai
-│   │   └── graphService.js      # Knowledge graph logic
-│   ├── routes/
-│   │   ├── ai.js                # /api/ai/*
-│   │   ├── documents.js         # /api/docs/*
-│   │   ├── tasks.js             # /api/tasks/*
-│   │   ├── graph.js             # /api/graph/*
-│   │   ├── voice.js             # /api/voice/*
-│   │   └── workspace.js         # /api/workspace/*
-│   ├── p2p/
-│   │   └── discovery.js         # mDNS LAN discovery
-│   ├── index.js                 # Express + Socket.io server
-│   └── .env                     # Environment config
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── layout/          # Sidebar, TopBar, AMDbadge
-│   │   │   ├── editor/          # RichEditor, AIAssistPanel, CollabPresence
-│   │   │   ├── ai/              # ChatPanel, ImageGen, VoiceInput
-│   │   │   ├── graph/           # KnowledgeGraph
-│   │   │   ├── tasks/           # TaskBoard, NLTaskInput
-│   │   │   └── workspace/       # WorkspaceSetup, PeerList
-│   │   ├── pages/               # Home, Editor, Tasks, Graph, AIStudio, Workspace, Settings
-│   │   ├── hooks/               # useOllama, usePeer, useVoice, useGraph
-│   │   ├── store/               # Zustand global store
-│   │   ├── utils/               # amdDetect, lanDiscovery
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   └── package.json
-├── electron/
-│   ├── main.js                  # Electron main process
-│   └── preload.js               # Context bridge
-├── package.json                 # Root scripts
-└── README.md
-```
+- verify Ollama availability
+- verify model readiness
+- detect acceleration and optional voice support
+- create your first workspace
 
----
+## Available Scripts
 
-## Scripts
+| Script | Purpose |
+|---|---|
+| npm run dev | Runs frontend and backend together |
+| npm run dev:backend | Runs backend only |
+| npm run dev:frontend | Runs frontend only |
+| npm run electron | Launches desktop shell |
+| npm run build | Builds frontend production bundle |
 
-| Script | Description |
-|--------|------------|
-| `npm run dev` | Start backend + frontend concurrently |
-| `npm run dev:backend` | Start Express server only |
-| `npm run dev:frontend` | Start Vite dev server only |
-| `npm run electron` | Launch Electron desktop app |
-| `npm run build` | Build frontend for production |
+## Configuration
 
----
-
-## Environment Variables
-
-Edit `backend/.env`:
+Create or update backend environment values in backend/.env:
 
 ```env
 PORT=3001
 OLLAMA_BASE=http://localhost:11434
 OLLAMA_MODEL=phi3:mini
 EMBED_MODEL=nomic-embed-text
-WHISPER_PATH=/usr/local/bin/whisper
-WHISPER_MODEL=base.en
+WHISPER_PATH=/path/to/whisper
+WHISPER_MODEL=/path/to/model.bin
 ```
 
----
+## AMD and Performance Notes
 
-## Whisper.cpp Setup (Optional)
+RyFlow works on CPU-only systems and automatically uses acceleration when available.
 
-```bash
-git clone https://github.com/ggerganov/whisper.cpp
-cd whisper.cpp
-make
-# Download model
-bash ./models/download-ggml-model.sh base.en
-```
+- with AMD + ROCm: lower latency and higher throughput
+- without ROCm: fully functional, slightly slower inference
 
-Set `WHISPER_PATH` in `.env` to point to the built binary.
+## Contributing
 
----
+Contributions, bug reports, and ideas are welcome.
 
-## AMD ROCm Notes
+- open an issue with repro steps or feature proposal
+- keep pull requests focused and testable
+- prefer additive changes over disruptive rewrites
 
-RyFlow automatically detects AMD GPUs via `rocm-smi` (Linux) or `wmic` (Windows). When an AMD GPU with ROCm is detected:
+## License
 
-- The **AMD badge** glows green: *"AMD ROCm — GPU Accelerated"*
-- Ollama uses GPU acceleration automatically
-- Sustainability tracker shows energy savings
-
-Without an AMD GPU, everything runs on CPU — fully functional, just slower.
-
----
+MIT
 
