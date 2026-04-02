@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import { apiFetch } from '../../utils/apiClient';
 
 // Downloads text content as a local markdown file.
 function downloadText(filename, content) {
@@ -15,12 +16,53 @@ function downloadText(filename, content) {
   URL.revokeObjectURL(url);
 }
 
+function normalizeGuideShape(parsed) {
+  return {
+    summary: parsed?.summary || 'No summary available',
+    key_terms: Array.isArray(parsed?.key_terms) ? parsed.key_terms : [],
+    key_points: Array.isArray(parsed?.key_points) ? parsed.key_points : [],
+    quiz: Array.isArray(parsed?.quiz) ? parsed.quiz : []
+  };
+}
+
+function safeParseStudyGuide(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+
+  const stripped = raw
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/gi, '')
+    .trim();
+
+  try {
+    return normalizeGuideShape(JSON.parse(stripped));
+  } catch {
+    // Try extracting JSON body from mixed output.
+  }
+
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return normalizeGuideShape(JSON.parse(match[0]));
+    } catch {
+      // Ignore parse failure.
+    }
+  }
+
+  return {
+    summary: 'Study guide generation failed. Try selecting fewer documents.',
+    key_terms: [],
+    key_points: [],
+    quiz: []
+  };
+}
+
 export default function StudyGuidePanel() {
   const { workspace } = useStore();
   const [docs, setDocs] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [loadingGuide, setLoadingGuide] = useState(false);
+  const [guideError, setGuideError] = useState('');
   const [guide, setGuide] = useState(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -39,16 +81,65 @@ export default function StudyGuidePanel() {
   const generate = async () => {
     if (!workspace?.id || selectedIds.length === 0) return;
     setLoadingGuide(true);
+    setGuideError('Generating study guide... this may take 30-60 seconds');
     setGuide(null);
     setQuizIndex(0);
     setAnswers({});
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 60000);
+
     try {
-      const res = await axios.post('/api/ai/study-guide', {
-        workspace_id: workspace.id,
-        doc_ids: selectedIds
+      const res = await apiFetch('/api/ai/study-guide', {
+        method: 'POST',
+        body: JSON.stringify({
+          doc_ids: selectedIds,
+          workspace_id: workspace.id
+        }),
+        signal: controller.signal
       });
-      setGuide(res.data);
-    } catch {
+
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json().catch(() => null);
+      let parsed = null;
+      if (data && typeof data === 'object' && (
+        'summary' in data || 'key_terms' in data || 'key_points' in data || 'quiz' in data
+      )) {
+        parsed = normalizeGuideShape(data);
+      } else if (typeof data?.response === 'string') {
+        parsed = safeParseStudyGuide(data.response);
+      } else if (typeof data?.guide === 'string') {
+        parsed = safeParseStudyGuide(data.guide);
+      } else if (typeof data?.text === 'string') {
+        parsed = safeParseStudyGuide(data.text);
+      }
+
+      if (!parsed) {
+        parsed = {
+          summary: 'Study guide generation failed. Try selecting fewer documents.',
+          key_terms: [],
+          key_points: [],
+          quiz: []
+        };
+      }
+
+      setGuide(parsed);
+      setGuideError('');
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err.name === 'AbortError') {
+        setGuideError('Study guide generation timed out. Try selecting fewer documents or check if Ollama is running.');
+      } else {
+        setGuideError(err.message || 'Generation failed');
+      }
       toast.error('Failed to generate study guide');
     } finally {
       setLoadingGuide(false);
@@ -118,8 +209,10 @@ export default function StudyGuidePanel() {
           disabled={loadingGuide || selectedIds.length === 0}
           className={`mt-3 px-3 py-2 rounded text-sm text-[var(--text-on-accent)] ${loadingGuide ? 'bg-accent/70' : 'bg-accent'} disabled:opacity-50`}
         >
-          {loadingGuide ? 'Generating...' : 'Generate Study Guide'}
+          {loadingGuide ? 'Generating study guide... this may take 30-60 seconds' : 'Generate Study Guide'}
         </button>
+
+        {guideError ? <div className="text-xs text-amd-orange mt-2">{guideError}</div> : null}
       </div>
 
       {guide ? (

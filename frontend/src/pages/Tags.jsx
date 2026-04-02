@@ -16,7 +16,7 @@ const TYPE_OPTIONS = [
 ];
 
 function targetPathForItem(item) {
-  if (item.type === 'doc') return item.source_id ? `/editor/${item.source_id}` : '/editor';
+  if (item.type === 'doc') return item.source_id ? `/editor/${item.source_id}` : '/documents';
   if (item.type === 'task') return '/tasks';
   if (item.type === 'code') return item.source_id ? `/code/${item.source_id}` : '/code';
   if (item.type === 'canvas') return item.source_id ? `/canvas/${item.source_id}` : '/canvas';
@@ -39,7 +39,7 @@ export default function Tags() {
     if (!workspace?.id) return;
     try {
       const res = await axios.get('/api/tags', { params: { workspace_id: workspace.id } });
-      const next = res.data.tags || [];
+      const next = Array.isArray(res.data) ? res.data : (res.data?.tags || []);
       setTags(next);
       if (!activeTagId && next.length) {
         setActiveTagId(next[0].id);

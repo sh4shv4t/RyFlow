@@ -9,6 +9,7 @@ import CommandPalette from './components/layout/CommandPalette';
 import Home from './pages/Home';
 import Workspace from './pages/Workspace';
 import Editor from './pages/Editor';
+import Documents from './pages/Documents';
 import Tasks from './pages/Tasks';
 import Graph from './pages/Graph';
 import AIStudio from './pages/AIStudio';
@@ -16,6 +17,7 @@ import Settings from './pages/Settings';
 import CodeEditorPage from './pages/CodeEditorPage';
 import CanvasPage from './pages/CanvasPage';
 import WorkspaceManager from './pages/WorkspaceManager';
+import TagsView from './pages/TagsView';
 import useStore from './store/useStore';
 
 export default function App() {
@@ -160,7 +162,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/workspace" element={<Workspace />} />
-            <Route path="/editor" element={<Editor />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route path="/editor" element={<Navigate to="/documents" replace />} />
             <Route path="/editor/:id" element={<Editor />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/graph" element={<Graph />} />
@@ -169,6 +172,7 @@ export default function App() {
             <Route path="/code/:id" element={<CodeEditorPage />} />
             <Route path="/canvas" element={<CanvasPage />} />
             <Route path="/canvas/:id" element={<CanvasPage />} />
+            <Route path="/tags" element={<TagsView />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/workspaces" element={<WorkspaceManager />} />
             <Route path="*" element={<Navigate to="/" />} />

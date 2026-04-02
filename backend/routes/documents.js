@@ -295,7 +295,10 @@ router.post('/:id/versions/:versionId/restore', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const db = getDb();
-    const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+    const workspaceId = req.query.workspace_id;
+    const doc = workspaceId
+      ? db.prepare('SELECT * FROM documents WHERE id = ? AND workspace_id = ?').get(req.params.id, workspaceId)
+      : db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
     appendTagsToDocuments(db, [doc]);
     res.json(doc);
@@ -307,14 +310,22 @@ router.get('/:id', (req, res) => {
 // PUT /api/docs/:id — Update a document's content and/or title
 router.put('/:id', async (req, res) => {
   try {
-    const { title, content, last_editor } = req.body;
+    const { title, content, last_editor, workspace_id } = req.body;
     const db = getDb();
 
-    const existing = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+    const existing = workspace_id
+      ? db.prepare('SELECT * FROM documents WHERE id = ? AND workspace_id = ?').get(req.params.id, workspace_id)
+      : db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Document not found' });
 
-    const nextTitle = title || existing.title;
-    const nextContent = content !== undefined ? content : existing.content;
+    const nextTitle = (typeof title === 'string' && title.trim()) ? title : existing.title;
+    let nextContent = content !== undefined ? content : existing.content;
+    if (nextContent && typeof nextContent === 'object') {
+      nextContent = JSON.stringify(nextContent);
+    }
+    if (typeof nextContent !== 'string') {
+      nextContent = String(nextContent ?? '');
+    }
     const changed = nextTitle !== existing.title || nextContent !== existing.content;
 
     if (changed) {
@@ -348,20 +359,26 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const db = getDb();
-    const existing = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Document not found' });
 
-    db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
+    db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+    db.prepare('DELETE FROM document_versions WHERE document_id = ?').run(id);
+    db.prepare('DELETE FROM doc_comments WHERE document_id = ?').run(id);
 
     // Clean up graph node
-    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'doc');
+    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(id, 'doc');
     if (node) {
       db.prepare('DELETE FROM edges WHERE source_id = ? OR target_id = ?').run(node.id, node.id);
       db.prepare('DELETE FROM nodes WHERE id = ?').run(node.id);
     }
 
+    db.prepare('DELETE FROM nodes WHERE source_id = ?').run(id);
+
     res.json({ success: true });
   } catch (err) {
+    console.error('[docs DELETE]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

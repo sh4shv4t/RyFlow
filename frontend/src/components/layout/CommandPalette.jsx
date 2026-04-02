@@ -57,14 +57,14 @@ export default function CommandPalette() {
   }, [query, commandPaletteOpen, workspace?.id]);
 
   const quickActions = useMemo(() => ([
-    { key: 'new-doc', label: 'New Document', run: () => navigate('/editor') },
+    { key: 'new-doc', label: 'New Document', run: () => navigate('/documents') },
     { key: 'new-task', label: 'Open Tasks', run: () => navigate('/tasks') },
     { key: 'open-graph', label: 'Open Graph', run: () => navigate('/graph') }
   ]), [navigate]);
 
   const openResult = (item) => {
     if (!item) return;
-    if (item.type === 'doc') navigate(item.source_id ? `/editor/${item.source_id}` : '/editor');
+    if (item.type === 'doc') navigate(item.source_id ? `/editor/${item.source_id}` : '/documents');
     else if (item.type === 'task') navigate('/tasks');
     else if (item.type === 'code') navigate(item.source_id ? `/code/${item.source_id}` : '/code');
     else if (item.type === 'canvas') navigate(item.source_id ? `/canvas/${item.source_id}` : '/canvas');

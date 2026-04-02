@@ -311,7 +311,7 @@ export default function KnowledgeGraph() {
     if (!node) return;
     const type = normalizeType(node.type);
     if (type === 'document') {
-      navigate(node.source_id ? `/editor/${node.source_id}` : '/editor');
+      navigate(node.source_id ? `/editor/${node.source_id}` : '/documents');
       return;
     }
     if (type === 'code') {
@@ -326,7 +326,7 @@ export default function KnowledgeGraph() {
       navigate('/tasks');
       return;
     }
-    navigate('/editor');
+    navigate('/documents');
   }, [navigate]);
 
   const selectedType = normalizeType(selectedNode?.type);

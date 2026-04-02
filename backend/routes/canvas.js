@@ -57,7 +57,7 @@ router.get('/list', (req, res) => {
     const canvases = db.prepare(
       'SELECT id, workspace_id, title, thumbnail, created_by, updated_at, created_at FROM canvases WHERE workspace_id = ? ORDER BY updated_at DESC'
     ).all(workspace_id);
-    res.json({ canvases });
+    res.json(canvases);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -101,7 +101,12 @@ router.post('/save', async (req, res) => {
       enqueueEmbeddingJob(createdNode.id, workspace_id);
     }
 
-    res.json(saved);
+    res.json({
+      ...saved,
+      canvas_id: saved.id,
+      elements: decodeCanvasJSON(saved.elements, '[]'),
+      app_state: decodeCanvasJSON(saved.app_state, '{}')
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

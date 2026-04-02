@@ -1,11 +1,10 @@
 // Home page — unified workspace activity dashboard.
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import * as d3 from 'd3';
 import {
   FileText, CheckSquare, Code2, PencilRuler, MessageSquare,
-  GitBranch, ArrowRight, AlertCircle, Mic
+  AlertCircle, Mic
 } from 'lucide-react';
 import axios from 'axios';
 import { apiFetch } from '../utils/apiClient';
@@ -36,7 +35,6 @@ const TYPE_COLORS = {
 
 export default function Home() {
   const navigate = useNavigate();
-  const svgRef = useRef(null);
   const { user, workspace, aiStatus, peers } = useStore();
   const [clock, setClock] = useState(new Date());
   const [stats, setStats] = useState(null);
@@ -45,7 +43,6 @@ export default function Home() {
   const [recentChats, setRecentChats] = useState([]);
   const [codeFiles, setCodeFiles] = useState([]);
   const [canvases, setCanvases] = useState([]);
-  const [graphPreview, setGraphPreview] = useState({ nodes: [], edges: [] });
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingSpeaking, setBriefingSpeaking] = useState(false);
   const [briefingText, setBriefingText] = useState('');
@@ -107,14 +104,13 @@ export default function Home() {
   // Loads all dashboard data in one batch.
   const fetchDashboard = useCallback(async () => {
     if (!workspace?.id) return;
-    const [statsRes, activityRes, tasksRes, chatsRes, codeRes, canvasRes, graphRes] = await Promise.all([
+    const [statsRes, activityRes, tasksRes, chatsRes, codeRes, canvasRes] = await Promise.all([
       axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } }),
       axios.get('/api/workspace/activity', { params: { workspace_id: workspace.id } }),
       axios.get('/api/tasks', { params: { workspace_id: workspace.id } }),
       axios.get('/api/chats', { params: { workspace_id: workspace.id } }),
       axios.get('/api/code/list', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/graph', { params: { workspace_id: workspace.id } })
+      axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } })
     ]);
 
     setStats(statsRes.data);
@@ -122,51 +118,13 @@ export default function Home() {
     setTasks(tasksRes.data.tasks || []);
     setRecentChats((chatsRes.data.chats || []).slice(0, 2));
     setCodeFiles((codeRes.data.files || []).slice(0, 3));
-    setCanvases((canvasRes.data.canvases || []).slice(0, 3));
-
-    const nodes = (graphRes.data.nodes || []).slice(-10);
-    const ids = new Set(nodes.map((n) => n.id));
-    const edges = (graphRes.data.edges || []).filter((e) => ids.has(e.source_id) && ids.has(e.target_id));
-    setGraphPreview({ nodes, edges });
+    const canvasList = Array.isArray(canvasRes.data) ? canvasRes.data : (canvasRes.data?.canvases || []);
+    setCanvases(canvasList.slice(0, 3));
   }, [workspace?.id]);
 
   useEffect(() => {
     fetchDashboard().catch(() => {});
   }, [fetchDashboard]);
-
-  // Draws mini non-interactive force graph preview.
-  useEffect(() => {
-    if (!svgRef.current || graphPreview.nodes.length === 0) return;
-    const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
-    const width = svgRef.current.clientWidth;
-    const height = 300;
-
-    const simulation = d3.forceSimulation(graphPreview.nodes.map((n) => ({ ...n })))
-      .force('link', d3.forceLink(graphPreview.edges.map((e) => ({ source: e.source_id, target: e.target_id }))).id((d) => d.id).distance(70))
-      .force('charge', d3.forceManyBody().strength(-120))
-      .force('center', d3.forceCenter(width / 2, height / 2));
-
-    const links = svg.append('g').selectAll('line').data(graphPreview.edges).enter().append('line')
-      .attr('stroke', 'rgba(255,255,255,0.18)');
-
-    const nodes = svg.append('g').selectAll('circle').data(simulation.nodes()).enter().append('circle')
-      .attr('r', 6)
-      .attr('fill', (d) => TYPE_COLORS[d.type] || '#E8000D');
-
-    simulation.on('tick', () => {
-      links
-        .attr('x1', (d) => d.source.x)
-        .attr('y1', (d) => d.source.y)
-        .attr('x2', (d) => d.target.x)
-        .attr('y2', (d) => d.target.y);
-      nodes
-        .attr('cx', (d) => d.x)
-        .attr('cy', (d) => d.y);
-    });
-
-    return () => simulation.stop();
-  }, [graphPreview]);
 
   const inProgressTasks = useMemo(
     () => tasks.filter((t) => ['in_progress', 'in-progress'].includes(t.status)).slice(0, 3),
@@ -214,10 +172,10 @@ export default function Home() {
         <div style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {[
-              { label: 'New Doc', icon: FileText, onClick: () => navigate('/editor') },
-              { label: 'New Task', icon: CheckSquare, onClick: () => navigate('/tasks') },
-              { label: 'Ask AI', icon: MessageSquare, onClick: () => navigate('/ai') },
-              { label: 'Voice Note', icon: Mic, onClick: () => navigate('/ai') }
+              { label: 'New Doc', icon: FileText, onClick: () => navigate('/documents'), accent: '#E8000D' },
+              { label: 'New Task', icon: CheckSquare, onClick: () => navigate('/tasks'), accent: '#FF6B00' },
+              { label: 'Ask AI', icon: MessageSquare, onClick: () => navigate('/ai'), accent: '#8B5CF6' },
+              { label: 'Voice Note', icon: Mic, onClick: () => navigate('/ai'), accent: '#3D9970' }
             ].map((action) => {
               const ActionIcon = action.icon;
               return (
@@ -239,12 +197,13 @@ export default function Home() {
                     padding: '8px 14px',
                     backgroundColor: '#1A1A1A',
                     border: '1px solid #333333',
+                    borderLeft: `3px solid ${action.accent}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
                     transition: 'all 150ms ease'
                   }}
                 >
-                  <ActionIcon size={14} color="#666666" />
+                  <ActionIcon size={14} color={action.accent} />
                   <span style={{ fontSize: '13px', color: '#999999' }}>{action.label}</span>
                 </button>
               );
@@ -363,7 +322,7 @@ export default function Home() {
                 <button
                   key={`${item.type}-${item.id}`}
                   onClick={() => {
-                    if (item.type === 'document') navigate('/editor');
+                    if (item.type === 'document') navigate('/documents');
                     if (item.type === 'task') navigate('/tasks');
                     if (item.type === 'code') navigate('/code');
                     if (item.type === 'canvas') navigate('/canvas');
@@ -387,7 +346,7 @@ export default function Home() {
                     textAlign: 'left'
                   }}
                 >
-                  <ItemIcon size={14} color="#666666" />
+                  <ItemIcon size={14} color={TYPE_COLORS[item.type] || '#666666'} />
                   <span
                     style={{
                       fontSize: '13px',
@@ -422,40 +381,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
-              KNOWLEDGE GRAPH
-            </p>
-          </div>
-          <div
-            style={{
-              backgroundColor: '#111111',
-              border: '1px solid #242424',
-              borderRadius: '6px',
-              height: '220px',
-              overflow: 'hidden',
-              marginBottom: '8px'
-            }}
-          >
-            <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
-          </div>
-          <button
-            onClick={() => navigate('/graph')}
-            style={{
-              display: 'block',
-              textAlign: 'right',
-              fontSize: '12px',
-              color: '#E8000D',
-              cursor: 'pointer',
-              background: 'none',
-              border: 'none',
-              width: '100%'
-            }}
-          >
-            Open Graph →
-          </button>
-        </div>
+        <div />
       </div>
 
       <div
@@ -555,18 +481,6 @@ export default function Home() {
               <span style={{ fontSize: '10px', color: '#666666' }}>{timeAgo(chat.updated_at)}</span>
             </button>
           ))}
-        </div>
-
-        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
-
-        <div style={{ marginBottom: '20px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
-            STORAGE
-          </p>
-          <p style={{ fontSize: '11px', color: '#999999', marginBottom: '6px' }}>Workspace usage unavailable</p>
-          <div style={{ height: '3px', backgroundColor: '#222222', borderRadius: '2px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', backgroundColor: '#E8000D', borderRadius: '2px', width: '18%' }} />
-          </div>
         </div>
 
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>

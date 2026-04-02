@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, FileText, CheckSquare, Settings, Code2, PenTool,
-  Sparkles, CalendarDays, Layers, ChevronDown, Network
+  Sparkles, CalendarDays, Layers, ChevronDown, Network, Tag
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -15,7 +15,7 @@ const navSections = [
     label: 'WORKSPACE',
     items: [
       { to: '/', icon: Home, label: 'Home' },
-      { to: '/editor', icon: FileText, label: 'Documents' },
+      { to: '/documents', icon: FileText, label: 'Documents' },
       { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
       { to: '/code', icon: Code2, label: 'Code' },
       { to: '/canvas', icon: PenTool, label: 'Canvas' }
@@ -32,6 +32,7 @@ const navSections = [
     label: 'ORGANIZE',
     items: [
       { action: 'daily-note', icon: CalendarDays, label: "Today's Note" },
+      { to: '/tags', icon: Tag, label: 'Tags' },
       { to: '/workspaces', icon: Layers, label: 'Workspaces' }
     ]
   }
@@ -50,10 +51,13 @@ export default function Sidebar() {
   }, [user?.name]);
 
   const isItemActive = (to) => {
-    if (to === '/') {
-      return location.pathname === '/';
-    }
-    return location.pathname === to;
+    const path = location.pathname;
+    if (to === '/') return path === '/';
+    if (to === '/documents') return path === '/documents' || path.startsWith('/editor/');
+    if (to === '/code') return path === '/code' || path.startsWith('/code/');
+    if (to === '/canvas') return path === '/canvas' || path.startsWith('/canvas/');
+    if (to === '/tags') return path === '/tags';
+    return path === to;
   };
 
   // Opens or creates today's daily note and navigates directly to the resolved document id.
@@ -224,7 +228,9 @@ export default function Sidebar() {
             </p>
 
             {section.items.map((item) => {
-              const active = item.to ? isItemActive(item.to) : (item.action === 'daily-note' && location.pathname === '/editor');
+              const active = item.to
+                ? isItemActive(item.to)
+                : (item.action === 'daily-note' && location.pathname.startsWith('/editor'));
               const hover = hoveredNav === item.to;
               const Icon = item.icon;
               const isHighlighted = active || hover;

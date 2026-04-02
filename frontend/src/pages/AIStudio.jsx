@@ -56,21 +56,21 @@ export default function AIStudio() {
     setActiveChatId(null);
   }, []);
 
-  // Deletes a saved chat after user confirmation.
+  // Deletes a saved chat with optimistic UI removal.
   const handleDeleteChat = useCallback(async (chatId) => {
-    const confirmed = window.confirm('Are you sure? This cannot be undone.');
-    if (!confirmed) return;
+    const previous = chats;
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    if (activeChatId === chatId) {
+      setActiveChatId(null);
+    }
     try {
       await axios.delete(`/api/chats/${chatId}`);
-      toast.success('Chat deleted');
-      if (activeChatId === chatId) {
-        setActiveChatId(null);
-      }
-      fetchChats();
     } catch {
+      setChats(previous);
+      fetchChats();
       toast.error('Failed to delete chat');
     }
-  }, [activeChatId, fetchChats]);
+  }, [activeChatId, chats, fetchChats]);
 
   const handleChatCreated = useCallback((createdChat) => {
     if (!createdChat?.id) return;
@@ -194,54 +194,105 @@ export default function AIStudio() {
             <p style={{ padding: '20px 10px', fontSize: '13px', color: '#666666', textAlign: 'center' }}>No chats yet</p>
           )}
           {!chatLoading && filteredChats.map((chat) => (
-            <button
+            <div
               key={chat.id}
-              onClick={() => setActiveChatId(chat.id)}
+              style={{ position: 'relative' }}
               onMouseEnter={(e) => {
-                if (activeChat?.id !== chat.id) e.currentTarget.style.backgroundColor = '#222222';
+                const btn = e.currentTarget.querySelector('.chat-delete-btn');
+                if (btn) btn.style.opacity = '1';
+                const card = e.currentTarget.querySelector('.chat-item-card');
+                if (card && activeChat?.id !== chat.id) card.style.backgroundColor = '#222222';
               }}
               onMouseLeave={(e) => {
-                if (activeChat?.id !== chat.id) e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-              style={{
-                width: '100%',
-                padding: activeChat?.id === chat.id ? '8px 10px 8px 8px' : '8px 10px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                marginBottom: '1px',
-                transition: 'background 150ms',
-                borderLeft: activeChat?.id === chat.id ? '2px solid #E8000D' : '2px solid transparent',
-                backgroundColor: activeChat?.id === chat.id ? 'rgba(232,0,13,0.08)' : 'transparent',
-                borderTop: 'none',
-                borderRight: 'none',
-                borderBottom: 'none',
-                textAlign: 'left'
+                const btn = e.currentTarget.querySelector('.chat-delete-btn');
+                if (btn) btn.style.opacity = '0';
+                const card = e.currentTarget.querySelector('.chat-item-card');
+                if (card && activeChat?.id !== chat.id) card.style.backgroundColor = 'transparent';
               }}
             >
-              <p
+              <button
+                className="chat-item-card"
+                onClick={() => setActiveChatId(chat.id)}
                 style={{
-                  fontSize: '13px',
-                  fontWeight: '500',
-                  color: '#F0F0F0',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  marginBottom: '3px'
+                  width: '100%',
+                  padding: activeChat?.id === chat.id ? '8px 28px 8px 8px' : '8px 28px 8px 10px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  marginBottom: '1px',
+                  transition: 'background 150ms',
+                  borderLeft: activeChat?.id === chat.id ? '2px solid #E8000D' : '2px solid transparent',
+                  backgroundColor: activeChat?.id === chat.id ? 'rgba(232,0,13,0.08)' : 'transparent',
+                  borderTop: 'none',
+                  borderRight: 'none',
+                  borderBottom: 'none',
+                  textAlign: 'left'
                 }}
               >
-                {chat.title}
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: '#2A2A2A', color: '#666666', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
-                {chat.rag_used ? <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '2px' }}>RAG</span> : null}
-                <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{timeAgo(chat.updated_at)}</span>
-              </div>
-            </button>
+                <p
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    color: '#F0F0F0',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginBottom: '3px'
+                  }}
+                >
+                  {chat.title}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: '#2A2A2A', color: '#666666', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
+                  {chat.rag_used ? <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '2px' }}>RAG</span> : null}
+                  <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{timeAgo(chat.updated_at)}</span>
+                </div>
+              </button>
+
+              <button
+                className="chat-delete-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteChat(chat.id);
+                }}
+                style={{
+                  opacity: 0,
+                  position: 'absolute',
+                  right: '6px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--error)',
+                  padding: '2px 4px',
+                  borderRadius: '3px',
+                  flexShrink: 0,
+                  transition: 'opacity 150ms ease'
+                }}
+                title="Delete chat"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#111111' }}>
+        <div style={{ padding: '14px 20px 10px' }}>
+          <h1
+            style={{
+              fontSize: '20px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              paddingLeft: '12px',
+              borderLeft: '3px solid var(--accent)',
+              margin: 0
+            }}
+          >
+            AI Studio
+          </h1>
+        </div>
         <AnimatePresence mode="wait">
           {activeTab === 'chat' && (
             <motion.div

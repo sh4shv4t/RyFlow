@@ -329,7 +329,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
                         <button
                           key={`${c.id}-${idx}`}
                           onClick={() => {
-                            if (c.type === 'doc') navigate(c.source_id ? `/editor/${c.source_id}` : '/editor');
+                            if (c.type === 'doc') navigate(c.source_id ? `/editor/${c.source_id}` : '/documents');
                             else if (c.type === 'code') navigate(c.source_id ? `/code/${c.source_id}` : '/code');
                             else if (c.type === 'canvas') navigate(c.source_id ? `/canvas/${c.source_id}` : '/canvas');
                             else if (c.type === 'task') navigate('/tasks');

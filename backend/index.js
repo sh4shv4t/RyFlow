@@ -68,6 +68,7 @@ app.use('/api/canvas', joinCodeAuth);
 app.use('/api/voice', joinCodeAuth);
 app.use('/api/workspace', joinCodeAuth);
 app.use('/api/comments', joinCodeAuth);
+app.use('/api/tags', joinCodeAuth);
 
 // Mount API routes
 app.use('/api/ai', require('./routes/ai'));
@@ -82,6 +83,7 @@ app.use('/api/chats', require('./routes/chats'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/workspaces', require('./routes/workspaces'));
 app.use('/api/comments', require('./routes/comments'));
+app.use('/api/tags', require('./routes/tags'));
 
 // GET /api/system/info — Exposes host network info for LAN joins.
 app.get('/api/system/info', (req, res) => {

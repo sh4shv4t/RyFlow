@@ -261,6 +261,8 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'nowrap',
+        overflow: 'hidden',
         padding: '0 16px',
         gap: '8px',
         background: 'var(--bg-surface)',
@@ -274,7 +276,10 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
           onChange={(e) => onTitleChange?.(e.target.value)}
           placeholder="Canvas title"
           style={{
-            flex: 1,
+            width: '100%',
+            maxWidth: '200px',
+            minWidth: '80px',
+            flexShrink: 1,
             height: '32px',
             borderRadius: '8px',
             border: '1px solid var(--border-subtle)',

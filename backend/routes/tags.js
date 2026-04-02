@@ -7,6 +7,31 @@ const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 const router = express.Router();
 
+function ensureTagTables(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tags (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#64748b',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS node_tags (
+      node_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (node_id, tag_id),
+      FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_workspace_name ON tags(workspace_id, name);
+    CREATE INDEX IF NOT EXISTS idx_node_tags_tag_node ON node_tags(tag_id, node_id);
+  `);
+}
+
 function normalizeType(type) {
   const value = String(type || '').toLowerCase();
   if (value === 'document' || value === 'docs') return 'doc';
@@ -39,10 +64,11 @@ router.get('/', (req, res) => {
     const workspaceId = req.query.workspace_id;
     if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
+    ensureTagTables(db);
     const tags = db.prepare(
       'SELECT id, workspace_id, name, color, created_at FROM tags WHERE workspace_id = ? ORDER BY name COLLATE NOCASE ASC'
     ).all(workspaceId);
-    return res.json({ tags });
+    return res.json(tags);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -57,6 +83,7 @@ router.post('/', (req, res) => {
     }
 
     const db = getDb();
+    ensureTagTables(db);
     const id = uuidv4();
     db.prepare('INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?)')
       .run(id, workspace_id, String(name).trim(), color || '#64748b');
@@ -75,6 +102,7 @@ router.post('/', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const db = getDb();
+    ensureTagTables(db);
     const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.params.id);
     if (!tag) return res.status(404).json({ error: 'Tag not found' });
     db.prepare('DELETE FROM tags WHERE id = ?').run(req.params.id);
@@ -95,6 +123,7 @@ router.get('/by-source', (req, res) => {
     }
 
     const db = getDb();
+    ensureTagTables(db);
     const node = db.prepare(
       'SELECT id FROM nodes WHERE workspace_id = ? AND type = ? AND source_id = ? LIMIT 1'
     ).get(workspaceId, type, sourceId);
@@ -116,6 +145,7 @@ router.post('/assign', (req, res) => {
     }
 
     const db = getDb();
+    ensureTagTables(db);
     const node = db.prepare(
       'SELECT id FROM nodes WHERE workspace_id = ? AND type = ? AND source_id = ? LIMIT 1'
     ).get(workspace_id, normalizedType, source_id);
@@ -148,6 +178,7 @@ router.get('/filter', (req, res) => {
     }
 
     const db = getDb();
+    ensureTagTables(db);
     const nodes = db.prepare(
       `SELECT n.id, n.type, n.title, n.content_summary, n.source_id, n.created_at
        FROM nodes n

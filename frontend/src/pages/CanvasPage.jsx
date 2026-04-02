@@ -27,6 +27,7 @@ export default function CanvasPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Idle');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const latestSceneRef = useRef({ elements: [], appState: {} });
 
   // Fetches saved canvas list for the active workspace.
@@ -34,7 +35,8 @@ export default function CanvasPage() {
     if (!workspace?.id) return;
     try {
       const res = await axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } });
-      setCanvases(res.data.canvases || []);
+      const next = Array.isArray(res.data) ? res.data : (res.data?.canvases || []);
+      setCanvases(next);
     } catch (err) {
       toast.error('Failed to load canvases');
     } finally {
@@ -106,31 +108,34 @@ export default function CanvasPage() {
         created_by: user?.id || null
       };
       const res = await axios.post('/api/canvas/save', payload, { timeout: 20000 });
-      const saved = res.data;
+      const saved = res.data || {};
+      const resolvedId = saved.id || saved.canvas_id || activeCanvas.id;
       setActiveCanvas({
         ...saved,
+        id: resolvedId,
         elements: parseMaybeJSON(saved.elements, []),
         app_state: parseMaybeJSON(saved.app_state, {})
       });
 
       setCanvases((prev) => {
         const nextItem = {
-          id: saved.id,
-          workspace_id: saved.workspace_id,
-          title: saved.title,
-          thumbnail: saved.thumbnail,
-          created_by: saved.created_by,
-          updated_at: saved.updated_at,
-          created_at: saved.created_at
+          id: resolvedId,
+          workspace_id: saved.workspace_id || workspace.id,
+          title: saved.title || activeCanvas.title || 'Untitled Canvas',
+          thumbnail: saved.thumbnail || null,
+          created_by: saved.created_by || user?.id || null,
+          updated_at: saved.updated_at || new Date().toISOString(),
+          created_at: saved.created_at || new Date().toISOString()
         };
-        const filtered = prev.filter((c) => c.id !== saved.id);
+        const filtered = prev.filter((c) => c.id !== resolvedId);
         return [nextItem, ...filtered];
       });
 
       setSaveStatus(silent ? 'Auto-saved' : 'Saved');
-      if (saved.id && saved.id !== activeCanvas.id) {
-        navigate(`/canvas/${saved.id}`);
+      if (resolvedId && resolvedId !== activeCanvas.id) {
+        navigate(`/canvas/${resolvedId}`);
       }
+      await fetchCanvases();
       if (!silent) {
         toast.success('Canvas saved');
       }
@@ -144,7 +149,7 @@ export default function CanvasPage() {
         setSaving(false);
       }
     }
-  }, [activeCanvas, navigate, user?.id, workspace?.id]);
+  }, [activeCanvas, fetchCanvases, navigate, user?.id, workspace?.id]);
 
   // Updates active canvas title in local state.
   const handleTitleChange = useCallback((title) => {
@@ -154,50 +159,90 @@ export default function CanvasPage() {
   const collaborators = useMemo(() => [user?.name || 'You'], [user?.name]);
 
   return (
-    <div style={{ backgroundColor: '#111111', height: '100%', display: 'flex' }}>
-      <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid #242424', padding: '12px', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666' }}>Canvases</p>
-          <button onClick={createCanvas} style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div
+      style={{
+        backgroundColor: '#111111',
+        height: '100%',
+        width: '100%',
+        display: 'flex',
+        overflow: 'hidden'
+      }}
+    >
+      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
+          <button
+            onClick={() => setPickerOpen((v) => !v)}
+            style={{
+              height: '30px',
+              padding: '0 10px',
+              borderRadius: '6px',
+              border: '1px solid #333333',
+              backgroundColor: '#111111',
+              color: '#999999',
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+          >
+            My Canvases ({canvases.length})
+          </button>
+
+          {pickerOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '40px',
+                left: '16px',
+                width: '280px',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                zIndex: 20,
+                background: '#1A1A1A',
+                border: '1px solid #333333',
+                borderRadius: '8px',
+                padding: '8px'
+              }}
+            >
+              {loading ? (
+                <div style={{ fontSize: '12px', color: '#777777', padding: '8px' }}>Loading canvases...</div>
+              ) : canvases.length === 0 ? (
+                <div style={{ fontSize: '12px', color: '#777777', padding: '8px' }}>No saved canvases yet.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {canvases.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        loadCanvas(c.id);
+                        setPickerOpen(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: activeCanvas?.id === c.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                        backgroundColor: activeCanvas?.id === c.id ? 'rgba(232,0,13,0.08)' : '#111111',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
+                      <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(c.updated_at || c.created_at).toLocaleString()}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button onClick={createCanvas} style={{ width: '30px', height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#111111', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Plus size={14} />
           </button>
-        </div>
 
-        {loading ? (
-          <div style={{ display: 'grid', gap: '6px' }}>{[1, 2, 3].map((i) => <div key={i} style={{ height: '44px', borderRadius: '6px', backgroundColor: '#1A1A1A', border: '1px solid #333333' }} />)}</div>
-        ) : canvases.length === 0 ? (
-          <div style={{ fontSize: '12px', color: '#666666' }}>No saved canvases yet.</div>
-        ) : (
-          <div style={{ display: 'grid', gap: '6px' }}>
-            {canvases.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => loadCanvas(c.id)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: activeCanvas?.id === c.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                  backgroundColor: activeCanvas?.id === c.id ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>🧭 {c.title}</div>
-                <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(c.updated_at || c.created_at).toLocaleString()}</div>
-              </button>
-            ))}
-          </div>
-        )}
-      </aside>
-
-      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <input
             value={activeCanvas?.title || ''}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="Untitled Canvas"
-            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1 }}
+            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1, minWidth: 0 }}
           />
           <span style={{ backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#999999' }}>{saveStatus}</span>
           <span style={{ fontSize: '11px', color: '#666666' }}>Collaborators: {collaborators.join(', ')}</span>
