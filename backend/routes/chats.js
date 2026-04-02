@@ -4,7 +4,6 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Parses serialized messages defensively.
@@ -52,12 +51,12 @@ async function upsertChatNode(chat) {
   if (existing) {
     db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
       .run(title, summary, JSON.stringify(metadata), existing.id);
-    enqueueEmbeddingJob(existing.id, buildEmbedText({ type: 'ai_chat', title, content_summary: summary, metadata }));
+    enqueueEmbeddingJob(existing.id, chat.workspace_id);
     return existing.id;
   }
 
   const created = await createNode(chat.workspace_id, 'ai_chat', title, summary, chat.id, metadata);
-  enqueueEmbeddingJob(created.id, buildEmbedText({ type: 'ai_chat', title, content_summary: summary, metadata }));
+  enqueueEmbeddingJob(created.id, chat.workspace_id);
   return created.id;
 }
 

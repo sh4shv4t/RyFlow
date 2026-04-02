@@ -19,14 +19,18 @@ export default function useGraph() {
     setLoading(true);
     try {
       const loadAll = Boolean(options.all);
-      const limit = Number(options.limit || 200);
+      const limit = Number(options.limit || 500);
       // Fetch nodes and edges explicitly to match graph API contract.
       const [nodesRes, edgesRes] = await Promise.all([
         axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit } }),
         axios.get('/api/graph/edges', { params: { workspace_id: workspace.id } })
       ]);
-      setNodes(nodesRes.data.nodes || []);
-      setEdges(edgesRes.data.edges || []);
+      const loadedNodes = nodesRes.data.nodes || [];
+      const nodeIds = new Set(loadedNodes.map((n) => n.id));
+      const filteredEdges = (edgesRes.data.edges || []).filter((e) => nodeIds.has(e.source_id) && nodeIds.has(e.target_id));
+
+      setNodes(loadedNodes);
+      setEdges(filteredEdges);
       setIsNeighborhoodMode(false);
       setCenterNodeId(null);
     } catch (err) {
@@ -65,7 +69,7 @@ export default function useGraph() {
       const res = await axios.post('/api/graph/search', {
         query,
         workspace_id: workspace.id,
-        top_k: 5
+        top_k: 12
       });
       setSearchResults(res.data.results || []);
       return res.data.results;

@@ -3,18 +3,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Monitor } from 'lucide-react';
 import useStore from '../../store/useStore';
-import { useEffect } from 'react';
-import { detectAMD } from '../../utils/amdDetect';
 
 export default function AMDbadge() {
-  const { aiStatus, aiActive, setAiStatus } = useStore();
-
-  useEffect(() => {
-    // Refresh system acceleration status when the badge mounts.
-    detectAMD().then((status) => {
-      if (status) setAiStatus(status);
-    });
-  }, [setAiStatus]);
+  const { aiStatus, aiActive } = useStore();
 
   const isROCm = aiStatus.rocmAvailable;
   const isGPU = aiStatus.gpuDetected;

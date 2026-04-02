@@ -46,7 +46,7 @@ export default function Workspace() {
           </h3>
           <div className="flex items-center gap-4 mb-4">
             <div
-              className="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold"
+              className="w-14 h-14 rounded-full flex items-center justify-center text-[var(--text-on-accent)] text-xl font-bold"
               style={{ backgroundColor: user?.avatar_color || '#E8000D' }}
             >
               {user?.name?.charAt(0)?.toUpperCase() || '?'}

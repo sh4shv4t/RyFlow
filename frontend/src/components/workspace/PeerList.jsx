@@ -36,7 +36,7 @@ export default function PeerList() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
               transition={{ delay: i * 0.05 }}
-              className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors"
+              className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-elevated transition-colors"
             >
               <div className="flex items-center gap-2">
                 <div className="relative">

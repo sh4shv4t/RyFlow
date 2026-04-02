@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
@@ -13,12 +12,6 @@ function buildDocMetadata(content, lastEditor) {
   const text = String(content || '').replace(/<[^>]+>/g, ' ');
   const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   return { word_count: wordCount, last_editor: lastEditor || null };
-}
-
-function normalizeDateKey(inputDate) {
-  const value = String(inputDate || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  return new Date().toISOString().slice(0, 10);
 }
 
 function listNodeTags(db, nodeId) {
@@ -62,11 +55,11 @@ function saveVersionSnapshot(db, doc, editorId) {
     'SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version FROM document_versions WHERE document_id = ?'
   ).get(doc.id).next_version;
   db.prepare(
-    'INSERT INTO document_versions (id, document_id, title, content, version_number, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(uuidv4(), doc.id, doc.title, doc.content, nextVersion, editorId || null);
+    'INSERT INTO document_versions (id, document_id, title, content, version_number, saved_by, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(uuidv4(), doc.id, doc.title, doc.content, nextVersion, editorId || null, editorId || null);
 }
 
-function updateDocNode(db, documentId, title, content, metadata) {
+function updateDocNode(db, documentId, workspaceId, title, content, metadata) {
   const node = db.prepare('SELECT id, metadata FROM nodes WHERE source_id = ? AND type = ?').get(documentId, 'doc');
   if (!node) return null;
 
@@ -75,12 +68,7 @@ function updateDocNode(db, documentId, title, content, metadata) {
   db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
     .run(title, (content || '').substring(0, 500), JSON.stringify(mergedMetadata), node.id);
 
-  enqueueEmbeddingJob(node.id, buildEmbedText({
-    type: 'doc',
-    title,
-    content_summary: (content || '').substring(0, 500),
-    metadata: mergedMetadata
-  }));
+  enqueueEmbeddingJob(node.id, workspaceId);
   return node.id;
 }
 
@@ -130,6 +118,66 @@ function upsertMentionEdges(db, docNodeId, mentionNodeIds = []) {
   });
 }
 
+function resolveValidUserId(db, userId, workspaceId) {
+  const candidate = String(userId || '').trim();
+  if (!candidate) return null;
+  const exists = db.prepare('SELECT id FROM users WHERE id = ? AND workspace_id = ? LIMIT 1').get(candidate, workspaceId);
+  return exists?.id || null;
+}
+
+// GET /api/docs/daily — Fetch or auto-create today's daily note.
+router.get('/daily', async (req, res) => {
+  try {
+    const { workspace_id, created_by } = req.query;
+    if (!workspace_id) {
+      return res.status(400).json({ error: 'workspace_id required' });
+    }
+
+    const today = new Date();
+    const day = String(today.getDate()).padStart(2, '0');
+    const month = today.toLocaleString('en-GB', { month: 'short' });
+    const year = today.getFullYear();
+    const title = `Daily Note — ${day} ${month} ${year}`;
+
+    const db = getDb();
+    const createdBy = resolveValidUserId(db, created_by, workspace_id);
+    let doc = db.prepare(
+      'SELECT * FROM documents WHERE workspace_id = ? AND title = ? LIMIT 1'
+    ).get(workspace_id, title);
+
+    if (!doc) {
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const emptyContent = JSON.stringify({
+        type: 'doc',
+        content: [{
+          type: 'paragraph',
+          content: []
+        }]
+      });
+
+      db.prepare(
+        `INSERT INTO documents
+         (id, workspace_id, title, content, created_by, updated_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, workspace_id, title, emptyContent, createdBy, now, now);
+
+      const metadata = {
+        ...buildDocMetadata(emptyContent, createdBy),
+        is_daily_note: true,
+        daily_note_date: `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-${day}`
+      };
+      await createNode(workspace_id, 'doc', title, emptyContent.substring(0, 500), id, metadata);
+      doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
+    }
+
+    appendTagsToDocuments(db, [doc]);
+    return res.json(doc);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/docs — List all documents in a workspace
 router.get('/', (req, res) => {
   try {
@@ -138,50 +186,15 @@ router.get('/', (req, res) => {
 
     const db = getDb();
     const docs = db.prepare(
-      'SELECT id, workspace_id, title, content, is_daily_note, daily_note_date, created_by, updated_at, created_at FROM documents WHERE workspace_id = ? ORDER BY updated_at DESC'
+      `SELECT id, workspace_id, title, content, is_daily_note, daily_note_date, created_by, updated_at, created_at
+       FROM documents
+       WHERE workspace_id = ?
+       ORDER BY is_daily_note DESC, COALESCE(daily_note_date, '') DESC, updated_at DESC`
     ).all(workspace_id);
     appendTagsToDocuments(db, docs);
     res.json({ documents: docs });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/docs/daily — Fetch or auto-create a daily note for a date.
-router.get('/daily', async (req, res) => {
-  try {
-    const { workspace_id, created_by } = req.query;
-    const date = normalizeDateKey(req.query.date);
-    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
-
-    const db = getDb();
-    let doc = db.prepare(
-      `SELECT * FROM documents
-       WHERE workspace_id = ? AND is_daily_note = 1 AND daily_note_date = ?
-       LIMIT 1`
-    ).get(workspace_id, date);
-
-    if (!doc) {
-      const id = uuidv4();
-      const title = `Daily Note - ${date}`;
-      db.prepare(
-        `INSERT INTO documents (id, workspace_id, title, content, is_daily_note, daily_note_date, created_by)
-         VALUES (?, ?, ?, ?, 1, ?, ?)`
-      ).run(id, workspace_id, title, '', date, created_by || null);
-
-      const metadata = {
-        ...buildDocMetadata('', created_by || null),
-        is_daily_note: true,
-        daily_note_date: date
-      };
-      await createNode(workspace_id, 'doc', title, '', id, metadata);
-      doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
-    }
-
-    appendTagsToDocuments(db, [doc]);
-    return res.json(doc);
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -194,19 +207,24 @@ router.post('/', async (req, res) => {
     }
 
     const db = getDb();
+    const createdBy = resolveValidUserId(db, created_by, workspace_id);
     const id = uuidv4();
+    const now = new Date().toISOString();
     db.prepare(
-      'INSERT INTO documents (id, workspace_id, title, content, is_daily_note, daily_note_date, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, workspace_id, title, content || '', 0, null, created_by || null);
+      `INSERT INTO documents
+       (id, workspace_id, title, content, created_by, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, workspace_id, title, content || '', createdBy, now, now);
 
     // Add to knowledge graph
-    const metadata = { ...buildDocMetadata(content || '', created_by || null), is_daily_note: false, daily_note_date: null };
+    const metadata = { ...buildDocMetadata(content || '', createdBy), is_daily_note: false, daily_note_date: null };
     await createNode(workspace_id, 'doc', title, (content || '').substring(0, 500), id, metadata);
 
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     appendTagsToDocuments(db, [doc]);
     res.status(201).json(doc);
   } catch (err) {
+    console.error('[Documents create] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -265,7 +283,7 @@ router.post('/:id/versions/:versionId/restore', (req, res) => {
       is_daily_note: Boolean(restored.is_daily_note),
       daily_note_date: restored.daily_note_date || null
     };
-    updateDocNode(db, restored.id, restored.title, restored.content || '', metadata);
+    updateDocNode(db, restored.id, restored.workspace_id, restored.title, restored.content || '', metadata);
     appendTagsToDocuments(db, [restored]);
     return res.json(restored);
   } catch (err) {
@@ -312,7 +330,7 @@ router.put('/:id', async (req, res) => {
       is_daily_note: Boolean(existing.is_daily_note),
       daily_note_date: existing.daily_note_date || null
     };
-    const docNodeId = updateDocNode(db, req.params.id, nextTitle, nextContent, metadata);
+    const docNodeId = updateDocNode(db, req.params.id, existing.workspace_id, nextTitle, nextContent, metadata);
 
     const jsonContent = parseDocContentJSON(nextContent);
     const mentionedIds = extractMentions(jsonContent);

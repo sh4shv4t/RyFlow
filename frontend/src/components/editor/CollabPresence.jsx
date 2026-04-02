@@ -20,7 +20,7 @@ export default function CollabPresence({ connected = false, presenceList = [] })
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0 }}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-amd-charcoal"
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[var(--text-on-accent)] text-[10px] font-bold border-2 border-amd-charcoal"
               style={{ backgroundColor: peer.avatarColor || '#E8000D' }}
               title={peer.userName}
             >

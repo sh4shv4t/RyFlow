@@ -10,6 +10,13 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { APP_VERSION } from '../constants/appVersion';
 
+const LANGUAGE_OPTIONS = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'mr', label: 'Marathi' }
+];
+
 // Animates numeric values from 0 to target in one second.
 function CountUp({ value = 0 }) {
   const [display, setDisplay] = useState(0);
@@ -35,7 +42,7 @@ function topItems(items, n = 3) {
 // Stats card component used throughout the workspace stats grid.
 function StatCard({ label, value, subValue, icon: Icon, footer }) {
   return (
-    <div className="rounded-xl bg-[#2C2C2C] p-4 border border-white/10">
+    <div className="rounded-xl bg-[#2C2C2C] p-4 border border-border-d">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-amd-white/60">{label}</span>
         <Icon size={14} className="text-amd-white/40" />
@@ -48,7 +55,12 @@ function StatCard({ label, value, subValue, icon: Icon, footer }) {
 }
 
 export default function Settings() {
-  const { selectedModel, setSelectedModel, workspace, setAiActive } = useStore();
+  const { selectedModel, setSelectedModel, workspace, setAiActive, language, setLanguage } = useStore();
+  const safeSetAiActive = useCallback((active) => {
+    if (typeof setAiActive === 'function') {
+      setAiActive(active);
+    }
+  }, [setAiActive]);
   const [status, setStatus] = useState(null);
   const [models, setModels] = useState([]);
   const [stats, setStats] = useState(null);
@@ -56,45 +68,68 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [storage, setStorage] = useState(null);
 
+  const handleSelectModel = useCallback((name) => {
+    if (typeof setSelectedModel === 'function') {
+      setSelectedModel(name);
+      toast.success(`Model set to ${name}`);
+    }
+  }, [setSelectedModel]);
+
   // Fetches backend status, models, and workspace stats.
   const fetchAll = useCallback(async () => {
     if (!workspace?.id) return;
     setLoading(true);
     try {
-      const [statusRes, modelsRes, statsRes] = await Promise.all([
+      const [statusRes, modelsRes] = await Promise.all([
         axios.get('/api/ai/system-status'),
-        axios.get('/api/ai/models'),
-        axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/ai/models')
       ]);
       setStatus(statusRes.data);
       setModels(modelsRes.data.models || []);
-      setStats(statsRes.data);
-      const storageRes = await axios.get('/api/workspace/storage', { params: { workspace_id: workspace.id } });
-      setStorage(storageRes.data || null);
 
-      setAiActive(true);
-      const insightRes = await axios.post('/api/ai/chat', {
-        messages: [{
-          role: 'user',
-          content: `Based on these workspace statistics: ${JSON.stringify(statsRes.data)}, give 3 short actionable insights about this team's productivity and collaboration patterns. Each insight max 20 words. Return as JSON array of strings.`
-        }],
-        model: selectedModel,
-        workspace_id: null
-      });
+      let statsData = null;
+      try {
+        const statsRes = await axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } });
+        statsData = statsRes.data || null;
+        setStats(statsData);
+      } catch {
+        setStats(null);
+      }
 
       try {
-        const parsed = JSON.parse(String(insightRes.data.content || '[]').replace(/```json|```/gi, '').trim());
-        setInsights(Array.isArray(parsed) ? parsed.slice(0, 3) : []);
+        const storageRes = await axios.get('/api/workspace/storage', { params: { workspace_id: workspace.id } });
+        setStorage(storageRes.data || null);
       } catch {
+        setStorage(null);
+      }
+
+      if (statsData) {
+        safeSetAiActive(true);
+        const insightRes = await axios.post('/api/ai/chat', {
+          messages: [{
+            role: 'user',
+            content: `Based on these workspace statistics: ${JSON.stringify(statsData)}, give 3 short actionable insights about this team's productivity and collaboration patterns. Each insight max 20 words. Return as JSON array of strings.`
+          }],
+          model: selectedModel,
+          workspace_id: null
+        });
+
+        try {
+          const parsed = JSON.parse(String(insightRes?.data?.content || '[]').replace(/```json|```/gi, '').trim());
+          setInsights(Array.isArray(parsed) ? parsed.slice(0, 3) : []);
+        } catch {
+          setInsights([]);
+        }
+      } else {
         setInsights([]);
       }
     } catch {
       toast.error('Could not reach backend');
     } finally {
-      setAiActive(false);
+      safeSetAiActive(false);
       setLoading(false);
     }
-  }, [workspace?.id, selectedModel, setAiActive]);
+  }, [workspace?.id, selectedModel, safeSetAiActive]);
 
   useEffect(() => {
     fetchAll();
@@ -130,205 +165,204 @@ export default function Settings() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="max-w-6xl mx-auto space-y-6"
-    >
-      <h1 className="font-heading text-2xl font-bold text-amd-white">Settings</h1>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ height: '100%', overflowY: 'auto', padding: '40px', backgroundColor: '#111111' }}>
+      <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', marginBottom: '32px' }}>Settings</h1>
 
-      <section className="glass-card p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-amd-white flex items-center gap-2">
-            <Cpu size={16} className="text-amd-red" /> System Status
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            System Status
           </h2>
-          <button
-            onClick={fetchAll}
-            className="text-amd-white/40 hover:text-amd-white p-1.5 rounded-lg hover:bg-white/5"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+          {loading ? (
+            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Loading status...</div>
+          ) : status ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Ollama</p>
+                  <p style={{ fontSize: '12px', color: '#999999' }}>Model service availability</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
+                  <StatusDot ok={Boolean(status.ollamaRunning ?? status.ollama_running)} /> {Boolean(status.ollamaRunning ?? status.ollama_running) ? 'Running' : 'Offline'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>AMD GPU</p>
+                  <p style={{ fontSize: '12px', color: '#999999' }}>{status.gpuName || status.gpu_name || 'Hardware acceleration status'}</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
+                  <StatusDot ok={Boolean(status.gpuDetected ?? status.amd_gpu)} /> {Boolean(status.gpuDetected ?? status.amd_gpu) ? 'Detected' : 'Not found'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Inference Mode</p>
+                  <p style={{ fontSize: '12px', color: '#999999' }}>Current processing runtime</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
+                  <Zap size={12} color={Boolean(status.gpuDetected ?? status.amd_gpu) ? '#3D9970' : '#B85C00'} /> {Boolean(status.gpuDetected ?? status.amd_gpu) ? 'GPU (ROCm)' : 'CPU'}
+                </div>
+              </div>
+              {(status.vram || status.gpuVram) ? (
+                <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>VRAM</p>
+                    <p style={{ fontSize: '12px', color: '#999999' }}>{status.vram || status.gpuVram}</p>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Unavailable</div>
+          )}
+        </section>
 
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton-loader h-10 rounded-lg" />)}
-          </div>
-        ) : status ? (
-          <div className="grid grid-cols-2 gap-3">
-            <InfoRow label="Ollama" value={status.ollama_running ? 'Running' : 'Offline'}>
-              <StatusDot ok={status.ollama_running} />
-            </InfoRow>
-            <InfoRow label="AMD GPU" value={status.amd_gpu ? 'Detected' : 'Not found'}>
-              <StatusDot ok={status.amd_gpu} />
-            </InfoRow>
-            {status.gpu_name && <InfoRow label="GPU Name" value={status.gpu_name} />}
-            {status.vram && <InfoRow label="VRAM" value={status.vram} />}
-            <InfoRow label="Inference Mode" value={status.amd_gpu ? 'GPU (ROCm)' : 'CPU'}>
-              <Zap size={12} className={status.amd_gpu ? 'text-amd-green' : 'text-amd-orange'} />
-            </InfoRow>
-          </div>
-        ) : (
-          <p className="text-sm text-amd-white/30">Unavailable</p>
-        )}
-      </section>
-
-      <section className="glass-card p-5 space-y-4">
-        <h2 className="font-heading font-semibold text-amd-white flex items-center gap-2">
-          <Zap size={16} className="text-amd-orange" /> AI Model
-        </h2>
-
-        {models.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
-            {models.map((m) => (
-              <button
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            AI Model
+          </h2>
+          {models.length > 0 ? (
+            models.map((m) => (
+              <div
                 key={m.name}
-                onClick={() => { setSelectedModel(m.name); toast.success(`Model set to ${m.name}`); }}
-                className={`flex items-center gap-2 p-3 rounded-lg text-sm transition-all ${
-                  selectedModel === m.name
-                    ? 'bg-amd-red/10 border border-amd-red/30 text-amd-white'
-                    : 'bg-white/5 text-amd-white/60 hover:bg-white/10'
-                }`}
+                onClick={() => handleSelectModel(m.name)}
+                style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424', cursor: 'pointer' }}
               >
-                {selectedModel === m.name && <Check size={14} className="text-amd-green flex-shrink-0" />}
-                <span className="truncate">{m.name}</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>{m.name}</p>
+                  <p style={{ fontSize: '12px', color: '#999999' }}>Click to activate this model</p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectModel(m.name);
+                  }}
+                  style={{
+                    height: '30px',
+                    borderRadius: '6px',
+                    border: selectedModel === m.name ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                    backgroundColor: selectedModel === m.name ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
+                    color: selectedModel === m.name ? '#E8000D' : '#999999',
+                    fontSize: '12px',
+                    padding: '0 10px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {selectedModel === m.name ? 'Selected' : 'Use'}
+                </button>
+              </div>
+            ))
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#B85C00', padding: '14px 0' }}>
+              <AlertTriangle size={14} /> No models found. Install with ollama pull phi3:mini
+            </div>
+          )}
+        </section>
+
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            Language
+          </h2>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '8px' }}>
+            {LANGUAGE_OPTIONS.map((item) => (
+              <button
+                key={item.code}
+                onClick={() => typeof setLanguage === 'function' && setLanguage(item.code)}
+                style={{
+                  height: '30px',
+                  borderRadius: '6px',
+                  border: language === item.code ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                  backgroundColor: language === item.code ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
+                  color: language === item.code ? '#E8000D' : '#999999',
+                  fontSize: '12px',
+                  padding: '0 10px',
+                  cursor: 'pointer'
+                }}
+              >
+                {item.label}
               </button>
             ))}
           </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm text-amd-orange">
-            <AlertTriangle size={14} />
-            No models found. Install one with <code className="bg-white/5 px-1.5 rounded">ollama pull phi3:mini</code>
+        </section>
+
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            Workspace Stats
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '8px', marginTop: '8px' }}>
+            {[ 
+              { label: 'Documents', value: stats?.documents?.count || 0 },
+              { label: 'Tasks', value: stats?.tasks?.count || 0 },
+              { label: 'Completion', value: `${completionRate}%` },
+              { label: 'AI Chats', value: stats?.ai_chats?.count || 0 },
+              { label: 'Graph Nodes', value: stats?.knowledge_graph?.total_nodes || 0 },
+              { label: 'Voice Notes', value: stats?.voice_logs?.count || 0 }
+            ].map((stat) => (
+              <div key={stat.label} style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '16px' }}>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: '#E8000D', marginBottom: '4px' }}>{stat.value}</div>
+                <div style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#666666' }}>{stat.label}</div>
+              </div>
+            ))}
           </div>
-        )}
-      </section>
+        </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-heading font-semibold text-amd-white">Workspace Statistics</h2>
-          <button
-            onClick={fetchAll}
-            className="text-amd-white/50 hover:text-amd-white text-xs flex items-center gap-1"
-          >
-            <RefreshCw size={12} /> Last updated: just now
-          </button>
-        </div>
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            Storage
+          </h2>
+          {storage ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Total Usage</p>
+                  <p style={{ fontSize: '12px', color: '#999999' }}>{formatBytes(storage.total_bytes || 0)}</p>
+                </div>
+                <button onClick={clearEmbeddings} style={{ height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>
+                  Clear Embeddings
+                </button>
+              </div>
+              <div style={{ padding: '10px 0 0' }}>
+                <p style={{ fontSize: '11px', color: '#999999', marginBottom: '6px' }}>Estimated .ryflow size: {formatBytes(Math.round(Number(storage.total_bytes || 0) * 0.7))}</p>
+                <div style={{ height: '3px', backgroundColor: '#222222', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', backgroundColor: '#E8000D', borderRadius: '2px', width: '45%' }} />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Storage data unavailable.</div>
+          )}
+        </section>
 
-        {loading || !stats ? (
-          <div className="grid grid-cols-4 gap-3">
-            {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 rounded-xl bg-[#2C2C2C] animate-pulse" />)}
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+            About RyFlow
+          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>RyFlow</p>
+              <p style={{ fontSize: '12px', color: '#999999' }}>Offline-first collaborative workspace</p>
+            </div>
+            <span style={{ fontSize: '12px', color: '#666666' }}>v{APP_VERSION}</span>
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-4 gap-3">
-              <StatCard label="Total Documents" value={<CountUp value={stats.documents.count} />} icon={FileText} />
-              <StatCard label="Total Tasks" value={<CountUp value={stats.tasks.count} />} icon={CheckSquare} />
-              <StatCard label="Completed Tasks" value={`${completionRate}%`} subValue={`${stats.tasks.completed}/${stats.tasks.count}`} icon={Check} />
-              <StatCard label="AI Conversations" value={<CountUp value={stats.ai_chats.count} />} icon={MessageSquare} />
-            </div>
-
-            <div className="grid grid-cols-4 gap-3">
-              <StatCard
-                label="Code Files"
-                value={<CountUp value={stats.code_files.count} />}
-                icon={Code2}
-                footer={topItems(stats.code_files.languages).map((lang) => (
-                  <span key={lang} className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/60">{lang}</span>
-                ))}
-              />
-              <StatCard label="Canvas Drawings" value={<CountUp value={stats.canvases.count} />} icon={PencilRuler} />
-              <StatCard
-                label="Knowledge Graph"
-                value={<CountUp value={stats.knowledge_graph.total_nodes} />}
-                subValue={`${stats.knowledge_graph.total_edges} edges`}
-                icon={GitBranch}
-              />
-              <StatCard label="Voice Notes" value={<CountUp value={stats.voice_logs.count} />} icon={Mic} />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
+          {insights.length > 0 && (
+            <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
               {insights.map((insight, i) => (
-                <div key={i} className="rounded-xl bg-[#2C2C2C] p-4 border border-white/10">
-                  <div className="flex items-center gap-2 text-amd-red mb-2">
-                    <Lightbulb size={14} />
-                    <span className="text-xs font-medium">Insight {i + 1}</span>
-                  </div>
-                  <p className="text-sm text-amd-white/80">{insight}</p>
+                <div key={i} style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '10px 12px' }}>
+                  <p style={{ fontSize: '12px', color: '#999999' }}><Lightbulb size={12} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />{insight}</p>
                 </div>
               ))}
             </div>
-          </>
-        )}
-      </section>
-
-      <section className="glass-card p-5 space-y-3">
-        <h2 className="font-heading font-semibold text-amd-white">Storage Usage</h2>
-        {storage ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-amd-white/60 mb-1">Total: {formatBytes(storage.total_bytes || 0)}</div>
-              <div className="h-2 rounded bg-white/10 overflow-hidden">
-                <div
-                  className={`h-full ${storage.total_bytes > 1024 * 1024 * 1024 ? 'bg-amd-red' : storage.total_bytes > 500 * 1024 * 1024 ? 'bg-amd-orange' : 'bg-amd-green'}`}
-                  style={{ width: '100%' }}
-                />
-              </div>
-            </div>
-
-            {[
-              ['Documents', storage.breakdown?.documents?.bytes || 0],
-              ['Embeddings', storage.breakdown?.embeddings?.bytes || 0],
-              ['Canvases', storage.breakdown?.canvases?.bytes || 0],
-              ['AI Chats', storage.breakdown?.ai_chats?.bytes || 0],
-              ['Uploads', storage.breakdown?.uploads?.bytes || 0]
-            ].map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[120px_1fr_80px] items-center gap-2 text-xs">
-                <span className="text-amd-white/70">{label}</span>
-                <div className="h-2 rounded bg-white/10 overflow-hidden">
-                  <div className="h-full bg-amd-red/70" style={{ width: `${Math.max(2, (Number(value) / Math.max(1, Number(storage.total_bytes || 1))) * 100)}%` }} />
-                </div>
-                <span className="text-amd-white/60 text-right">{formatBytes(Number(value))}</span>
-              </div>
-            ))}
-
-            <div className="flex gap-2">
-              <button onClick={() => { window.location.href = '/workspaces'; }} className="px-3 py-2 rounded bg-white/10 text-amd-white/75 text-xs">
-                Export Workspace
-              </button>
-              <button onClick={clearEmbeddings} className="px-3 py-2 rounded bg-amd-orange/20 text-amd-orange text-xs">
-                Clear Embeddings ({formatBytes(storage.breakdown?.embeddings?.bytes || 0)})
-              </button>
-            </div>
-
-            <div className="text-[11px] text-amd-white/50">Estimated .ryflow size: {formatBytes(Math.round(Number(storage.total_bytes || 0) * 0.7))}</div>
-          </div>
-        ) : <div className="text-sm text-amd-white/45">Storage data unavailable.</div>}
-      </section>
-
-      <section className="glass-card p-5 space-y-3">
-        <h2 className="font-heading font-semibold text-amd-white flex items-center gap-2">
-          <Palette size={16} className="text-amd-red" /> About RyFlow
-        </h2>
-        <p className="text-sm text-amd-white/50 leading-relaxed">
-          RyFlow is an offline-first, peer-to-peer AI collaboration workspace built for
-          college students. Powered by AMD's open-source AI stack — Ollama, ROCm, Whisper.cpp
-          — it runs entirely on your local machine with zero cloud dependency.
-        </p>
-        <div className="flex gap-4 text-xs text-amd-white/30">
-          <span>RyFlow v{APP_VERSION}</span>
-          <span>&middot;</span>
-          <span>Desktop &middot; Electron</span>
-          <span>&middot;</span>
-          <span>MIT License</span>
-        </div>
-      </section>
+          )}
+        </section>
+      </div>
     </motion.div>
   );
 }
 
 function InfoRow({ label, value, children }) {
   return (
-    <div className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+    <div className="flex items-center justify-between bg-surface border border-border-d rounded-lg px-3 py-2">
       <span className="text-xs text-amd-white/50">{label}</span>
       <span className="text-xs text-amd-white flex items-center gap-1.5">
         {children}

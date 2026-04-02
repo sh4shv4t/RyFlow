@@ -37,7 +37,7 @@ const TYPE_COLORS = {
 export default function Home() {
   const navigate = useNavigate();
   const svgRef = useRef(null);
-  const { user, workspace, aiStatus } = useStore();
+  const { user, workspace, aiStatus, peers } = useStore();
   const [clock, setClock] = useState(new Date());
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState([]);
@@ -173,166 +173,433 @@ export default function Home() {
     [tasks]
   );
 
-  const quickStats = [
-    { label: 'Documents', value: stats?.documents?.count || 0, path: '/editor' },
-    { label: 'Tasks Done/Total', value: `${stats?.tasks?.completed || 0}/${stats?.tasks?.count || 0}`, path: '/tasks' },
-    { label: 'Code Files', value: stats?.code_files?.count || 0, path: '/code' },
-    { label: 'Canvases', value: stats?.canvases?.count || 0, path: '/canvas' },
-    { label: 'AI Chats', value: stats?.ai_chats?.count || 0, path: '/ai' },
-    { label: 'Graph Nodes', value: stats?.knowledge_graph?.total_nodes || 0, path: '/graph' },
-  ];
+  const TYPE_BADGE_COLORS = {
+    document: { bg: 'rgba(232,0,13,0.1)', text: '#E8000D' },
+    task: { bg: 'rgba(255,107,0,0.1)', text: '#FF6B00' },
+    code: { bg: 'rgba(59,130,246,0.1)', text: '#3B82F6' },
+    canvas: { bg: 'rgba(0,188,212,0.1)', text: '#00BCD4' },
+    ai_chat: { bg: 'rgba(139,92,246,0.1)', text: '#8B5CF6' },
+    voice: { bg: 'rgba(61,153,112,0.1)', text: '#3D9970' }
+  };
+
+  const iconForType = (type) => {
+    if (type === 'task') return CheckSquare;
+    if (type === 'code') return Code2;
+    if (type === 'canvas') return PencilRuler;
+    if (type === 'ai_chat') return MessageSquare;
+    if (type === 'voice') return Mic;
+    return FileText;
+  };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
-      <section className="glass-card p-5 flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-3xl font-bold text-amd-white">Welcome back, {user?.name || 'Teammate'}</h1>
-          <p className="text-amd-white/60 mt-1">{workspace?.name || 'Workspace'} • {clock.toLocaleString()}</p>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '40px' }}>
+        <div style={{ marginBottom: '32px' }}>
+          <h1
+            style={{
+              fontSize: '22px',
+              fontWeight: '600',
+              color: '#F0F0F0',
+              lineHeight: '1.2',
+              marginBottom: '4px'
+            }}
+          >
+            Welcome back, {user?.name || 'Teammate'}
+          </h1>
+          <p style={{ fontSize: '13px', color: '#999999' }}>
+            {workspace?.name || 'Workspace'} • {clock.toLocaleString()}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col items-end gap-1">
-            <button onClick={handlePlayBriefing} className="px-3 py-2 rounded bg-amd-red/20 text-amd-red text-sm">
-              {briefingSpeaking ? '⏹ Stop Briefing' : (briefingLoading ? 'Generating...' : '🎙 Play Briefing')}
-            </button>
-            {briefingText ? (
-              <button onClick={() => setShowTranscript((v) => !v)} className="text-xs text-amd-white/55 hover:text-amd-white/75">
-                📄 {showTranscript ? 'Hide transcript' : 'Show transcript'}
-              </button>
-            ) : null}
-          </div>
-          <AMDbadge />
-        </div>
-      </section>
 
-      {showTranscript && briefingText ? (
-        <section className="glass-card p-4 text-sm text-amd-white/75">
-          {briefingText}
-        </section>
-      ) : null}
-
-      {!aiStatus.ollamaRunning && (
-        <div className="glass-card p-3 border border-amd-orange/30 text-amd-orange text-sm flex items-center gap-2">
-          <AlertCircle size={16} /> Ollama is offline. AI-only widgets may be limited.
-        </div>
-      )}
-
-      <section className="grid grid-cols-6 gap-3">
-        {quickStats.map((item) => (
-          <button key={item.label} onClick={() => navigate(item.path)} className="rounded-xl bg-[#2C2C2C] p-3 text-left hover:bg-[#343434] transition-colors">
-            <p className="text-[11px] text-amd-white/60">{item.label}</p>
-            <p className="text-xl font-bold text-amd-red">{item.value}</p>
-          </button>
-        ))}
-      </section>
-
-      <section className="grid grid-cols-[1.5fr_1fr] gap-4">
-        <div className="glass-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-heading text-amd-white font-semibold">Active Tasks</h3>
-            <button onClick={() => navigate('/tasks')} className="text-xs text-amd-red flex items-center gap-1">View All Tasks <ArrowRight size={12} /></button>
-          </div>
-          <div className="space-y-2">
-            {inProgressTasks.map((task) => {
-              const overdue = task.due_date && task.status !== 'done' && task.due_date < new Date().toISOString().slice(0, 10);
+        <div style={{ marginBottom: '40px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[
+              { label: 'New Doc', icon: FileText, onClick: () => navigate('/editor') },
+              { label: 'New Task', icon: CheckSquare, onClick: () => navigate('/tasks') },
+              { label: 'Ask AI', icon: MessageSquare, onClick: () => navigate('/ai') },
+              { label: 'Voice Note', icon: Mic, onClick: () => navigate('/ai') }
+            ].map((action) => {
+              const ActionIcon = action.icon;
               return (
-                <div key={task.id} className="rounded-lg bg-white/5 p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-amd-white font-medium">{task.title}</p>
-                    {overdue ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-amd-red/20 text-amd-red">OVERDUE</span> : null}
-                  </div>
-                  <div className="mt-1 text-xs text-amd-white/50">{task.assignee || 'Unassigned'} • {task.priority || 'medium'} • {task.due_date || 'No due date'}</div>
-                </div>
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#222222';
+                    e.currentTarget.style.borderColor = '#444444';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#1A1A1A';
+                    e.currentTarget.style.borderColor = '#333333';
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    backgroundColor: '#1A1A1A',
+                    border: '1px solid #333333',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 150ms ease'
+                  }}
+                >
+                  <ActionIcon size={14} color="#666666" />
+                  <span style={{ fontSize: '13px', color: '#999999' }}>{action.label}</span>
+                </button>
               );
             })}
-            {inProgressTasks.length === 0 ? <p className="text-xs text-amd-white/40">No in-progress tasks</p> : null}
           </div>
         </div>
 
-        <div className="glass-card p-4">
-          <h3 className="font-heading text-amd-white font-semibold mb-3">AI Chat Snapshot</h3>
-          <div className="space-y-2">
-            {recentChats.map((chat) => (
-              <div key={chat.id} className="rounded-lg bg-white/5 p-3">
-                <p className="text-sm text-amd-white font-medium">{chat.title}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/60">{chat.model}</span>
-                  {chat.rag_used ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-amd-orange/20 text-amd-orange">📚 RAG</span> : null}
-                  <span className="text-[10px] text-amd-white/40">{chat.message_count} msgs</span>
-                </div>
-                <button onClick={() => navigate('/ai')} className="text-xs text-amd-red mt-2">Continue →</button>
-              </div>
-            ))}
-            {recentChats.length === 0 ? <p className="text-xs text-amd-white/40">No recent chats</p> : null}
+        {!aiStatus.ollamaRunning && (
+          <div
+            style={{
+              marginBottom: '20px',
+              border: '1px solid #333333',
+              backgroundColor: '#1A1A1A',
+              borderRadius: '6px',
+              padding: '10px 12px',
+              color: '#999999',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <AlertCircle size={14} color="#B85C00" /> Ollama is offline. AI features may be limited.
           </div>
-        </div>
-      </section>
+        )}
 
-      <section className="grid grid-cols-[1.2fr_1fr] gap-4">
-        <div className="glass-card p-4">
-          <h3 className="font-heading text-amd-white font-semibold mb-3">Recent Activity</h3>
-          <div className="max-h-72 overflow-auto space-y-2 pr-1">
-            {activity.map((item) => (
+        {showTranscript && briefingText ? (
+          <div
+            style={{
+              backgroundColor: '#1A1A1A',
+              border: '1px solid #333333',
+              borderRadius: '6px',
+              padding: '16px 20px',
+              marginBottom: '24px',
+              fontSize: '13px',
+              color: '#999999',
+              lineHeight: '1.7'
+            }}
+          >
+            {briefingText}
+          </div>
+        ) : null}
+
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
+              ACTIVE TASKS
+            </p>
+          </div>
+
+          <div>
+            {inProgressTasks.length === 0 ? (
+              <div style={{ fontSize: '13px', color: '#666666', padding: '8px 8px' }}>No active tasks</div>
+            ) : inProgressTasks.map((task) => (
               <button
-                key={`${item.type}-${item.id}`}
-                onClick={() => {
-                  if (item.type === 'document') navigate('/editor');
-                  if (item.type === 'task') navigate('/tasks');
-                  if (item.type === 'code') navigate('/code');
-                  if (item.type === 'canvas') navigate('/canvas');
-                  if (item.type === 'ai_chat') navigate('/ai');
-                  if (item.type === 'voice') navigate('/ai');
+                key={task.id}
+                onClick={() => navigate('/tasks')}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  height: '36px',
+                  padding: '0 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  transition: 'background 150ms ease',
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  textAlign: 'left'
                 }}
-                className="w-full text-left rounded-lg bg-white/5 p-2.5 hover:bg-white/10"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TYPE_COLORS[item.type] || '#E8000D' }} />
-                    <span className="text-sm text-amd-white">{item.title}</span>
-                  </div>
-                  <span className="text-[10px] text-amd-white/40">{timeAgo(item.updated_at)}</span>
-                </div>
+                <span
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    backgroundColor: task.priority === 'high' ? '#C0392B' : task.priority === 'medium' ? '#B85C00' : '#666666'
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '13px',
+                    color: '#F0F0F0',
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {task.title}
+                </span>
+                <span style={{ fontSize: '11px', color: '#666666', flexShrink: 0 }}>
+                  {task.due_date || 'No due'}
+                </span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="glass-card p-4">
-            <h3 className="font-heading text-amd-white font-semibold mb-3">Code & Canvas</h3>
-            <div className="space-y-2">
-              {codeFiles.map((file) => (
-                <div key={file.id} className="rounded-lg bg-white/5 p-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-amd-white">{file.title}</p>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/60">{file.language}</span>
-                  </div>
-                  <p className="text-[10px] text-amd-white/40">{timeAgo(file.updated_at)}</p>
-                </div>
-              ))}
-              {canvases.map((canvas) => (
-                <div key={canvas.id} className="rounded-lg bg-white/5 p-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-amd-white">{canvas.title}</p>
-                    <span className="text-[10px] text-amd-white/50">Canvas</span>
-                  </div>
-                  <p className="text-[10px] text-amd-white/40">{timeAgo(canvas.updated_at)}</p>
-                </div>
-              ))}
-            </div>
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
+              RECENT ACTIVITY
+            </p>
           </div>
 
-          <div className="glass-card p-4">
-            <h3 className="font-heading text-amd-white font-semibold mb-2">Peers Online</h3>
-            <PeerList />
+          <div>
+            {activity.slice(0, 7).map((item) => {
+              const ItemIcon = iconForType(item.type);
+              const badge = TYPE_BADGE_COLORS[item.type] || TYPE_BADGE_COLORS.document;
+              return (
+                <button
+                  key={`${item.type}-${item.id}`}
+                  onClick={() => {
+                    if (item.type === 'document') navigate('/editor');
+                    if (item.type === 'task') navigate('/tasks');
+                    if (item.type === 'code') navigate('/code');
+                    if (item.type === 'canvas') navigate('/canvas');
+                    if (item.type === 'ai_chat') navigate('/ai');
+                    if (item.type === 'voice') navigate('/ai');
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    height: '36px',
+                    padding: '0 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    transition: 'background 150ms ease',
+                    width: '100%',
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left'
+                  }}
+                >
+                  <ItemIcon size={14} color="#666666" />
+                  <span
+                    style={{
+                      fontSize: '13px',
+                      color: '#F0F0F0',
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {item.title}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: '500',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      padding: '1px 6px',
+                      borderRadius: '3px',
+                      flexShrink: 0,
+                      backgroundColor: badge.bg,
+                      color: badge.text
+                    }}
+                  >
+                    {String(item.type || 'item').replace('_', ' ')}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#666666', flexShrink: 0 }}>{timeAgo(item.updated_at)}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
-      </section>
 
-      <section className="glass-card p-4">
-        <h3 className="font-heading text-amd-white font-semibold mb-3">Knowledge Graph Mini Preview</h3>
-        <svg ref={svgRef} className="w-full h-[300px] rounded bg-black/20" />
-        <button onClick={() => navigate('/graph')} className="mt-3 text-sm text-amd-red">Open Full Graph →</button>
-      </section>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
+              KNOWLEDGE GRAPH
+            </p>
+          </div>
+          <div
+            style={{
+              backgroundColor: '#111111',
+              border: '1px solid #242424',
+              borderRadius: '6px',
+              height: '220px',
+              overflow: 'hidden',
+              marginBottom: '8px'
+            }}
+          >
+            <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
+          </div>
+          <button
+            onClick={() => navigate('/graph')}
+            style={{
+              display: 'block',
+              textAlign: 'right',
+              fontSize: '12px',
+              color: '#E8000D',
+              cursor: 'pointer',
+              background: 'none',
+              border: 'none',
+              width: '100%'
+            }}
+          >
+            Open Graph →
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          width: '260px',
+          flexShrink: 0,
+          backgroundColor: '#1A1A1A',
+          borderLeft: '1px solid #242424',
+          padding: '20px 16px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0'
+        }}
+      >
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+            AMD STATUS
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '32px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? '#3D9970' : '#666666' }} />
+            <span style={{ fontSize: '13px', color: '#999999' }}>{aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? 'ROCm Active' : 'CPU Mode'}</span>
+          </div>
+          <div style={{ marginTop: '8px' }}><AMDbadge /></div>
+        </div>
+
+        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
+
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+            PEERS ONLINE
+          </p>
+          {peers.length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#666666' }}>No peers online</p>
+          ) : peers.map((peer) => {
+            const name = peer.name || 'Peer';
+            const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+            return (
+              <div key={`${peer.host || 'peer'}-${peer.port || name}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '34px' }}>
+                <div
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#2A3A5A',
+                    fontSize: '11px',
+                    color: '#FFFFFF',
+                    fontWeight: '600'
+                  }}
+                >
+                  {initials || 'P'}
+                </div>
+                <span style={{ fontSize: '13px', color: '#F0F0F0', fontWeight: '500', flex: 1 }}>{name}</span>
+                <span style={{ fontSize: '11px', color: '#666666' }}>online</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
+
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+            RECENT CHATS
+          </p>
+          {recentChats.length === 0 ? (
+            <p style={{ fontSize: '13px', color: '#666666' }}>No recent chats</p>
+          ) : recentChats.slice(0, 2).map((chat) => (
+            <button
+              key={chat.id}
+              onClick={() => navigate('/ai')}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#222222'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '32px',
+                borderRadius: '4px',
+                padding: '0 4px',
+                cursor: 'pointer',
+                transition: 'background 150ms',
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                textAlign: 'left'
+              }}
+            >
+              <MessageSquare size={13} color="#666666" />
+              <span style={{ fontSize: '12px', color: '#F0F0F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {chat.title}
+              </span>
+              <span style={{ fontSize: '10px', color: '#666666' }}>{timeAgo(chat.updated_at)}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
+
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+            STORAGE
+          </p>
+          <p style={{ fontSize: '11px', color: '#999999', marginBottom: '6px' }}>Workspace usage unavailable</p>
+          <div style={{ height: '3px', backgroundColor: '#222222', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', backgroundColor: '#E8000D', borderRadius: '2px', width: '18%' }} />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            onClick={handlePlayBriefing}
+            style={{
+              height: '34px',
+              borderRadius: '6px',
+              border: '1px solid #333333',
+              backgroundColor: briefingSpeaking ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
+              color: briefingSpeaking ? '#E8000D' : '#999999',
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+          >
+            {briefingSpeaking ? 'Stop Briefing' : (briefingLoading ? 'Generating...' : 'Play Briefing')}
+          </button>
+          {briefingText ? (
+            <button
+              onClick={() => setShowTranscript((v) => !v)}
+              style={{
+                fontSize: '11px',
+                color: '#666666',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              {showTranscript ? 'Hide transcript' : 'Show transcript'}
+            </button>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

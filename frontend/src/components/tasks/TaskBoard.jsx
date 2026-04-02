@@ -1,23 +1,16 @@
 // TaskBoard — Kanban board with optimistic updates and animated new tasks.
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit3, Calendar, User, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Edit3, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
-import TagPicker from '../common/TagPicker';
 
 const COLUMNS = [
-  { id: 'todo', label: 'Todo', color: '#F5F5F0' },
-  { id: 'in_progress', label: 'In Progress', color: '#FF6B00' },
-  { id: 'done', label: 'Done', color: '#00C853' },
+  { id: 'todo', label: 'Todo' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'done', label: 'Done' }
 ];
-
-const PRIORITY_COLORS = {
-  high: '#E8000D',
-  medium: '#FF6B00',
-  low: '#666',
-};
 
 // Normalizes status values between UI and backend variants.
 function normalizeStatus(status) {
@@ -83,19 +76,21 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
     setLocalTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, status: normalized } : task));
     try {
       await axios.patch(`/api/tasks/${taskId}`, { status: normalized });
+      onRefresh && onRefresh();
     } catch {
       setLocalTasks(previous);
       toast.error('Failed to move task. Reverted.');
     }
-  }, [localTasks]);
+  }, [localTasks, onRefresh]);
 
   // Optimistically deletes a task card then syncs in background.
   const deleteTask = useCallback(async (taskId) => {
     const previous = [...localTasks];
-    setLocalTasks((prev) => prev.filter((task) => task.id !== taskId));
+    const next = previous.filter((task) => task.id !== taskId);
+    setLocalTasks(next);
     try {
       await axios.delete(`/api/tasks/${taskId}`);
-      onChange && onChange(previous.filter((task) => task.id !== taskId));
+      onChange && onChange(next);
     } catch {
       setLocalTasks(previous);
       toast.error('Failed to delete task. Reverted.');
@@ -113,17 +108,18 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
         priority: 'medium'
       });
       const created = { ...res.data, status: normalizeStatus(res.data.status) };
-      setLocalTasks((prev) => [created, ...prev]);
+      const next = [created, ...localTasks];
+      setLocalTasks(next);
       setNewTaskIds((ids) => new Set([...ids, created.id]));
       setTimeout(() => {
         setNewTaskIds((ids) => {
-          const next = new Set(ids);
-          next.delete(created.id);
-          return next;
+          const mutable = new Set(ids);
+          mutable.delete(created.id);
+          return mutable;
         });
       }, 2000);
       setEditingTask(created.id);
-      onChange && onChange([created, ...localTasks]);
+      onChange && onChange(next);
       toast.success('Task created');
     } catch {
       toast.error('Failed to create task');
@@ -155,49 +151,74 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
     setDraggedTask(null);
   }, [draggedTask, updateTaskStatus]);
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-3 gap-4 h-full">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="glass-card p-4">
-            <div className="skeleton-loader h-6 w-24 mb-4" />
-            {[1, 2, 3].map((j) => (
-              <div key={j} className="skeleton-loader-red h-24 w-full mb-3 rounded-lg" />
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
+  if (loading) return null;
 
   return (
-    <div className="grid grid-cols-3 gap-4 h-full">
+    <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'auto', paddingBottom: '16px' }}>
       {COLUMNS.map((col) => {
         const columnTasks = localTasks.filter((task) => normalizeStatus(task.status) === col.id);
         return (
           <div
             key={col.id}
-            className={`glass-card p-4 flex flex-col ${draggedTask ? 'border-dashed border-2 border-white/10' : ''}`}
+            style={{ width: '280px', minWidth: '280px', display: 'flex', flexDirection: 'column' }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => handleDrop(col.id)}
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color }} />
-                <h3 className="font-heading font-semibold text-sm text-amd-white">{col.label}</h3>
-                <span className="text-xs text-amd-white/40 bg-white/5 px-2 py-0.5 rounded-full">{columnTasks.length}</span>
-              </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '10px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid #242424'
+              }}
+            >
+              <p
+                style={{
+                  fontSize: '11px',
+                  fontWeight: '500',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  color: '#666666',
+                  flex: 1
+                }}
+              >
+                {col.label}
+              </p>
+              <span
+                style={{
+                  backgroundColor: '#222222',
+                  borderRadius: '10px',
+                  padding: '1px 7px',
+                  fontSize: '11px',
+                  color: '#999999'
+                }}
+              >
+                {columnTasks.length}
+              </span>
               {col.id === 'todo' && (
                 <button
                   onClick={createTask}
-                  className="p-1 rounded hover:bg-white/5 text-amd-white/40 hover:text-amd-white"
+                  style={{
+                    width: '22px',
+                    height: '22px',
+                    borderRadius: '4px',
+                    border: '1px solid #333333',
+                    backgroundColor: '#1A1A1A',
+                    color: '#999999',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
                 >
-                  <Plus size={16} />
+                  <Plus size={12} />
                 </button>
               )}
             </div>
 
-            <div className="flex-1 overflow-auto space-y-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, overflowY: 'auto' }}>
               <AnimatePresence>
                 {columnTasks.map((task) => (
                   <TaskCard
@@ -214,7 +235,7 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
                 ))}
               </AnimatePresence>
               {columnTasks.length === 0 && (
-                <div className="text-center py-8 text-amd-white/20 text-xs">
+                <div style={{ fontSize: '12px', color: '#666666', padding: '8px 0' }}>
                   {col.id === 'todo' ? 'Add a task to get started' : 'Drag tasks here'}
                 </div>
               )}
@@ -228,37 +249,13 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
 
 // Task card with inline editing and new-item animation.
 function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStart, onDragEnd }) {
-  const { workspace } = useStore();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
-  const [tags, setTags] = useState([]);
 
   useEffect(() => {
     setTitle(task.title || '');
     setDescription(task.description || '');
   }, [task.title, task.description]);
-
-  useEffect(() => {
-    if (!workspace?.id || !task?.id) return;
-    axios.get('/api/tags/by-source', {
-      params: { workspace_id: workspace.id, type: 'task', source_id: task.id }
-    }).then((res) => setTags(res.data.tags || [])).catch(() => setTags([]));
-  }, [workspace?.id, task?.id]);
-
-  const saveTags = async (nextTags) => {
-    if (!workspace?.id || !task?.id) return;
-    setTags(nextTags);
-    try {
-      await axios.post('/api/tags/by-source', {
-        workspace_id: workspace.id,
-        type: 'task',
-        source_id: task.id,
-        tag_ids: nextTags.map((t) => t.id || t)
-      });
-    } catch {
-      toast.error('Failed to save task tags');
-    }
-  };
 
   return (
     <motion.div
@@ -269,58 +266,108 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
       draggable
       onDragStart={() => onDragStart(task)}
       onDragEnd={onDragEnd}
-      className={`glass-card glass-card-hover p-3 cursor-grab active:cursor-grabbing border ${
-        isNew ? 'border-amd-red' : 'border-transparent'
-      } transition-colors duration-700`}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#444444'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = isNew ? '#444444' : '#333333'; }}
+      style={{
+        backgroundColor: '#1A1A1A',
+        border: `1px solid ${isNew ? '#444444' : '#333333'}`,
+        borderRadius: '6px',
+        padding: '12px 14px',
+        cursor: 'grab',
+        transition: 'border-color 150ms ease'
+      }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 flex-1">
-          <GripVertical size={14} className="text-amd-white/20 flex-shrink-0" />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+          <GripVertical size={12} color="#666666" style={{ flexShrink: 0 }} />
           {editing ? (
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => onUpdate(task.id, { title })}
               onKeyDown={(e) => e.key === 'Enter' && onUpdate(task.id, { title })}
-              className="flex-1 bg-transparent border-b border-amd-red/30 text-sm text-amd-white outline-none"
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid #444444',
+                color: '#F0F0F0',
+                fontSize: '13px',
+                outline: 'none'
+              }}
               autoFocus
             />
           ) : (
-            <span className="text-sm text-amd-white font-medium">{task.title}</span>
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#F0F0F0',
+                lineHeight: '1.4',
+                marginBottom: '10px',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden'
+              }}
+            >
+              {task.title}
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={onEdit} className="p-0.5 text-amd-white/30 hover:text-amd-white">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <button onClick={onEdit} style={{ padding: '2px', border: 'none', background: 'transparent', color: '#666666', cursor: 'pointer' }}>
             <Edit3 size={12} />
           </button>
-          <button onClick={() => onDelete(task.id)} className="p-0.5 text-amd-white/30 hover:text-amd-red">
+          <button onClick={() => onDelete(task.id)} style={{ padding: '2px', border: 'none', background: 'transparent', color: '#666666', cursor: 'pointer' }}>
             <Trash2 size={12} />
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-2 flex-wrap">
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div
           style={{
-            backgroundColor: `${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}20`,
-            color: PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            backgroundColor: '#2A2A2A',
+            border: '1px solid #333333',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '9px',
+            color: '#999999',
+            fontWeight: '600',
+            flexShrink: 0
           }}
         >
-          {task.priority || 'medium'}
+          {(task.assignee || 'U').charAt(0).toUpperCase()}
+        </div>
+
+        <span
+          style={{
+            fontSize: '10px',
+            fontWeight: '500',
+            textTransform: 'uppercase',
+            padding: '1px 6px',
+            borderRadius: '3px',
+            backgroundColor: task.priority === 'high'
+              ? 'rgba(192,57,43,0.15)'
+              : task.priority === 'medium'
+              ? 'rgba(184,92,0,0.15)'
+              : 'rgba(85,85,85,0.15)',
+            color: task.priority === 'high'
+              ? '#C0392B'
+              : task.priority === 'medium'
+              ? '#B85C00'
+              : '#888888'
+          }}
+        >
+          {task.priority || 'low'}
         </span>
 
-        {task.assignee && (
-          <span className="flex items-center gap-1 text-[10px] text-amd-white/40">
-            <User size={10} /> {task.assignee}
-          </span>
-        )}
-
-        {task.due_date && (
-          <span className="flex items-center gap-1 text-[10px] text-amd-white/40">
-            <Calendar size={10} /> {task.due_date}
-          </span>
-        )}
+        <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{task.due_date || 'No due'}</span>
       </div>
 
       <AnimatePresence>
@@ -329,20 +376,38 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="mt-3 space-y-2 overflow-hidden"
+            style={{ marginTop: '10px', overflow: 'hidden' }}
           >
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={() => onUpdate(task.id, { description })}
               placeholder="Add description..."
-              className="w-full bg-black/20 rounded p-2 text-xs text-amd-white/70 outline-none resize-none h-16"
+              style={{
+                width: '100%',
+                height: '60px',
+                resize: 'none',
+                backgroundColor: '#222222',
+                border: '1px solid #333333',
+                borderRadius: '4px',
+                padding: '8px',
+                fontSize: '12px',
+                color: '#F0F0F0',
+                marginBottom: '8px'
+              }}
             />
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
               <select
                 value={task.priority || 'medium'}
                 onChange={(e) => onUpdate(task.id, { priority: e.target.value })}
-                className="text-xs bg-black/20 rounded px-2 py-1 text-amd-white outline-none"
+                style={{
+                  fontSize: '11px',
+                  backgroundColor: '#222222',
+                  border: '1px solid #333333',
+                  borderRadius: '4px',
+                  color: '#999999',
+                  padding: '4px 6px'
+                }}
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -353,16 +418,30 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 value={task.assignee || ''}
                 onChange={(e) => onUpdate(task.id, { assignee: e.target.value })}
                 placeholder="Assignee"
-                className="text-xs bg-black/20 rounded px-2 py-1 text-amd-white outline-none flex-1"
+                style={{
+                  flex: 1,
+                  fontSize: '11px',
+                  backgroundColor: '#222222',
+                  border: '1px solid #333333',
+                  borderRadius: '4px',
+                  color: '#999999',
+                  padding: '4px 6px'
+                }}
               />
               <input
                 type="date"
                 value={task.due_date || ''}
                 onChange={(e) => onUpdate(task.id, { due_date: e.target.value })}
-                className="text-xs bg-black/20 rounded px-2 py-1 text-amd-white outline-none"
+                style={{
+                  fontSize: '11px',
+                  backgroundColor: '#222222',
+                  border: '1px solid #333333',
+                  borderRadius: '4px',
+                  color: '#999999',
+                  padding: '4px 6px'
+                }}
               />
             </div>
-            <TagPicker value={tags} onChange={saveTags} compact />
           </motion.div>
         )}
       </AnimatePresence>

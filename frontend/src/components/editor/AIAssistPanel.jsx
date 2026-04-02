@@ -45,7 +45,7 @@ export default function AIAssistPanel({ text, action, onApply, onClose }) {
 
       {/* Original text */}
       <div className="text-xs text-amd-white/40 mb-2">Original:</div>
-      <div className="text-xs text-amd-white/60 bg-black/20 rounded p-2 mb-3 max-h-20 overflow-auto">
+      <div className="text-xs text-amd-white/60 bg-surface rounded p-2 mb-3 max-h-20 overflow-auto">
         {text}
       </div>
 
@@ -54,7 +54,7 @@ export default function AIAssistPanel({ text, action, onApply, onClose }) {
         AI Result:
         {loading && <Loader2 size={10} className="animate-spin text-amd-red" />}
       </div>
-      <div className="text-sm text-amd-white bg-black/20 rounded p-3 mb-3 max-h-40 overflow-auto min-h-[60px]">
+      <div className="text-sm text-amd-white bg-surface rounded p-3 mb-3 max-h-40 overflow-auto min-h-[60px]">
         {loading ? (
           <span>{streamingText || result}<span className="animate-pulse">▊</span></span>
         ) : (
@@ -72,13 +72,13 @@ export default function AIAssistPanel({ text, action, onApply, onClose }) {
         <button
           onClick={() => onApply(result || streamingText)}
           disabled={loading || !(result || streamingText)}
-          className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-amd-red text-white text-sm font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-accent text-[var(--text-on-accent)] text-sm font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors"
         >
           <Check size={14} /> Apply
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-2 rounded-lg bg-white/5 text-amd-white/60 text-sm hover:bg-white/10 transition-colors"
+          className="px-4 py-2 rounded-lg bg-surface text-amd-white/60 text-sm hover:bg-elevated transition-colors"
         >
           Cancel
         </button>

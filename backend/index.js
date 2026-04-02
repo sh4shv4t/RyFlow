@@ -10,7 +10,6 @@ const { Server } = require('socket.io');
 const registry = require('./db/registry');
 const { switchWorkspace, clearActiveWorkspace } = require('./db/database');
 const { startDiscovery, getPeers, stopDiscovery } = require('./p2p/discovery');
-const { startEmbeddingWorker, stopEmbeddingWorker } = require('./services/embeddingQueue');
 const joinCodeAuth = require('./middleware/joinCodeAuth');
 const remoteProxy = require('./middleware/remoteProxy');
 
@@ -67,7 +66,6 @@ app.use('/api/chats', joinCodeAuth);
 app.use('/api/code', joinCodeAuth);
 app.use('/api/canvas', joinCodeAuth);
 app.use('/api/voice', joinCodeAuth);
-app.use('/api/tags', joinCodeAuth);
 app.use('/api/workspace', joinCodeAuth);
 app.use('/api/comments', joinCodeAuth);
 
@@ -81,7 +79,6 @@ app.use('/api/workspace', require('./routes/workspace'));
 app.use('/api/code', require('./routes/code'));
 app.use('/api/canvas', require('./routes/canvas'));
 app.use('/api/chats', require('./routes/chats'));
-app.use('/api/tags', require('./routes/tags'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/workspaces', require('./routes/workspaces'));
 app.use('/api/comments', require('./routes/comments'));
@@ -173,7 +170,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('RyFlow backend listening on port 3001');
   console.log('LAN access enabled');
   console.log(`📡 Socket.io signaling active at ${LOCAL_IP}:${PORT}`);
-  startEmbeddingWorker();
 
   // Start LAN peer discovery
   try {
@@ -186,7 +182,6 @@ server.listen(PORT, '0.0.0.0', () => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down RyFlow...');
-  stopEmbeddingWorker();
   stopDiscovery();
   clearActiveWorkspace();
   server.close();

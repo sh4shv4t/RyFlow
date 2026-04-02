@@ -14,6 +14,18 @@ if (!fs.existsSync(DATA_DIR)) {
 let activeDb = null;
 let activeWorkspaceId = null;
 
+function addColumnIfMissing(db, table, column, definition) {
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(column)) {
+      db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+      console.log(`[DB] Added column ${table}.${column}`);
+    }
+  } catch (err) {
+    console.error(`[DB] Could not add ${table}.${column}:`, err.message);
+  }
+}
+
 // Returns the currently active workspace database connection.
 function getDb() {
   if (!activeDb) {
@@ -45,6 +57,39 @@ function initializeSchema(db) {
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
+
+  // Compatibility migrations for older workspace databases.
+  addColumnIfMissing(db, 'workspaces', 'description', 'TEXT');
+  addColumnIfMissing(db, 'workspaces', 'owner_name', 'TEXT');
+  addColumnIfMissing(db, 'workspaces', 'join_code', 'TEXT');
+  addColumnIfMissing(db, 'workspaces', 'is_local', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'workspaces', 'host_ip', 'TEXT');
+  addColumnIfMissing(db, 'workspaces', 'host_port', 'INTEGER');
+  addColumnIfMissing(db, 'workspaces', 'last_accessed', 'DATETIME');
+  try {
+    db.prepare("UPDATE workspaces SET last_accessed = COALESCE(last_accessed, CURRENT_TIMESTAMP)").run();
+  } catch (err) {
+    console.error('[DB] Could not normalize workspaces.last_accessed:', err.message);
+  }
+
+  addColumnIfMissing(db, 'documents', 'version_number', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'documents', 'is_daily_note', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'documents', 'daily_note_date', 'TEXT');
+
+  addColumnIfMissing(db, 'code_files', 'content', 'TEXT');
+  addColumnIfMissing(db, 'code_files', 'language', "TEXT DEFAULT 'javascript'");
+  addColumnIfMissing(db, 'code_files', 'created_by', 'TEXT');
+  addColumnIfMissing(db, 'code_files', 'version_number', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'code_files', 'updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+  addColumnIfMissing(db, 'code_files', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
+
+  addColumnIfMissing(db, 'nodes', 'metadata', 'TEXT');
+  addColumnIfMissing(db, 'nodes', 'source_id', 'TEXT');
+
+  addColumnIfMissing(db, 'ai_chats', 'rag_used', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'ai_chats', 'message_count', 'INTEGER DEFAULT 0');
+
+  addColumnIfMissing(db, 'document_versions', 'saved_by', 'TEXT');
 }
 
 // Switches active connection to a workspace database, creating it if needed.

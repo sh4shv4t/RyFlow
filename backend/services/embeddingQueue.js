@@ -1,110 +1,147 @@
-// Background embedding queue so save routes remain responsive under heavy writes.
-const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../db/database');
-const { generateAndStoreEmbedding } = require('./embeddingService');
+'use strict';
 
-let workerTimer = null;
-let workerRunning = false;
+// Lazy-require to avoid circular deps at module load
+const getOllama = () => require('./ollamaService');
+const getDatabase = () => require('../db/database');
 
-function serializePayload(payload) {
-  if (!payload) return null;
-  try {
-    return JSON.stringify(payload);
-  } catch {
-    return null;
+const queue = [];
+let processing = false;
+let consecutiveFails = 0;
+
+// Permanently skip nodes that have failed
+const blacklist = new Set();
+
+function enqueue(nodeId, workspaceId) {
+  if (!nodeId || typeof nodeId !== 'string') return;
+  if (!workspaceId || typeof workspaceId !== 'string') return;
+  if (blacklist.has(nodeId)) return;
+  // Deduplicate
+  if (queue.some(j => j.nodeId === nodeId)) return;
+  queue.push({ nodeId, workspaceId });
+  if (!processing) scheduleNext(0);
+}
+
+function scheduleNext(delayMs) {
+  setTimeout(tick, delayMs);
+}
+
+async function tick() {
+  if (queue.length === 0) {
+    processing = false;
+    return;
   }
-}
 
-function enqueueEmbeddingJob(nodeId, payload = null) {
-  if (!nodeId) return null;
-  const db = getDb();
-  const id = uuidv4();
-  db.prepare(
-    `INSERT INTO embedding_jobs (id, node_id, payload, status, retries, error, next_run_at)
-     VALUES (?, ?, ?, 'pending', 0, NULL, CURRENT_TIMESTAMP)`
-  ).run(id, nodeId, serializePayload(payload));
-  return id;
-}
-
-function parsePayload(payloadText) {
-  if (!payloadText) return null;
-  try {
-    return JSON.parse(payloadText);
-  } catch {
-    return null;
+  // Back off if Ollama keeps failing
+  if (consecutiveFails >= 3) {
+    processing = false;
+    console.log('[Embedding] Backing off 30s - Ollama may be unavailable');
+    setTimeout(() => {
+      consecutiveFails = 0;
+      if (queue.length > 0) scheduleNext(0);
+    }, 30000);
+    return;
   }
-}
 
-function pickNextJob(db) {
-  return db.prepare(
-    `SELECT * FROM embedding_jobs
-     WHERE status IN ('pending', 'retry')
-       AND datetime(next_run_at) <= datetime('now')
-     ORDER BY created_at ASC
-     LIMIT 1`
-  ).get();
-}
+  processing = true;
+  const job = queue.shift();
+  const { nodeId } = job;
 
-async function processOneJob() {
-  if (workerRunning) return;
-  workerRunning = true;
   try {
-    const db = getDb();
-    const job = pickNextJob(db);
-    if (!job) return;
-
-    db.prepare(
-      "UPDATE embedding_jobs SET status = 'processing', updated_at = CURRENT_TIMESTAMP, error = NULL WHERE id = ?"
-    ).run(job.id);
-
-    const payload = parsePayload(job.payload);
-    const text = payload && typeof payload === 'object' ? payload : null;
-    const result = await generateAndStoreEmbedding(job.node_id, text);
-
-    if (result) {
-      db.prepare("UPDATE embedding_jobs SET status = 'done', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(job.id);
+    // Get DB connection safely
+    let db;
+    try {
+      db = getDatabase().getDb();
+    } catch {
+      // No active DB - skip this job permanently
+      blacklist.add(nodeId);
+      scheduleNext(100);
       return;
     }
 
-    const nextRetries = Number(job.retries || 0) + 1;
-    if (nextRetries >= 3) {
-      db.prepare(
-        "UPDATE embedding_jobs SET status = 'failed', retries = ?, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-      ).run(nextRetries, 'Embedding generation failed', job.id);
+    // Fetch node - may be null if deleted
+    const node = db.prepare(
+      'SELECT id, title, type, content_summary, metadata FROM nodes WHERE id = ?'
+    ).get(nodeId);
+
+    // Node gone - blacklist and move on silently
+    if (!node) {
+      blacklist.add(nodeId);
+      consecutiveFails = 0;
+      scheduleNext(50);
       return;
     }
 
-    db.prepare(
-      `UPDATE embedding_jobs
-       SET status = 'retry', retries = ?, error = ?,
-           next_run_at = datetime('now', '+' || ? || ' seconds'),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`
-    ).run(nextRetries, 'Embedding generation failed', 10 * nextRetries, job.id);
+    // Build embed text WITHOUT using buildEmbedText
+    // to avoid any import issues or null crashes
+    const meta = (() => {
+      if (!node.metadata) return {};
+      try { return JSON.parse(node.metadata); }
+      catch { return {}; }
+    })();
+
+    const parts = [
+      node.type && `Type: ${node.type}`,
+      node.title && `Title: ${node.title}`,
+      node.content_summary && `Content: ${node.content_summary}`,
+      meta.priority && `Priority: ${meta.priority}`,
+      meta.language && `Language: ${meta.language}`,
+      meta.assignee && `Assignee: ${meta.assignee}`,
+    ].filter(Boolean);
+
+    const text = parts.join('. ');
+
+    if (!text.trim()) {
+      // Nothing to embed - skip silently
+      consecutiveFails = 0;
+      scheduleNext(50);
+      return;
+    }
+
+    // Call Ollama
+    const ollama = getOllama();
+    const embedding = await ollama.embed(text);
+
+    if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+      // Ollama returned nothing - retry later
+      consecutiveFails++;
+      queue.unshift(job); // put back at front
+      scheduleNext(3000);
+      return;
+    }
+
+    // Success
+    consecutiveFails = 0;
+
+    // Store as binary buffer (4 bytes per float)
+    const buf = Buffer.allocUnsafe(embedding.length * 4);
+    for (let i = 0; i < embedding.length; i++) {
+      buf.writeFloatLE(embedding[i], i * 4);
+    }
+
+    db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?').run(buf, nodeId);
+
   } catch (err) {
-    console.error('[EmbeddingQueue] Worker error:', err.message);
-  } finally {
-    workerRunning = false;
+    // Blacklist this node - never try it again
+    blacklist.add(nodeId);
+    consecutiveFails++;
+
+    // Only log unexpected errors (not null access)
+    const msg = err?.message || '';
+    if (!msg.includes('null') && !msg.includes('metadata') && !msg.includes('undefined')) {
+      console.error('[Embedding] Unexpected error:', msg);
+    }
   }
-}
 
-function startEmbeddingWorker(intervalMs = 2000) {
-  if (workerTimer) return;
-  workerTimer = setInterval(() => {
-    processOneJob().catch((err) => {
-      console.error('[EmbeddingQueue] Process error:', err.message);
-    });
-  }, intervalMs);
-}
-
-function stopEmbeddingWorker() {
-  if (!workerTimer) return;
-  clearInterval(workerTimer);
-  workerTimer = null;
+  scheduleNext(100);
 }
 
 module.exports = {
-  enqueueEmbeddingJob,
-  startEmbeddingWorker,
-  stopEmbeddingWorker
+  enqueueEmbeddingJob: enqueue,
+  enqueue,
+  getStats: () => ({
+    queued: queue.length,
+    processing,
+    blacklisted: blacklist.size,
+    consecutiveFails
+  })
 };

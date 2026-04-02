@@ -5,20 +5,10 @@ const { v4: uuidv4 } = require('uuid');
 const LZString = require('lz-string');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Builds canonical graph summary for a saved canvas.
-function buildCanvasSummary(canvas) {
-  let elementCount = 0;
-  try {
-    const raw = String(canvas.elements || '');
-    const decompressed = LZString.decompress(raw);
-    const parsed = JSON.parse((decompressed || raw || '[]'));
-    elementCount = Array.isArray(parsed) ? parsed.length : 0;
-  } catch {
-    elementCount = 0;
-  }
+function buildCanvasSummary(canvas, elementCount = 0) {
   const dateText = canvas.updated_at || canvas.created_at || new Date().toISOString();
   return `Visual canvas with ${elementCount} elements. Created: ${new Date(dateText).toISOString()}`;
 }
@@ -26,9 +16,11 @@ function buildCanvasSummary(canvas) {
 // Extracts canvas metadata used by semantic search and detail UI.
 function buildCanvasMetadata(elements) {
   try {
+    if (Array.isArray(elements)) {
+      return { element_count: elements.length };
+    }
     const raw = String(elements || '');
-    const decompressed = LZString.decompress(raw);
-    const parsed = JSON.parse((decompressed || raw || '[]'));
+    const parsed = JSON.parse(raw || '[]');
     return { element_count: Array.isArray(parsed) ? parsed.length : 0 };
   } catch {
     return { element_count: 0 };
@@ -96,17 +88,17 @@ router.post('/save', async (req, res) => {
     }
 
     const saved = db.prepare('SELECT * FROM canvases WHERE id = ?').get(canvasId);
-    const summary = buildCanvasSummary(saved);
-    const metadata = buildCanvasMetadata(saved.elements);
+    const metadata = buildCanvasMetadata(req.body.elements || []);
+    const summary = buildCanvasSummary(saved, metadata.element_count || 0);
 
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(canvasId, 'canvas');
     if (node) {
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(saved.title, summary, JSON.stringify(metadata), node.id);
-      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, workspace_id);
     } else {
       const createdNode = await createNode(workspace_id, 'canvas', saved.title, summary, canvasId, metadata);
-      enqueueEmbeddingJob(createdNode.id, buildEmbedText({ type: 'canvas', title: saved.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(createdNode.id, workspace_id);
     }
 
     res.json(saved);

@@ -54,33 +54,65 @@ export default function Tasks() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col h-full gap-4"
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        backgroundColor: '#111111',
+        padding: '32px 40px'
+      }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-amd-white">Tasks</h1>
-          <p className="text-sm text-amd-white/40 mt-0.5">
-            {tasks.length} total &middot; {counts.todo} to-do &middot; {counts.in_progress} in progress &middot; {counts.done} done
-          </p>
-        </div>
-        <button
-          onClick={() => { setLoading(true); fetchTasks(); }}
-          className="p-2 rounded-lg text-amd-white/40 hover:text-amd-white hover:bg-white/5 transition-all"
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          flexShrink: 0,
+          marginBottom: '20px'
+        }}
+      >
+        <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0' }}>Tasks</h1>
+        <span
+          style={{
+            backgroundColor: '#1A1A1A',
+            border: '1px solid #333333',
+            borderRadius: '10px',
+            padding: '1px 8px',
+            fontSize: '11px',
+            color: '#999999'
+          }}
         >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-        </button>
+          {tasks.length}
+        </span>
+        <div style={{ marginLeft: 'auto' }}>
+          <button
+            onClick={() => { setLoading(true); fetchTasks(); }}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              border: '1px solid #333333',
+              backgroundColor: '#1A1A1A',
+              color: '#999999',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
-      {/* NL input */}
       <NLTaskInput onTasksCreated={handleTasksCreated} />
 
-      {/* Board */}
-      <div className="flex-1 overflow-auto">
+      <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'auto', paddingBottom: '16px' }}>
         {loading ? (
-          <div className="grid grid-cols-3 gap-4 h-full">
+          <div style={{ display: 'flex', gap: '20px', width: '100%' }}>
             {[1, 2, 3].map(i => (
-              <div key={i} className="skeleton-loader rounded-xl h-64" />
+              <div key={i} style={{ width: '280px', minWidth: '280px', height: '100%', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px' }} />
             ))}
           </div>
         ) : (

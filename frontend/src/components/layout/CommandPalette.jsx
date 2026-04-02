@@ -59,8 +59,7 @@ export default function CommandPalette() {
   const quickActions = useMemo(() => ([
     { key: 'new-doc', label: 'New Document', run: () => navigate('/editor') },
     { key: 'new-task', label: 'Open Tasks', run: () => navigate('/tasks') },
-    { key: 'open-graph', label: 'Open Graph', run: () => navigate('/graph') },
-    { key: 'open-tags', label: 'Open Tags', run: () => navigate('/tags') }
+    { key: 'open-graph', label: 'Open Graph', run: () => navigate('/graph') }
   ]), [navigate]);
 
   const openResult = (item) => {
@@ -77,9 +76,9 @@ export default function CommandPalette() {
   if (!commandPaletteOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[14vh] px-4" onClick={() => setCommandPaletteOpen(false)}>
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-amd-charcoal shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+    <div className="fixed inset-0 z-50 bg-overlay backdrop-blur-sm flex items-start justify-center pt-[14vh] px-4" onClick={() => setCommandPaletteOpen(false)}>
+      <div className="w-full max-w-2xl rounded-2xl border border-border-d bg-overlay shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-d">
           <Command size={16} className="text-amd-red" />
           <input
             autoFocus
@@ -88,7 +87,7 @@ export default function CommandPalette() {
             placeholder="Search workspace or run a command..."
             className="flex-1 bg-transparent outline-none text-amd-white placeholder:text-amd-white/35"
           />
-          <span className="text-[10px] px-2 py-1 rounded bg-white/5 text-amd-white/40">Ctrl/Cmd+K</span>
+          <span className="text-[10px] px-2 py-1 rounded bg-surface text-amd-white/40">Ctrl/Cmd+K</span>
         </div>
 
         {query.trim() === '' ? (
@@ -100,7 +99,7 @@ export default function CommandPalette() {
                   action.run();
                   setCommandPaletteOpen(false);
                 }}
-                className="w-full text-left p-2 rounded-lg hover:bg-white/5 text-sm text-amd-white/80"
+                className="w-full text-left p-2 rounded-lg hover:bg-elevated text-sm text-amd-white/80"
               >
                 {action.label}
               </button>
@@ -116,7 +115,7 @@ export default function CommandPalette() {
                 <button
                   key={item.id}
                   onClick={() => openResult(item)}
-                  className="w-full text-left p-2 rounded-lg hover:bg-white/5 flex items-start gap-2"
+                  className="w-full text-left p-2 rounded-lg hover:bg-elevated flex items-start gap-2"
                 >
                   <Icon size={14} className="text-amd-red mt-0.5" />
                   <div className="min-w-0">

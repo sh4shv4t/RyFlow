@@ -175,14 +175,14 @@ async function semanticSearch(query, workspaceId, topK = 5) {
 async function generateAndStoreEmbedding(nodeId, text) {
   try {
     const textToEmbed = typeof text === 'object' ? buildEmbedText(text) : String(text || '').trim();
+    if (!textToEmbed) return null;
     const embedding = await embed(textToEmbed);
     const db = getDb();
     const packed = floatArrayToBuffer(embedding || []);
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?')
       .run(packed, nodeId);
     return embedding;
-  } catch (err) {
-    console.error('[Embedding] Failed to generate embedding:', err.message);
+  } catch {
     return null;
   }
 }

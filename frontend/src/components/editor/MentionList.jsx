@@ -63,12 +63,12 @@ const MentionList = forwardRef((props, ref) => {
   }
 
   return (
-    <div className="w-[340px] rounded-lg border border-white/10 bg-amd-gray shadow-xl overflow-hidden">
+    <div className="w-[340px] rounded-lg border border-border-d bg-surface shadow-xl overflow-hidden">
       {items.map((item, index) => (
         <button
           key={item.id}
           onClick={() => selectItem(index)}
-          className={`w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 ${index === selectedIndex ? 'bg-amd-red/20' : 'hover:bg-amd-red/10'}`}
+          className={`w-full text-left px-3 py-2 border-b border-border-d last:border-b-0 ${index === selectedIndex ? 'bg-amd-red/20' : 'hover:bg-amd-red/10'}`}
         >
           <div className="flex items-start gap-2">
             <span className={TYPE_COLOR[item.type] || 'text-amd-white/60'}>{TYPE_ICON[item.type] || '🔗'}</span>

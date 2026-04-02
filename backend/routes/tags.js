@@ -1,22 +1,20 @@
-// Tag routes for workspace-level tags and source-node assignments.
+// Workspace tag routes with node-level assignment and filtered graph view.
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
-const { buildEmbedText } = require('../services/embeddingService');
+const { parseMetadata } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 const router = express.Router();
 
-function resolveNodeId(db, workspaceId, type, sourceId) {
-  if (!workspaceId || !type || !sourceId) return null;
-  const row = db.prepare(
-    'SELECT id FROM nodes WHERE workspace_id = ? AND type = ? AND source_id = ? LIMIT 1'
-  ).get(workspaceId, type, sourceId);
-  return row?.id || null;
+function normalizeType(type) {
+  const value = String(type || '').toLowerCase();
+  if (value === 'document' || value === 'docs') return 'doc';
+  if (value === 'tasks') return 'task';
+  return value;
 }
 
 function listNodeTags(db, nodeId) {
-  if (!nodeId) return [];
   return db.prepare(
     `SELECT t.id, t.name, t.color
      FROM tags t
@@ -26,52 +24,59 @@ function listNodeTags(db, nodeId) {
   ).all(nodeId);
 }
 
-// GET /api/tags?workspace_id=... — list tags for workspace.
+function syncNodeMetadataTags(db, nodeId) {
+  const node = db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata FROM nodes WHERE id = ?').get(nodeId);
+  if (!node) return;
+  const tags = listNodeTags(db, nodeId);
+  const metadata = { ...parseMetadata(node.metadata), tags: tags.map((t) => t.name) };
+  db.prepare('UPDATE nodes SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), nodeId);
+  enqueueEmbeddingJob(nodeId, node.workspace_id);
+}
+
+// GET /api/tags?workspace_id=... — List workspace tags.
 router.get('/', (req, res) => {
   try {
-    const { workspace_id } = req.query;
-    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const workspaceId = req.query.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
     const tags = db.prepare(
       'SELECT id, workspace_id, name, color, created_at FROM tags WHERE workspace_id = ? ORDER BY name COLLATE NOCASE ASC'
-    ).all(workspace_id);
+    ).all(workspaceId);
     return res.json({ tags });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/tags — create a workspace tag.
+// POST /api/tags — Create a workspace tag.
 router.post('/', (req, res) => {
   try {
-    const { workspace_id, name, color } = req.body;
-    const cleanName = String(name || '').trim();
-    if (!workspace_id || !cleanName) {
+    const { workspace_id, name, color } = req.body || {};
+    if (!workspace_id || !String(name || '').trim()) {
       return res.status(400).json({ error: 'workspace_id and name are required' });
     }
 
     const db = getDb();
-    const existing = db.prepare(
-      'SELECT id, workspace_id, name, color, created_at FROM tags WHERE workspace_id = ? AND lower(name) = lower(?)'
-    ).get(workspace_id, cleanName);
-    if (existing) return res.json(existing);
-
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?)'
-    ).run(id, workspace_id, cleanName, color || '#64748b');
+    db.prepare('INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?)')
+      .run(id, workspace_id, String(name).trim(), color || '#64748b');
 
-    const tag = db.prepare('SELECT id, workspace_id, name, color, created_at FROM tags WHERE id = ?').get(id);
+    const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(id);
     return res.status(201).json(tag);
   } catch (err) {
+    if (/UNIQUE constraint failed/i.test(String(err.message || ''))) {
+      return res.status(409).json({ error: 'Tag already exists in this workspace' });
+    }
     return res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /api/tags/:id — delete a tag.
+// DELETE /api/tags/:id — Delete tag and all node mappings.
 router.delete('/:id', (req, res) => {
   try {
     const db = getDb();
+    const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.params.id);
+    if (!tag) return res.status(404).json({ error: 'Tag not found' });
     db.prepare('DELETE FROM tags WHERE id = ?').run(req.params.id);
     return res.json({ success: true });
   } catch (err) {
@@ -79,65 +84,81 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// GET /api/tags/by-source?workspace_id=...&type=...&source_id=...
+// GET /api/tags/by-source?workspace_id=...&type=...&source_id=... — List tags for one item.
 router.get('/by-source', (req, res) => {
   try {
-    const { workspace_id, type, source_id } = req.query;
-    if (!workspace_id || !type || !source_id) {
+    const workspaceId = req.query.workspace_id;
+    const sourceId = req.query.source_id;
+    const type = normalizeType(req.query.type);
+    if (!workspaceId || !sourceId || !type) {
       return res.status(400).json({ error: 'workspace_id, type, and source_id are required' });
     }
+
     const db = getDb();
-    const nodeId = resolveNodeId(db, workspace_id, type, source_id);
-    if (!nodeId) return res.json({ tags: [] });
-    return res.json({ tags: listNodeTags(db, nodeId) });
+    const node = db.prepare(
+      'SELECT id FROM nodes WHERE workspace_id = ? AND type = ? AND source_id = ? LIMIT 1'
+    ).get(workspaceId, type, sourceId);
+
+    if (!node) return res.json({ tags: [] });
+    return res.json({ tags: listNodeTags(db, node.id) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/tags/by-source — replace tag assignments for source node.
-router.post('/by-source', (req, res) => {
+// POST /api/tags/assign — Replace tags assigned to one source item.
+router.post('/assign', (req, res) => {
   try {
-    const { workspace_id, type, source_id, tag_ids } = req.body;
-    if (!workspace_id || !type || !source_id || !Array.isArray(tag_ids)) {
+    const { workspace_id, type, source_id, tag_ids } = req.body || {};
+    const normalizedType = normalizeType(type);
+    if (!workspace_id || !normalizedType || !source_id || !Array.isArray(tag_ids)) {
       return res.status(400).json({ error: 'workspace_id, type, source_id, and tag_ids[] are required' });
     }
 
     const db = getDb();
-    const nodeId = resolveNodeId(db, workspace_id, type, source_id);
-    if (!nodeId) return res.status(404).json({ error: 'Node not found for source' });
+    const node = db.prepare(
+      'SELECT id FROM nodes WHERE workspace_id = ? AND type = ? AND source_id = ? LIMIT 1'
+    ).get(workspace_id, normalizedType, source_id);
+    if (!node) return res.status(404).json({ error: 'Node not found for item' });
 
-    const tx = db.transaction((ids) => {
-      db.prepare('DELETE FROM node_tags WHERE node_id = ?').run(nodeId);
-      const insert = db.prepare('INSERT OR IGNORE INTO node_tags (node_id, tag_id) VALUES (?, ?)');
-      ids.forEach((tagId) => {
-        const exists = db.prepare('SELECT id FROM tags WHERE id = ? AND workspace_id = ?').get(tagId, workspace_id);
-        if (exists) insert.run(nodeId, tagId);
-      });
-    });
-    tx(tag_ids);
+    const allowedTags = db.prepare(
+      `SELECT id FROM tags
+       WHERE workspace_id = ? AND id IN (${tag_ids.map(() => '?').join(',') || "''"})`
+    ).all(workspace_id, ...tag_ids).map((row) => row.id);
 
-    const tags = listNodeTags(db, nodeId);
-    const metadataRow = db.prepare('SELECT metadata FROM nodes WHERE id = ?').get(nodeId);
-    let metadata = {};
-    try {
-      metadata = metadataRow?.metadata ? JSON.parse(metadataRow.metadata) : {};
-    } catch {
-      metadata = {};
-    }
-    metadata.tags = tags.map((t) => t.name);
-    db.prepare('UPDATE nodes SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), nodeId);
-    const node = db.prepare('SELECT type, title, content_summary FROM nodes WHERE id = ?').get(nodeId);
-    if (node) {
-      enqueueEmbeddingJob(nodeId, buildEmbedText({
-        type: node.type,
-        title: node.title,
-        content_summary: node.content_summary,
-        metadata
-      }));
+    db.prepare('DELETE FROM node_tags WHERE node_id = ?').run(node.id);
+    const insert = db.prepare('INSERT OR IGNORE INTO node_tags (node_id, tag_id) VALUES (?, ?)');
+    allowedTags.forEach((tagId) => insert.run(node.id, tagId));
+
+    syncNodeMetadataTags(db, node.id);
+    return res.json({ success: true, tags: listNodeTags(db, node.id) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/tags/filter?workspace_id=...&tag_id=...&type=... — Filter nodes by tag.
+router.get('/filter', (req, res) => {
+  try {
+    const workspaceId = req.query.workspace_id;
+    const tagId = req.query.tag_id;
+    const type = req.query.type ? normalizeType(req.query.type) : null;
+    if (!workspaceId || !tagId) {
+      return res.status(400).json({ error: 'workspace_id and tag_id are required' });
     }
 
-    return res.json({ tags });
+    const db = getDb();
+    const nodes = db.prepare(
+      `SELECT n.id, n.type, n.title, n.content_summary, n.source_id, n.created_at
+       FROM nodes n
+       JOIN node_tags nt ON nt.node_id = n.id
+       WHERE n.workspace_id = ? AND nt.tag_id = ?
+         AND (? IS NULL OR n.type = ?)
+       ORDER BY n.created_at DESC
+       LIMIT 300`
+    ).all(workspaceId, tagId, type, type);
+
+    return res.json({ items: nodes });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -4,6 +4,13 @@
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  description TEXT,
+  owner_name TEXT,
+  join_code TEXT,
+  is_local INTEGER DEFAULT 0,
+  host_ip TEXT,
+  host_port INTEGER,
+  last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -23,6 +30,7 @@ CREATE TABLE IF NOT EXISTS documents (
   workspace_id TEXT NOT NULL,
   title TEXT NOT NULL,
   content TEXT,
+  version_number INTEGER DEFAULT 0,
   is_daily_note INTEGER DEFAULT 0,
   daily_note_date TEXT,
   created_by TEXT,
@@ -39,9 +47,11 @@ CREATE TABLE IF NOT EXISTS document_versions (
   title TEXT,
   content TEXT,
   version_number INTEGER NOT NULL,
+  saved_by TEXT,
   created_by TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+  FOREIGN KEY (saved_by) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
@@ -117,6 +127,7 @@ CREATE TABLE IF NOT EXISTS code_files (
   content TEXT,
   language TEXT DEFAULT 'javascript',
   created_by TEXT,
+  version_number INTEGER DEFAULT 0,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Keep code files scoped to workspace and optional creator lifecycle.

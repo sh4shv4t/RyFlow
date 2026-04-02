@@ -4,7 +4,6 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Builds code metadata for graph node storage.
@@ -13,6 +12,13 @@ function buildCodeMetadata(file) {
     language: file.language || 'javascript',
     line_count: String(file.content || '').split(/\r?\n/).length
   };
+}
+
+function resolveValidUserId(db, userId, workspaceId) {
+  const candidate = String(userId || '').trim();
+  if (!candidate) return null;
+  const exists = db.prepare('SELECT id FROM users WHERE id = ? AND workspace_id = ? LIMIT 1').get(candidate, workspaceId);
+  return exists?.id || null;
 }
 
 // GET /api/code/list?workspace_id={} — list saved code files for a workspace
@@ -35,11 +41,16 @@ router.get('/list', (req, res) => {
 router.post('/save', async (req, res) => {
   try {
     const { id, workspace_id, title, content, language, created_by } = req.body;
-    if (!workspace_id || !title) {
-      return res.status(400).json({ error: 'workspace_id and title are required' });
+
+    if (!workspace_id) {
+      return res.status(400).json({ error: 'workspace_id required' });
+    }
+    if (!title) {
+      return res.status(400).json({ error: 'title is required' });
     }
 
     const db = getDb();
+    const createdBy = resolveValidUserId(db, created_by, workspace_id);
     const fileId = id || uuidv4();
     const existing = db.prepare('SELECT id FROM code_files WHERE id = ?').get(fileId);
 
@@ -50,7 +61,7 @@ router.post('/save', async (req, res) => {
     } else {
       db.prepare(
         'INSERT INTO code_files (id, workspace_id, title, content, language, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(fileId, workspace_id, title, content || '', language || 'javascript', created_by || null);
+      ).run(fileId, workspace_id, title, content || '', language || 'javascript', createdBy);
     }
 
     const saved = db.prepare('SELECT * FROM code_files WHERE id = ?').get(fileId);
@@ -61,14 +72,15 @@ router.post('/save', async (req, res) => {
     if (node) {
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(`${saved.title} (${saved.language})`, summary, JSON.stringify(metadata), node.id);
-      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'code', title: `${saved.title} (${saved.language})`, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, workspace_id);
     } else {
       const createdNode = await createNode(workspace_id, 'code', `${saved.title} (${saved.language})`, summary, fileId, metadata);
-      enqueueEmbeddingJob(createdNode.id, buildEmbedText({ type: 'code', title: `${saved.title} (${saved.language})`, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(createdNode.id, workspace_id);
     }
 
     res.json(saved);
   } catch (err) {
+    console.error('[Code save]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

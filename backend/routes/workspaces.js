@@ -18,7 +18,6 @@ const {
   DATA_DIR
 } = require('../db/database');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
-const { buildEmbedText } = require('../services/embeddingService');
 
 const router = express.Router();
 const upload = multer({ dest: path.join(os.tmpdir(), 'ryflow_uploads') });
@@ -506,7 +505,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
     const nodes = db.prepare('SELECT id, title, type, content_summary, metadata FROM nodes WHERE workspace_id = ?').all(newWorkspaceId);
     nodes.forEach((node) => {
-      enqueueEmbeddingJob(node.id, buildEmbedText(node));
+      enqueueEmbeddingJob(node.id, newWorkspaceId);
     });
 
     fs.rmSync(tempDir, { recursive: true, force: true });

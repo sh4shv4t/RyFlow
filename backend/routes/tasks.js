@@ -4,7 +4,6 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
 const { createNode } = require('../services/graphService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 
@@ -12,10 +11,82 @@ const { v4: uuidv4 } = require('uuid');
 function buildTaskMetadata(task) {
   return {
     priority: task.priority || 'medium',
-    assignee: task.assignee || '',
+    assignee: task.assignee || null,
     due_date: task.due_date || null,
     status: task.status || 'todo'
   };
+}
+
+function resolveValidAssignee(db, assigneeId, workspaceId) {
+  const candidate = String(assigneeId || '').trim();
+  if (!candidate) return null;
+  const exists = db.prepare('SELECT id FROM users WHERE id = ? AND workspace_id = ? LIMIT 1').get(candidate, workspaceId);
+  return exists?.id || null;
+}
+
+// Removes markdown code fences around model outputs.
+function stripCodeFences(text) {
+  return String(text || '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+}
+
+function inferPriority(text) {
+  const value = String(text || '').toLowerCase();
+  if (/\b(high|urgent|asap|critical|immediately)\b/.test(value)) return 'high';
+  if (/\b(low|whenever|someday|later)\b/.test(value)) return 'low';
+  return 'medium';
+}
+
+function normalizeTask(rawTask) {
+  const title = String(rawTask?.title || '').trim();
+  if (!title) return null;
+  const due = String(rawTask?.due_date || '').trim();
+  const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null;
+  const priority = ['low', 'medium', 'high'].includes(String(rawTask?.priority || '').toLowerCase())
+    ? String(rawTask.priority).toLowerCase()
+    : inferPriority(`${title} ${rawTask?.description || ''}`);
+  return {
+    title,
+    description: String(rawTask?.description || '').trim(),
+    assignee: String(rawTask?.assignee || '').trim() || null,
+    due_date: dueDate,
+    priority
+  };
+}
+
+function extractTasksJSON(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+
+  let s = raw
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/gi, '')
+    .trim();
+
+  try {
+    const p = JSON.parse(s);
+    if (Array.isArray(p)) return p;
+    if (p && typeof p === 'object') return [p];
+  } catch {}
+
+  const arrMatch = s.match(/\[[\s\S]*?\]/);
+  if (arrMatch) {
+    try {
+      const p = JSON.parse(arrMatch[0]);
+      if (Array.isArray(p)) return p;
+    } catch {}
+  }
+
+  const objMatch = s.match(/\{[\s\S]*?\}/);
+  if (objMatch) {
+    try {
+      const p = JSON.parse(objMatch[0]);
+      if (p && typeof p === 'object') return [p];
+    } catch {}
+  }
+
+  return null;
 }
 
 // GET /api/tasks — List tasks for a workspace, optionally filtered by status
@@ -50,16 +121,17 @@ router.post('/', async (req, res) => {
     }
 
     const db = getDb();
+    const safeAssignee = resolveValidAssignee(db, assignee, workspace_id);
     const id = uuidv4();
     db.prepare(
       'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, workspace_id, title, description || '', assignee || '', status || 'todo', priority || 'medium', due_date || null);
+    ).run(id, workspace_id, title, description || '', safeAssignee, status || 'todo', priority || 'medium', due_date || null);
 
     // Add to knowledge graph
     const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
     const metadata = buildTaskMetadata({ priority, assignee, due_date, status: status || 'todo' });
     const node = await createNode(workspace_id, 'task', title, summary, id, metadata);
-    enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title, content_summary: summary, metadata }));
+    enqueueEmbeddingJob(node.id, workspace_id);
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     res.status(201).json(task);
@@ -76,12 +148,15 @@ router.patch('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Task not found' });
 
     const { title, description, assignee, status, priority, due_date } = req.body;
+    const safeAssignee = assignee !== undefined
+      ? resolveValidAssignee(db, assignee, existing.workspace_id)
+      : existing.assignee;
     db.prepare(
       'UPDATE tasks SET title = ?, description = ?, assignee = ?, status = ?, priority = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).run(
       title || existing.title,
       description !== undefined ? description : existing.description,
-      assignee !== undefined ? assignee : existing.assignee,
+      safeAssignee,
       status || existing.status,
       priority || existing.priority,
       due_date !== undefined ? due_date : existing.due_date,
@@ -97,7 +172,7 @@ router.patch('/:id', async (req, res) => {
       const metadata = buildTaskMetadata(task);
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(task.title, summary, JSON.stringify(metadata), node.id);
-      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title: task.title, content_summary: summary, metadata }));
+      enqueueEmbeddingJob(node.id, task.workspace_id);
     }
 
     res.json(task);
@@ -131,48 +206,70 @@ router.delete('/:id', (req, res) => {
 // POST /api/tasks/nl-create — Create tasks from natural language using LLM
 router.post('/nl-create', async (req, res) => {
   try {
-    const { text, workspace_id } = req.body;
-    if (!text || !workspace_id) {
+    const workspace_id = req.body?.workspace_id;
+    const userText = String(req.body?.userText || req.body?.text || '').trim();
+
+    console.log('[Tasks NL] userText:', userText);
+    console.log('[Tasks NL] workspace_id:', workspace_id);
+
+    if (!userText || !workspace_id) {
       return res.status(400).json({ error: 'text and workspace_id are required' });
     }
 
-    // Use a strict prompt format so task extraction stays deterministic.
-    const prompt = `Parse this into actionable tasks. Return ONLY a valid JSON array, no explanation, no markdown:\n[{title, description, assignee, due_date, priority}]\nInput: ${text}`;
+    const prompt =
+      'Extract tasks from the text below.\n' +
+      'Return ONLY a JSON array, nothing else.\n' +
+      'No markdown. No explanation. No extra text.\n' +
+      'Each task: {"title":"string","priority":"medium"}\n' +
+      'Priority must be: high, medium, or low\n' +
+      'If no tasks found: []\n\n' +
+      'Text: ' + userText;
 
-    const response = await chat(
+    const rawResponse = await chat(
       [{ role: 'user', content: prompt }],
       'phi3:mini',
-      false
+      false,
+      30000
     );
 
-    // Extract JSON from response
-    // Strip markdown fences before JSON extraction to avoid parse failures.
-    const sanitized = String(response || '').replace(/```json|```/gi, '').trim();
-    const jsonMatch = sanitized.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      return res.status(422).json({ error: 'Could not parse AI response into tasks', raw: sanitized });
+    console.log('[Tasks NL] raw response:', rawResponse);
+
+    const parsed = extractTasksJSON(rawResponse);
+    if (!parsed) {
+      return res.status(422).json({
+        error: 'Could not reliably parse tasks. Try 1-3 clear task sentences.',
+        raw: stripCodeFences(rawResponse).slice(0, 1200)
+      });
     }
 
-    const parsedTasks = JSON.parse(jsonMatch[0]);
+    const parsedTasks = parsed.map(normalizeTask).filter(Boolean);
+    if (!parsedTasks.length) {
+      return res.status(422).json({
+        error: 'Could not reliably parse tasks. Try 1-3 clear task sentences.',
+        raw: stripCodeFences(rawResponse).slice(0, 1200)
+      });
+    }
+
     const db = getDb();
     const createdTasks = [];
 
     for (const t of parsedTasks) {
       const id = uuidv4();
+      const safeAssignee = resolveValidAssignee(db, t.assignee, workspace_id);
       db.prepare(
         'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', t.assignee || '', 'todo', t.priority || 'medium', t.due_date || null);
+      ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', safeAssignee, 'todo', t.priority || 'medium', t.due_date || null);
 
       // Add to knowledge graph
       const summary = `${t.description || ''} Priority: ${t.priority || 'medium'}. Due: ${t.due_date || 'none'}`;
       const metadata = buildTaskMetadata({
         priority: t.priority || 'medium',
-        assignee: t.assignee || '',
+        assignee: safeAssignee,
         due_date: t.due_date || null,
         status: 'todo'
       });
-      const node = await createNode(workspace_id, 'task', t.title, summary, id, metadata);
-      enqueueEmbeddingJob(node.id, buildEmbedText({ type: 'task', title: t.title, content_summary: summary, metadata }));
+      const node = await createNode(workspace_id, 'task', t.title || 'Untitled Task', summary, id, metadata);
+      enqueueEmbeddingJob(node.id, workspace_id);
 
       const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
       createdTasks.push(task);
@@ -180,6 +277,9 @@ router.post('/nl-create', async (req, res) => {
 
     res.status(201).json({ tasks: createdTasks, parsed: parsedTasks.length });
   } catch (err) {
+    if (/timed out/i.test(String(err.message || ''))) {
+      return res.status(504).json({ error: 'Task parsing timed out. Try a shorter request or lighter model.' });
+    }
     res.status(500).json({ error: 'Failed to parse tasks. Is Ollama running?', details: err.message });
   }
 });

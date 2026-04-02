@@ -1,5 +1,5 @@
-// First-launch setup wizard that verifies dependencies and creates first workspace.
-import React, { useEffect, useMemo, useState } from 'react';
+// First-launch setup wizard with non-blocking background dependency checks.
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -9,13 +9,37 @@ const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.is
   ? 'http://localhost:3001'
   : '';
 
-// Renders one dependency check row with status icon and text.
-function CheckRow({ label, status, detail }) {
-  const icon = status === 'ok' ? '✅' : status === 'warn' ? '⚠️' : status === 'fail' ? '❌' : '⏳';
+// Renders one compact status item with a dot indicator and tooltip detail.
+function StatusItem({ label, status, detail }) {
+  const dotBase = {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    display: 'inline-block',
+    flexShrink: 0
+  };
+
+  let dotStyle = { ...dotBase, backgroundColor: 'var(--status-warning)' };
+  if (status === 'checking') {
+    dotStyle = {
+      ...dotBase,
+      backgroundColor: 'transparent',
+      border: '1.5px solid var(--border-default)',
+      borderTopColor: 'var(--text-tertiary)',
+      animation: 'spin 0.8s linear infinite'
+    };
+  } else if (status === 'ok') {
+    dotStyle = { ...dotBase, backgroundColor: 'var(--status-success)' };
+  } else if (status === 'warning') {
+    dotStyle = { ...dotBase, backgroundColor: 'var(--status-warning)' };
+  } else if (status === 'missing') {
+    dotStyle = { ...dotBase, backgroundColor: 'var(--status-warning)' };
+  }
+
   return (
-    <div className="rounded bg-white/5 border border-white/10 p-2">
-      <div className="text-sm text-amd-white">{icon} {label}</div>
-      {detail ? <div className="text-xs text-amd-white/55 mt-1 whitespace-pre-wrap">{detail}</div> : null}
+    <div title={detail || label} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+      <span style={dotStyle} />
+      <span>{label}</span>
     </div>
   );
 }
@@ -23,55 +47,110 @@ function CheckRow({ label, status, detail }) {
 export default function SetupWizard() {
   const { setUser, setWorkspace } = useStore();
   const [step, setStep] = useState(1);
-  const [checks, setChecks] = useState({});
-  const [checking, setChecking] = useState(false);
-  const [models, setModels] = useState([]);
+  const [checks, setChecks] = useState({
+    ollama: 'checking',
+    model: 'checking',
+    amd: 'checking',
+    whisper: 'checking'
+  });
+  const [checkDetails, setCheckDetails] = useState({
+    ollama: 'Checking Ollama availability',
+    model: 'Checking installed model(s)',
+    amd: 'Checking AMD GPU / ROCm status',
+    whisper: 'Checking voice transcription availability'
+  });
   const [form, setForm] = useState({ owner: '', name: '', description: '' });
   const [joinCode, setJoinCode] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Runs all dependency checks sequentially and updates statuses.
-  const runChecks = async () => {
-    setChecking(true);
-    const next = {};
+  // Wraps asynchronous work with a timeout to avoid hanging UI checks.
+  const withTimeout = async (promise, ms = 3000) => {
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('timeout')), ms);
+    });
+    return Promise.race([promise, timeout]);
+  };
+
+  // Checks local Ollama status without blocking setup flow.
+  const checkOllama = async () => {
     try {
-      next.ollama = { status: 'pending' };
-      setChecks({ ...next });
-      const tagsRes = await fetch('http://localhost:11434/api/tags');
-      if (!tagsRes.ok) throw new Error('Ollama not running');
-      const tags = await tagsRes.json();
-      const names = (tags?.models || []).map((m) => m.name);
-      setModels(names);
-      next.ollama = { status: 'ok', detail: 'Ollama is running' };
-      setChecks({ ...next });
-
-      next.model = { status: names.some((n) => n.includes('phi3:mini')) && names.some((n) => n.includes('nomic-embed-text')) ? 'ok' : 'warn', detail: names.some((n) => n.includes('phi3:mini')) && names.some((n) => n.includes('nomic-embed-text')) ? 'AI model ready (phi3:mini + nomic-embed-text)' : 'Model not downloaded yet.\nRun:\nollama pull phi3:mini\nollama pull nomic-embed-text' };
-      setChecks({ ...next });
-
-      const sysRes = await axios.get('/api/ai/system-status');
-      next.gpu = {
-        status: sysRes.data?.gpuDetected ? 'ok' : 'warn',
-        detail: sysRes.data?.gpuDetected
-          ? `AMD GPU detected — ${sysRes.data?.gpuName || 'AMD GPU'}`
-          : 'Running in CPU mode. AI still works normally.'
-      };
-      setChecks({ ...next });
-
-      const voiceRes = await axios.get('/api/voice/status');
-      next.voice = {
-        status: voiceRes.data?.available ? 'ok' : 'warn',
-        detail: voiceRes.data?.available ? 'Voice transcription ready' : 'Voice features unavailable (optional)'
-      };
-      setChecks({ ...next });
+      const res = await withTimeout(fetch('http://localhost:11434/api/tags'), 3000);
+      if (!res.ok) throw new Error('offline');
+      setChecks((prev) => ({ ...prev, ollama: 'ok' }));
+      setCheckDetails((prev) => ({ ...prev, ollama: 'Ollama is running' }));
     } catch {
-      next.ollama = { status: 'fail', detail: 'Ollama not found. Install from ollama.ai and run: ollama serve' };
-      setChecks({ ...next });
-    } finally {
-      setChecking(false);
+      setChecks((prev) => ({ ...prev, ollama: 'missing' }));
+      setCheckDetails((prev) => ({ ...prev, ollama: 'Ollama missing or not responding within 3s' }));
     }
   };
 
-  const requiredReady = useMemo(() => checks.ollama?.status === 'ok' && checks.model?.status === 'ok', [checks]);
+  // Checks whether a common local model is available.
+  const checkModel = async () => {
+    try {
+      const res = await withTimeout(fetch('http://localhost:11434/api/tags'), 3000);
+      if (!res.ok) throw new Error('offline');
+      const data = await res.json();
+      const hasModel = (data.models || []).some((m) =>
+        String(m?.name || '').includes('phi3') ||
+        String(m?.name || '').includes('gemma') ||
+        String(m?.name || '').includes('llama')
+      );
+      setChecks((prev) => ({ ...prev, model: hasModel ? 'ok' : 'missing' }));
+      setCheckDetails((prev) => ({
+        ...prev,
+        model: hasModel ? 'Compatible local model detected' : 'No common model found (phi3/gemma/llama)'
+      }));
+    } catch {
+      setChecks((prev) => ({ ...prev, model: 'missing' }));
+      setCheckDetails((prev) => ({ ...prev, model: 'Unable to verify models (timeout/offline)' }));
+    }
+  };
+
+  // Checks AMD/ROCm status via backend system endpoint.
+  const checkAMD = async () => {
+    try {
+      const res = await withTimeout(fetch(`${API_BASE}/api/ai/system-status`), 3000);
+      if (!res.ok) throw new Error('offline');
+      const data = await res.json();
+      const amdOk = Boolean(data?.rocmAvailable);
+      setChecks((prev) => ({ ...prev, amd: amdOk ? 'ok' : 'warning' }));
+      setCheckDetails((prev) => ({
+        ...prev,
+        amd: amdOk ? 'AMD GPU acceleration available' : 'Using CPU mode (GPU acceleration unavailable)'
+      }));
+    } catch {
+      setChecks((prev) => ({ ...prev, amd: 'warning' }));
+      setCheckDetails((prev) => ({ ...prev, amd: 'System status unavailable; defaulting to CPU mode' }));
+    }
+  };
+
+  // Checks voice transcription availability.
+  const checkWhisper = async () => {
+    try {
+      const res = await withTimeout(fetch(`${API_BASE}/api/voice/status`), 3000);
+      if (!res.ok) throw new Error('offline');
+      const data = await res.json();
+      const available = Boolean(data?.available);
+      setChecks((prev) => ({ ...prev, whisper: available ? 'ok' : 'warning' }));
+      setCheckDetails((prev) => ({
+        ...prev,
+        whisper: available ? 'Voice transcription available' : 'Voice optional feature unavailable'
+      }));
+    } catch {
+      setChecks((prev) => ({ ...prev, whisper: 'warning' }));
+      setCheckDetails((prev) => ({ ...prev, whisper: 'Voice status check timed out or failed' }));
+    }
+  };
+
+  // Runs checks in parallel on initial render and never blocks wizard flow.
+  useEffect(() => {
+    Promise.allSettled([
+      checkOllama(),
+      checkModel(),
+      checkAMD(),
+      checkWhisper()
+    ]);
+  }, []);
 
   // Creates first workspace and local user identity from wizard inputs.
   const createWorkspace = async () => {
@@ -94,7 +173,11 @@ export default function SetupWizard() {
       });
       setUser(userRes.data);
       localStorage.setItem('ryflow_onboarded', 'true');
+      localStorage.setItem('ryflow_setup_complete', 'true');
       setJoinCode(res.data.join_code || ws.join_code || '');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
     } catch {
       toast.error('Failed to create workspace');
     } finally {
@@ -102,59 +185,67 @@ export default function SetupWizard() {
     }
   };
 
-  const openApp = () => {
-    localStorage.setItem('ryflow_setup_complete', 'true');
-    window.location.href = '/';
-  };
-
   return (
-    <div className="min-h-screen bg-amd-charcoal flex items-center justify-center p-6">
-      <div className="w-full max-w-[520px] glass-card p-6 space-y-4">
-        <div className="flex justify-center gap-2">
-          {[1, 2, 3].map((i) => <span key={i} className={`w-2 h-2 rounded-full ${step === i ? 'bg-amd-red' : 'bg-white/20'}`} />)}
+    <div style={{ backgroundColor: '#111111', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '8px', padding: '40px', width: '100%', maxWidth: '440px' }}>
+        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '32px' }}>
+          {[1, 2].map((i) => (
+            <span key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: step === i ? 'var(--accent)' : 'var(--border-default)' }} />
+          ))}
         </div>
 
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <h1 className="font-heading text-3xl text-amd-white text-center">Welcome to RyFlow</h1>
-              <p className="text-center text-amd-white/60 mt-2">Your offline AI workspace for campus teams.</p>
-              <div className="text-center mt-4 text-xs text-amd-red">Built on AMD ROCm</div>
-              <button onClick={() => setStep(2)} className="mt-6 w-full py-2 rounded bg-amd-red text-white">Get Started</button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '24px' }}>
+                <div style={{ width: '26px', height: '26px', backgroundColor: '#E8000D', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ color: '#FFFFFF', fontSize: '13px', fontWeight: '700', lineHeight: 1 }}>R</span>
+                </div>
+                <span style={{ fontSize: '15px', fontWeight: '600', color: '#F0F0F0' }}>RyFlow</span>
+              </div>
+              <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', textAlign: 'center' }}>Welcome to RyFlow</h1>
+              <p style={{ fontSize: '13px', color: '#999999', textAlign: 'center', marginTop: '6px' }}>Your offline AI workspace for campus teams.</p>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '16px',
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  marginTop: '20px',
+                  marginBottom: '24px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <StatusItem label="Ollama" status={checks.ollama} detail={checkDetails.ollama} />
+                <StatusItem label="Model" status={checks.model} detail={checkDetails.model} />
+                <StatusItem label="AMD GPU" status={checks.amd} detail={checkDetails.amd} />
+                <StatusItem label="Voice" status={checks.whisper} detail={checkDetails.whisper} />
+              </div>
+              <button onClick={() => setStep(2)} style={{ width: '100%', height: '36px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>Get Started</button>
             </motion.div>
           )}
 
           {step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <h2 className="font-heading text-xl text-amd-white mb-3">Checking your setup...</h2>
-              <div className="space-y-2">
-                <CheckRow label="Ollama" status={checks.ollama?.status} detail={checks.ollama?.detail} />
-                <CheckRow label="AI Model" status={checks.model?.status} detail={checks.model?.detail} />
-                <CheckRow label="AMD GPU" status={checks.gpu?.status} detail={checks.gpu?.detail} />
-                <CheckRow label="Whisper" status={checks.voice?.status} detail={checks.voice?.detail} />
-              </div>
-              <button onClick={runChecks} disabled={checking} className="mt-3 px-3 py-2 rounded bg-white/10 text-amd-white text-sm">{checking ? 'Checking...' : 'Check Again'}</button>
-              <button onClick={() => setStep(3)} disabled={!requiredReady} className="mt-3 ml-2 px-3 py-2 rounded bg-amd-red text-white text-sm disabled:opacity-50">Continue</button>
-            </motion.div>
-          )}
-
-          {step === 3 && (
-            <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <h2 className="font-heading text-xl text-amd-white mb-3">Create Your First Workspace</h2>
-              <div className="space-y-2">
-                <input value={form.owner} onChange={(e) => setForm((s) => ({ ...s, owner: e.target.value }))} placeholder="Your name" className="w-full bg-amd-gray/40 border border-white/10 rounded px-3 py-2 text-sm text-amd-white" />
-                <input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" className="w-full bg-amd-gray/40 border border-white/10 rounded px-3 py-2 text-sm text-amd-white" />
-                <input value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" className="w-full bg-amd-gray/40 border border-white/10 rounded px-3 py-2 text-sm text-amd-white" />
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', textAlign: 'center' }}>Create Your First Workspace</h2>
+              <p style={{ fontSize: '13px', color: '#999999', textAlign: 'center', marginTop: '6px', marginBottom: '14px' }}>Set up your owner profile and workspace</p>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <input value={form.owner} onChange={(e) => setForm((s) => ({ ...s, owner: e.target.value }))} placeholder="Your name" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
+                <input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
+                <input value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
               </div>
 
               {!joinCode ? (
-                <button onClick={createWorkspace} disabled={creating} className="mt-4 w-full py-2 rounded bg-amd-red text-white disabled:opacity-50">{creating ? 'Creating...' : 'Create Workspace'}</button>
+                <button onClick={createWorkspace} disabled={creating} style={{ marginTop: '24px', width: '100%', height: '36px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1 }}>{creating ? 'Creating...' : 'Create Workspace'}</button>
               ) : (
-                <div className="mt-4 rounded bg-amd-orange/20 border border-amd-orange/30 p-3 text-center">
-                  <div className="text-sm text-amd-white">Your workspace is ready! Share this code with teammates:</div>
-                  <div className="text-2xl tracking-widest text-amd-orange font-bold mt-2">{joinCode}</div>
-                  <button onClick={() => navigator.clipboard.writeText(joinCode)} className="mt-2 px-2 py-1 text-xs rounded bg-white/10 text-amd-white/70">Copy</button>
-                  <button onClick={openApp} className="mt-3 w-full py-2 rounded bg-amd-red text-white">Open RyFlow</button>
+                <div style={{ marginTop: '16px', border: '1px solid #333333', borderRadius: '6px', backgroundColor: '#1A1A1A', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '13px', color: '#999999' }}>Your workspace is ready. Share this code:</div>
+                  <div style={{ fontSize: '20px', letterSpacing: '0.08em', color: '#E8000D', fontWeight: '600', marginTop: '8px' }}>{joinCode}</div>
+                  <button onClick={() => navigator.clipboard.writeText(joinCode)} style={{ marginTop: '10px', height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>Copy</button>
+                  <button onClick={() => { window.location.href = '/'; }} style={{ marginTop: '10px', width: '100%', height: '36px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>Open RyFlow</button>
                 </div>
               )}
             </motion.div>

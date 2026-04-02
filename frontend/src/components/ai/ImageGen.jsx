@@ -84,7 +84,7 @@ export default function ImageGen() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-3 border-b border-white/5">
+      <div className="p-3 border-b border-border-d">
         <h3 className="font-heading font-semibold text-amd-white flex items-center gap-2">
           <Image size={18} className="text-amd-red" /> AI Image Generator
         </h3>
@@ -97,7 +97,7 @@ export default function ImageGen() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Describe the image you want to create..."
-          className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors resize-none h-24"
+          className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors resize-none h-24"
         />
 
         {/* Suggested prompts */}
@@ -122,7 +122,7 @@ export default function ImageGen() {
               className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
                 style.label === s.label
                   ? 'bg-amd-red/20 text-amd-red border border-amd-red/30'
-                  : 'bg-white/5 text-amd-white/60 hover:bg-white/10'
+                  : 'bg-surface text-amd-white/60 hover:bg-elevated'
               }`}
             >
               {s.label}
@@ -135,7 +135,7 @@ export default function ImageGen() {
           <button
             onClick={generateImage}
             disabled={loading || !prompt.trim()}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amd-red text-white font-medium text-sm disabled:opacity-50 hover:bg-amd-red/80 transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-accent text-[var(--text-on-accent)] font-medium text-sm disabled:opacity-50 hover:bg-amd-red/80 transition-colors"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
             Generate
@@ -143,7 +143,7 @@ export default function ImageGen() {
           <button
             onClick={generateVariations}
             disabled={loadingVariations || !prompt.trim()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 text-amd-white/80 text-sm disabled:opacity-50 hover:bg-white/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface text-amd-white/80 text-sm disabled:opacity-50 hover:bg-elevated transition-colors"
           >
             {loadingVariations ? <Loader2 size={16} className="animate-spin" /> : <Grid size={16} />}
             4 Variations
@@ -158,12 +158,12 @@ export default function ImageGen() {
             <img
               src={imageUrl}
               alt="Generated"
-              className="w-full rounded-xl border border-white/10"
+              className="w-full rounded-xl border border-border-d"
               onError={() => toast.error('Image failed to load')}
             />
             <button
               onClick={() => downloadImage(imageUrl)}
-              className="absolute top-3 right-3 p-2 glass-card hover:bg-white/10 transition-colors"
+              className="absolute top-3 right-3 p-2 glass-card hover:bg-elevated transition-colors"
             >
               <Download size={16} />
             </button>
@@ -175,10 +175,10 @@ export default function ImageGen() {
           <div className="grid grid-cols-2 gap-3 mt-4">
             {variations.map((url, i) => (
               <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} className="relative">
-                <img src={url} alt={`Variation ${i + 1}`} className="w-full rounded-lg border border-white/10" />
+                <img src={url} alt={`Variation ${i + 1}`} className="w-full rounded-lg border border-border-d" />
                 <button
                   onClick={() => downloadImage(url)}
-                  className="absolute top-2 right-2 p-1.5 glass-card hover:bg-white/10 transition-colors"
+                  className="absolute top-2 right-2 p-1.5 glass-card hover:bg-elevated transition-colors"
                 >
                   <Download size={12} />
                 </button>

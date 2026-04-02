@@ -8,28 +8,31 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RichEditor from '../components/editor/RichEditor';
 import CollabPresence from '../components/editor/CollabPresence';
-import TagPicker from '../components/common/TagPicker';
 import HistoryPanel from '../components/editor/HistoryPanel';
 
 export default function Editor() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { workspace, user } = useStore();
+  const { workspace, workspaceId, user } = useStore();
   const [documents, setDocuments] = useState([]);
   const [currentDoc, setCurrentDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newTitle, setNewTitle] = useState('');
-  const [docTags, setDocTags] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [templates, setTemplates] = useState([]);
 
+  const resolveWorkspaceId = useCallback(() => {
+    return workspaceId || workspace?.id || localStorage.getItem('ryflow_workspace_id') || null;
+  }, [workspaceId, workspace?.id]);
+
   // Fetch all documents
   const fetchDocuments = useCallback(async () => {
-    if (!workspace) return;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId) return;
     try {
       const res = await axios.get('/api/docs', {
-        params: { workspace_id: workspace.id }
+        params: { workspace_id: activeWorkspaceId }
       });
       setDocuments(res.data.documents || []);
     } catch (err) {
@@ -37,7 +40,7 @@ export default function Editor() {
     } finally {
       setLoading(false);
     }
-  }, [workspace]);
+  }, [resolveWorkspaceId]);
 
   useEffect(() => {
     fetchDocuments();
@@ -51,13 +54,17 @@ export default function Editor() {
   }, [workspace?.id]);
 
   const openDailyNote = useCallback(async () => {
-    if (!workspace?.id) return;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId) {
+      toast.error('No active workspace');
+      return;
+    }
     const today = new Date().toISOString().slice(0, 10);
     const res = await axios.get('/api/docs/daily', {
-      params: { workspace_id: workspace.id, date: today, created_by: user?.id || null }
+      params: { workspace_id: activeWorkspaceId, date: today, created_by: user?.id || null }
     });
     navigate(`/editor/${res.data.id}`);
-  }, [workspace?.id, user?.id, navigate]);
+  }, [resolveWorkspaceId, user?.id, navigate]);
 
   useEffect(() => {
     if (searchParams.get('daily') === 'today') {
@@ -74,10 +81,6 @@ export default function Editor() {
         try {
           const res = await axios.get(`/api/docs/${id}`);
           setCurrentDoc(res.data);
-          const tagsRes = await axios.get('/api/tags/by-source', {
-            params: { workspace_id: workspace?.id, type: 'doc', source_id: id }
-          });
-          setDocTags(tagsRes.data.tags || []);
         } catch {
           toast.error('Document not found');
           navigate('/editor');
@@ -86,16 +89,19 @@ export default function Editor() {
       fetchDoc();
     } else {
       setCurrentDoc(null);
-      setDocTags([]);
     }
   }, [id, navigate, workspace?.id]);
 
   // Creates a new document
   const createDocument = async () => {
-    if (!workspace) return;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId) {
+      toast.error('No active workspace');
+      return;
+    }
     try {
       const res = await axios.post('/api/docs', {
-        workspace_id: workspace.id,
+        workspace_id: activeWorkspaceId,
         title: newTitle || 'Untitled Document',
         content: '',
         created_by: user?.id
@@ -110,10 +116,11 @@ export default function Editor() {
   };
 
   const createFromTemplate = async (template) => {
-    if (!workspace || !template) return;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId || !template) return;
     try {
       const res = await axios.post('/api/docs', {
-        workspace_id: workspace.id,
+        workspace_id: activeWorkspaceId,
         title: template.name,
         content: template.content,
         created_by: user?.id
@@ -122,21 +129,6 @@ export default function Editor() {
       navigate(`/editor/${res.data.id}`);
     } catch {
       toast.error('Failed to create from template');
-    }
-  };
-
-  const saveDocTags = async (nextTags) => {
-    if (!workspace?.id || !currentDoc?.id) return;
-    setDocTags(nextTags);
-    try {
-      await axios.post('/api/tags/by-source', {
-        workspace_id: workspace.id,
-        type: 'doc',
-        source_id: currentDoc.id,
-        tag_ids: nextTags.map((t) => t.id || t)
-      });
-    } catch {
-      toast.error('Failed to save tags');
     }
   };
 
@@ -204,43 +196,105 @@ export default function Editor() {
   };
 
   return (
-    <div className="flex h-full gap-4">
-      {/* Document sidebar */}
-      <div className="w-64 flex-shrink-0 flex flex-col">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading font-semibold text-amd-white">Documents</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-amd-white/40">{documents.length}</span>
-            <button onClick={openDailyNote} className="text-xs px-2 py-1 rounded bg-amd-orange/20 text-amd-orange flex items-center gap-1">
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        backgroundColor: '#111111',
+        overflow: 'hidden'
+      }}
+    >
+      <div
+        style={{
+          width: '260px',
+          minWidth: '260px',
+          borderRight: '1px solid #242424',
+          padding: '16px 12px',
+          overflowY: 'auto'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666' }}>
+            Documents
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: '#666666' }}>{documents.length}</span>
+            <button
+              onClick={openDailyNote}
+              style={{
+                fontSize: '11px',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                border: '1px solid #333333',
+                backgroundColor: '#1A1A1A',
+                color: '#999999',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer'
+              }}
+            >
               <CalendarDays size={12} /> Today
             </button>
           </div>
         </div>
 
-        {/* New document input */}
-        <div className="flex gap-1 mb-3">
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
           <input
             type="text"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && createDocument()}
             placeholder="New doc title..."
-            className="flex-1 bg-amd-gray/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50"
+            style={{
+              flex: 1,
+              height: '34px',
+              backgroundColor: '#1A1A1A',
+              border: '1px solid #333333',
+              borderRadius: '6px',
+              padding: '0 10px',
+              fontSize: '12px',
+              color: '#F0F0F0'
+            }}
           />
           <button
             onClick={createDocument}
-            className="p-2 rounded-lg bg-amd-red text-white hover:bg-amd-red/80"
+            style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: '#E8000D',
+              color: '#FFFFFF',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
           >
             <Plus size={14} />
           </button>
         </div>
 
         {templates.length > 0 && (
-          <div className="mb-3">
-            <div className="text-[10px] uppercase tracking-wide text-amd-white/30 mb-1">Templates</div>
-            <div className="grid grid-cols-1 gap-1">
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '6px' }}>Templates</div>
+            <div style={{ display: 'grid', gap: '4px' }}>
               {templates.slice(0, 4).map((tpl) => (
-                <button key={tpl.id} onClick={() => createFromTemplate(tpl)} className="text-left text-xs px-2 py-1.5 rounded bg-white/5 hover:bg-white/10 text-amd-white/70">
+                <button
+                  key={tpl.id}
+                  onClick={() => createFromTemplate(tpl)}
+                  style={{
+                    textAlign: 'left',
+                    fontSize: '12px',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #333333',
+                    backgroundColor: '#1A1A1A',
+                    color: '#999999',
+                    cursor: 'pointer'
+                  }}
+                >
                   {tpl.name}
                 </button>
               ))}
@@ -248,16 +302,15 @@ export default function Editor() {
           </div>
         )}
 
-        {/* Document list */}
-        <div className="flex-1 overflow-auto space-y-1">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {loading ? (
             <>
-              {[1, 2, 3].map(i => <div key={i} className="skeleton-loader h-12 w-full rounded-lg" />)}
+              {[1, 2, 3].map(i => <div key={i} style={{ height: '44px', width: '100%', borderRadius: '6px', backgroundColor: '#1A1A1A', border: '1px solid #333333' }} />)}
             </>
           ) : documents.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText size={24} className="text-amd-white/10 mx-auto mb-2" />
-              <p className="text-xs text-amd-white/30">Create your first document</p>
+            <div style={{ textAlign: 'center', padding: '20px 8px' }}>
+              <FileText size={20} color="#666666" style={{ margin: '0 auto 6px' }} />
+              <p style={{ fontSize: '12px', color: '#666666' }}>Create your first document</p>
             </div>
           ) : (
             documents.map((doc) => (
@@ -266,23 +319,36 @@ export default function Editor() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 onClick={() => navigate(`/editor/${doc.id}`)}
-                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all group ${
-                  currentDoc?.id === doc.id
-                    ? 'bg-amd-red/10 border border-amd-red/20'
-                    : 'hover:bg-white/5'
-                }`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease',
+                  backgroundColor: currentDoc?.id === doc.id ? 'rgba(232,0,13,0.1)' : 'transparent',
+                  border: currentDoc?.id === doc.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid transparent'
+                }}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm text-amd-white truncate">{doc.title}</p>
-                  {doc.is_daily_note ? <p className="text-[10px] text-amd-orange">Daily Note</p> : null}
-                  <p className="text-[10px] text-amd-white/30 flex items-center gap-1 mt-0.5">
+                  <p style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.title}</p>
+                  {doc.is_daily_note ? <p style={{ fontSize: '10px', color: '#B85C00' }}>Daily Note</p> : null}
+                  <p style={{ fontSize: '10px', color: '#666666', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                     <Clock size={8} />
                     {new Date(doc.updated_at || doc.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <button
                   onClick={(e) => deleteDoc(doc.id, e)}
-                  className="p-1 rounded opacity-0 group-hover:opacity-100 text-amd-white/30 hover:text-amd-red transition-all"
+                  style={{
+                    padding: '4px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#666666',
+                    cursor: 'pointer'
+                  }}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -292,31 +358,49 @@ export default function Editor() {
         </div>
       </div>
 
-      {/* Editor area */}
-      <div className="flex-1 flex flex-col glass-card overflow-hidden">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#111111', overflow: 'hidden' }}>
         {currentDoc ? (
           <>
-            {/* Doc header */}
-            <div className="flex items-center justify-between p-3 border-b border-white/5">
-              <input
-                value={currentDoc.title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                onBlur={handleTitleBlur}
-                className="font-heading font-semibold text-amd-white bg-transparent outline-none text-lg"
-              />
-              <button onClick={() => setShowHistory((prev) => !prev)} className="text-xs px-2 py-1 rounded bg-white/10 text-amd-white/70 hover:bg-white/15 flex items-center gap-1">
+            <input
+              value={currentDoc.title}
+              onChange={(e) => handleTitleChange(e.target.value)}
+              onBlur={handleTitleBlur}
+              placeholder="Untitled"
+              style={{
+                width: '100%',
+                fontSize: '20px',
+                fontWeight: '600',
+                color: '#F0F0F0',
+                backgroundColor: 'transparent',
+                border: 'none',
+                padding: '24px 40px 8px',
+                fontFamily: 'Inter, sans-serif'
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: '6px', padding: '6px 40px', borderBottom: '1px solid #242424', backgroundColor: '#1A1A1A', flexShrink: 0, alignItems: 'center' }}>
+              <button
+                onClick={() => setShowHistory((prev) => !prev)}
+                style={{
+                  height: '26px',
+                  borderRadius: '4px',
+                  border: '1px solid #333333',
+                  backgroundColor: '#222222',
+                  color: '#999999',
+                  fontSize: '11px',
+                  padding: '0 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
                 <History size={12} /> History
               </button>
-              {/* Hide presence until collaboration provider is fully wired for this route. */}
               <CollabPresence connected={false} presenceList={[]} />
             </div>
 
-            <div className="p-2 border-b border-white/5">
-              <TagPicker value={docTags} onChange={saveDocTags} compact />
-            </div>
-
-            {/* TipTap editor */}
-            <div className="flex-1 overflow-hidden relative flex">
+            <div style={{ flex: 1, overflow: 'hidden', position: 'relative', display: 'flex' }}>
               <RichEditor
                 key={currentDoc.id}
                 content={getEditorContent()}
@@ -337,10 +421,10 @@ export default function Editor() {
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full">
-            <FileText size={48} className="text-amd-white/10 mb-4" />
-            <h3 className="font-heading font-semibold text-amd-white/40 mb-2">No document selected</h3>
-            <p className="text-sm text-amd-white/20">Select a document or create a new one</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <FileText size={42} color="#333333" style={{ marginBottom: '8px' }} />
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#999999', marginBottom: '4px' }}>No document selected</h3>
+            <p style={{ fontSize: '13px', color: '#666666' }}>Select a document or create a new one</p>
           </div>
         )}
       </div>

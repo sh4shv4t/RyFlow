@@ -1,5 +1,5 @@
 // AI Studio page — Chat + Image Generation + Voice tabs with persistent chat history
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Image, Mic, Plus, Trash2, Search } from 'lucide-react';
 import axios from 'axios';
@@ -23,31 +23,37 @@ export default function AIStudio() {
   const [chatLoading, setChatLoading] = useState(false);
   const [activeChatId, setActiveChatId] = useState(null);
   const [searchText, setSearchText] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
-  const { workspace } = useStore();
+  const workspaceId = useStore((s) => s.workspace?.id || null);
+  const fetchTokenRef = useRef(0);
 
   // Loads saved chats for the active workspace.
   const fetchChats = useCallback(async () => {
-    if (!workspace?.id) return;
+    if (!workspaceId) return;
+    const token = fetchTokenRef.current + 1;
+    fetchTokenRef.current = token;
     setChatLoading(true);
     try {
-      const res = await axios.get('/api/chats', { params: { workspace_id: workspace.id } });
+      const res = await axios.get('/api/chats', { params: { workspace_id: workspaceId } });
+      if (token !== fetchTokenRef.current) return;
       setChats(res.data.chats || []);
     } catch {
       toast.error('Failed to load chat history');
     } finally {
-      setChatLoading(false);
+      if (token === fetchTokenRef.current) {
+        setChatLoading(false);
+      }
     }
-  }, [workspace?.id]);
+  }, [workspaceId]);
 
   useEffect(() => {
     fetchChats();
-  }, [fetchChats, refreshKey]);
+  }, [fetchChats]);
+
+  const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
 
   // Creates a fresh local chat session context.
   const handleNewChat = useCallback(() => {
     setActiveChatId(null);
-    setRefreshKey((k) => k + 1);
   }, []);
 
   // Deletes a saved chat after user confirmation.
@@ -56,7 +62,7 @@ export default function AIStudio() {
     if (!confirmed) return;
     try {
       await axios.delete(`/api/chats/${chatId}`);
-      toast.success('Are you sure? This cannot be undone.');
+      toast.success('Chat deleted');
       if (activeChatId === chatId) {
         setActiveChatId(null);
       }
@@ -65,6 +71,15 @@ export default function AIStudio() {
       toast.error('Failed to delete chat');
     }
   }, [activeChatId, fetchChats]);
+
+  const handleChatCreated = useCallback((createdChat) => {
+    if (!createdChat?.id) return;
+    setActiveChatId(createdChat.id);
+    setChats((prev) => {
+      const filtered = prev.filter((c) => c.id !== createdChat.id);
+      return [createdChat, ...filtered];
+    });
+  }, []);
 
   // Formats timestamps into short relative text for chat cards.
   const timeAgo = useCallback((iso) => {
@@ -86,41 +101,147 @@ export default function AIStudio() {
   }, [chats, searchText]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="flex flex-col h-full"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-amd-white">AI Studio</h1>
-          <p className="text-sm text-amd-white/40 mt-0.5">
-            Powered by AMD ROCm &middot; Ollama &middot; Local inference
-          </p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', height: '100%', overflow: 'hidden', backgroundColor: '#111111' }}>
+      <div
+        style={{
+          width: '240px',
+          minWidth: '240px',
+          backgroundColor: '#1A1A1A',
+          borderRight: '1px solid #242424',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          style={{
+            padding: '14px 12px 10px',
+            borderBottom: '1px solid #242424',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          <span style={{ fontSize: '13px', fontWeight: '600', color: '#F0F0F0', flex: 1 }}>Chats</span>
+          <button
+            onClick={handleNewChat}
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '4px',
+              border: 'none',
+              backgroundColor: 'transparent',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <Plus size={14} color="#666666" />
+          </button>
         </div>
 
-        {/* Tab switcher */}
-        <div className="flex bg-amd-gray/40 rounded-xl p-1 gap-0.5">
-          {tabs.map(({ key, label, icon: Icon }) => (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #242424' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={13} color="#666666" style={{ position: 'absolute', left: '8px', top: '7px' }} />
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search chats..."
+              style={{
+                width: '100%',
+                height: '28px',
+                padding: '0 10px 0 28px',
+                backgroundColor: '#222222',
+                border: '1px solid #333333',
+                borderRadius: '4px',
+                fontSize: '12px',
+                color: '#F0F0F0'
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #242424' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                style={{
+                  height: '24px',
+                  borderRadius: '4px',
+                  border: activeTab === key ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                  backgroundColor: activeTab === key ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
+                  color: activeTab === key ? '#E8000D' : '#666666',
+                  fontSize: '11px',
+                  padding: '0 8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <Icon size={12} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
+          {chatLoading && <p style={{ fontSize: '12px', color: '#666666', textAlign: 'center', padding: '12px 8px' }}>Loading chats...</p>}
+          {!chatLoading && filteredChats.length === 0 && (
+            <p style={{ padding: '20px 10px', fontSize: '13px', color: '#666666', textAlign: 'center' }}>No chats yet</p>
+          )}
+          {!chatLoading && filteredChats.map((chat) => (
             <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                activeTab === key
-                  ? 'bg-amd-red text-white shadow-lg shadow-amd-red/20'
-                  : 'text-amd-white/50 hover:text-amd-white hover:bg-white/5'
-              }`}
+              key={chat.id}
+              onClick={() => setActiveChatId(chat.id)}
+              onMouseEnter={(e) => {
+                if (activeChat?.id !== chat.id) e.currentTarget.style.backgroundColor = '#222222';
+              }}
+              onMouseLeave={(e) => {
+                if (activeChat?.id !== chat.id) e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              style={{
+                width: '100%',
+                padding: activeChat?.id === chat.id ? '8px 10px 8px 8px' : '8px 10px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginBottom: '1px',
+                transition: 'background 150ms',
+                borderLeft: activeChat?.id === chat.id ? '2px solid #E8000D' : '2px solid transparent',
+                backgroundColor: activeChat?.id === chat.id ? 'rgba(232,0,13,0.08)' : 'transparent',
+                borderTop: 'none',
+                borderRight: 'none',
+                borderBottom: 'none',
+                textAlign: 'left'
+              }}
             >
-              <Icon size={13} />
-              {label}
+              <p
+                style={{
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  color: '#F0F0F0',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  marginBottom: '3px'
+                }}
+              >
+                {chat.title}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: '#2A2A2A', color: '#666666', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
+                {chat.rag_used ? <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '2px' }}>RAG</span> : null}
+                <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{timeAgo(chat.updated_at)}</span>
+              </div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-hidden rounded-xl">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#111111' }}>
         <AnimatePresence mode="wait">
           {activeTab === 'chat' && (
             <motion.div
@@ -128,72 +249,11 @@ export default function AIStudio() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              className="h-full grid grid-cols-[300px_1fr] gap-4"
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             >
-              <div className="glass-card p-3 flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-heading font-semibold text-amd-white">Chat History</h3>
-                  <button
-                    onClick={handleNewChat}
-                    className="text-xs px-2 py-1 rounded bg-amd-red text-white flex items-center gap-1"
-                  >
-                    <Plus size={12} /> New Chat
-                  </button>
-                </div>
-
-                <div className="relative mb-3">
-                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-amd-white/30" />
-                  <input
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    placeholder="Search chats"
-                    className="w-full bg-black/20 border border-white/10 rounded-lg pl-8 pr-3 py-2 text-xs text-amd-white outline-none"
-                  />
-                </div>
-
-                <div className="flex-1 overflow-auto space-y-2">
-                  {chatLoading && <p className="text-xs text-amd-white/40">Loading chats...</p>}
-                  {!chatLoading && filteredChats.length === 0 && (
-                    <p className="text-xs text-amd-white/40">No saved chats yet</p>
-                  )}
-                  {filteredChats.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => setActiveChatId(chat.id)}
-                      className={`w-full text-left p-2.5 rounded-lg border-l-2 transition-colors ${
-                        activeChatId === chat.id
-                          ? 'border-l-amd-red bg-amd-red/10'
-                          : 'border-l-transparent bg-white/5 hover:bg-white/10'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs text-amd-white font-medium truncate">{chat.title}</p>
-                          <div className="flex items-center gap-1 mt-1 flex-wrap">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/60">{chat.model}</span>
-                            {chat.rag_used ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-amd-orange/20 text-amd-orange">📚 RAG</span> : null}
-                            <span className="text-[10px] text-amd-white/40">{chat.message_count} msgs</span>
-                          </div>
-                          <p className="text-[10px] text-amd-white/30 mt-1">{timeAgo(chat.updated_at)}</p>
-                        </div>
-                        <span
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteChat(chat.id);
-                          }}
-                          className="text-amd-white/30 hover:text-amd-red"
-                        >
-                          <Trash2 size={12} />
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <ChatPanel
                 activeChatId={activeChatId}
-                onChatPersisted={() => fetchChats()}
+                onChatCreated={handleChatCreated}
                 onRequestNewChat={handleNewChat}
               />
             </motion.div>
@@ -205,7 +265,7 @@ export default function AIStudio() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              className="h-full"
+              style={{ flex: 1, overflow: 'hidden' }}
             >
               <StudyGuidePanel />
             </motion.div>
@@ -217,7 +277,7 @@ export default function AIStudio() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              className="h-full"
+              style={{ flex: 1, overflow: 'hidden' }}
             >
               <ImageGen />
             </motion.div>
@@ -229,11 +289,11 @@ export default function AIStudio() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              className="h-full glass-card p-6"
+              style={{ flex: 1, padding: '20px', overflowY: 'auto' }}
             >
-              <div className="max-w-xl mx-auto">
-                <h2 className="font-heading text-lg font-semibold text-amd-white mb-1">Voice Input</h2>
-                <p className="text-sm text-amd-white/40 mb-6">
+              <div style={{ maxWidth: '720px', margin: '0 auto' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '600', color: '#F0F0F0', marginBottom: '4px' }}>Voice Input</h2>
+                <p style={{ fontSize: '13px', color: '#999999', marginBottom: '16px' }}>
                   Record speech and transcribe with Whisper.cpp — fully offline
                 </p>
                 <VoiceInput onTranscript={(text) => {}} />

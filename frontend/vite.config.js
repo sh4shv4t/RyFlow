@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: [
+      'monaco-editor',
+      'monaco-editor/esm/vs/editor/editor.worker'
+    ]
+  },
   resolve: {
     // Use browser-compatible events implementation required by readable-stream/simple-peer deps.
     alias: {

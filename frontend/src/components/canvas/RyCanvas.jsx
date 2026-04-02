@@ -1,5 +1,5 @@
 // Excalidraw-based canvas component with save/export/describe controls
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
@@ -56,11 +56,17 @@ function initialCanvasData(title) {
 }
 
 // Renders an Excalidraw canvas with save/export/describe actions.
-export default function RyCanvas({ canvasId, title, elements, appState, onTitleChange, onSave }) {
+export default function RyCanvas({ canvasId, title, elements, appState, onTitleChange, onSave, onSceneChange }) {
   const excalidrawRef = useRef(null);
+  const draftTimerRef = useRef(null);
+  const saveTimer = useRef(null);
+  const elementsRef = useRef([]);
+  const appStateRef = useRef({});
+  const latestSceneRef = useRef({ elements: [], appState: {} });
   const [aiOpen, setAiOpen] = useState(false);
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('Saved');
   const { workspace, selectedModel, setAiActive } = useStore();
 
   const draftKey = useMemo(() => `ryflow_canvas_draft_${canvasId || 'new'}`, [canvasId]);
@@ -77,23 +83,87 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
     }
   }, [draftKey]);
 
+  const initialData = useMemo(() => {
+    const base = initialCanvasData(title);
+    const resolved = {
+      ...base,
+      elements: Array.isArray(elements)
+        ? elements
+        : (Array.isArray(initialDraft?.elements) ? initialDraft.elements : base.elements),
+      appState: appState || initialDraft?.appState || base.appState
+    };
+    elementsRef.current = resolved.elements || [];
+    appStateRef.current = resolved.appState || {};
+    latestSceneRef.current = {
+      elements: elementsRef.current,
+      appState: appStateRef.current
+    };
+    return resolved;
+  }, [title, elements, appState, initialDraft]);
+
+  const doSave = useCallback(async (nextElements, nextAppState, options = {}) => {
+    if (!onSave) return;
+    const silent = Boolean(options.silent);
+    setSaveStatus('Saving...');
+    try {
+      await onSave({ elements: nextElements, appState: nextAppState }, { silent });
+      setSaveStatus('Saved');
+    } catch {
+      setSaveStatus('Save failed');
+    }
+  }, [onSave]);
+
+  const debouncedSave = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      doSave(elementsRef.current, appStateRef.current, { silent: true });
+    }, 2500);
+  }, [doSave]);
+
   // Persists local draft in localStorage whenever canvas content changes.
   const handleCanvasChange = useCallback((nextElements, nextAppState) => {
-    const draft = {
-      elements: nextElements || [],
-      appState: nextAppState || {}
+    elementsRef.current = nextElements || [];
+    appStateRef.current = nextAppState || {};
+    latestSceneRef.current = {
+      elements: elementsRef.current,
+      appState: appStateRef.current
     };
-    localStorage.setItem(draftKey, LZString.compress(JSON.stringify(draft)));
-  }, [draftKey]);
+    onSceneChange?.(latestSceneRef.current);
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      localStorage.setItem(draftKey, LZString.compress(JSON.stringify(latestSceneRef.current)));
+    }, 800);
+
+    debouncedSave();
+  }, [draftKey, onSceneChange, debouncedSave]);
 
   // Saves current canvas state through page-level callback.
   const handleSave = useCallback(async () => {
     const api = excalidrawRef.current;
     if (!api || !onSave) return;
-    const snapshot = api.getSceneElements();
-    const state = api.getAppState();
-    await onSave({ elements: snapshot, appState: state });
-  }, [onSave]);
+    elementsRef.current = api.getSceneElements();
+    appStateRef.current = api.getAppState();
+    latestSceneRef.current = {
+      elements: elementsRef.current,
+      appState: appStateRef.current
+    };
+    clearTimeout(saveTimer.current);
+    await doSave(elementsRef.current, appStateRef.current, { silent: false });
+  }, [doSave, onSave]);
+
+  // Clears pending autosave timer when canvas unmounts.
+  useEffect(() => {
+    return () => {
+      clearTimeout(saveTimer.current);
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+      }
+      if (latestSceneRef.current?.elements?.length || latestSceneRef.current?.appState) {
+        localStorage.setItem(draftKey, LZString.compress(JSON.stringify(latestSceneRef.current)));
+      }
+    };
+  }, [draftKey]);
 
   // Exports current canvas scene to PNG and triggers browser download.
   const handleExportPng = useCallback(async () => {
@@ -178,68 +248,96 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
   }, []);
 
   return (
-    <div className="h-full flex gap-4">
-      <div className="flex-1 glass-card overflow-hidden flex flex-col">
-        <div className="p-3 border-b border-white/10 bg-amd-gray/40 flex items-center gap-2">
-          <input
-            value={title}
-            onChange={(e) => onTitleChange?.(e.target.value)}
-            placeholder="Canvas title"
-            className="flex-1 bg-amd-gray/60 border border-white/10 rounded px-3 py-2 text-sm text-amd-white outline-none"
-          />
-          <button onClick={handleSave} className="px-3 py-2 rounded bg-amd-red text-white text-sm flex items-center gap-1">
-            <Save size={14} /> Save
-          </button>
-          <button onClick={handleExportPng} className="px-3 py-2 rounded bg-white/10 text-amd-white text-sm flex items-center gap-1 hover:bg-white/20">
-            <ImageDown size={14} /> Export PNG
-          </button>
-          <button onClick={handleDescribeCanvas} className="px-3 py-2 rounded bg-amd-red/15 text-amd-red text-sm flex items-center gap-1 hover:bg-amd-red/25">
-            <Sparkles size={14} /> Describe Canvas
-          </button>
-          <button onClick={handleClear} className="px-3 py-2 rounded bg-amd-orange/15 text-amd-orange text-sm flex items-center gap-1 hover:bg-amd-orange/25">
-            <Eraser size={14} /> Clear
-          </button>
-          <div className={`ml-2 text-xs flex items-center gap-1 px-2 py-1 rounded-full border ${aiLoading ? 'amd-pulse border-amd-red/40 text-amd-red' : 'border-amd-red/20 text-amd-red/70'}`}>
-            <Zap size={12} /> ⚡ AMD Accelerated
-          </div>
-        </div>
-
-        <div className="flex-1">
-          <Excalidraw
-            ref={excalidrawRef}
-            theme="dark"
-            UIOptions={{
-              canvasActions: { theme: true }
-            }}
-            initialData={{
-              ...(initialCanvasData(title)),
-              elements: Array.isArray(elements) ? elements : (Array.isArray(initialDraft?.elements) ? initialDraft.elements : initialCanvasData(title).elements),
-              appState: appState || initialDraft?.appState || initialCanvasData(title).appState
-            }}
-            onChange={handleCanvasChange}
-          />
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        height: '48px',
+        minHeight: '48px',
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 16px',
+        gap: '8px',
+        background: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)',
+        position: 'relative',
+        zIndex: 100,
+        pointerEvents: 'all'
+      }}>
+        <input
+          value={title}
+          onChange={(e) => onTitleChange?.(e.target.value)}
+          placeholder="Canvas title"
+          style={{
+            flex: 1,
+            height: '32px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
+            padding: '0 10px'
+          }}
+        />
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{saveStatus}</span>
+        <button onClick={handleSave} className="px-3 py-2 rounded bg-accent text-[var(--text-on-accent)] text-sm flex items-center gap-1">
+          <Save size={14} /> Save
+        </button>
+        <button onClick={handleExportPng} className="px-3 py-2 rounded bg-elevated text-t-primary text-sm flex items-center gap-1 hover:bg-overlay">
+          <ImageDown size={14} /> Export PNG
+        </button>
+        <button onClick={handleDescribeCanvas} className="px-3 py-2 rounded bg-amd-red/15 text-amd-red text-sm flex items-center gap-1 hover:bg-amd-red/25">
+          <Sparkles size={14} /> Describe Canvas
+        </button>
+        <button onClick={handleClear} className="px-3 py-2 rounded bg-amd-orange/15 text-amd-orange text-sm flex items-center gap-1 hover:bg-amd-orange/25">
+          <Eraser size={14} /> Clear
+        </button>
+        <div className={`ml-2 text-xs flex items-center gap-1 px-2 py-1 rounded-full border ${aiLoading ? 'amd-pulse border-amd-red/40 text-amd-red' : 'border-amd-red/20 text-amd-red/70'}`}>
+          <Zap size={12} /> ⚡ AMD Accelerated
         </div>
       </div>
 
-      <AnimatePresence>
-        {aiOpen && (
-          <motion.div
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 24 }}
-            className="w-[340px] glass-card p-4 overflow-auto"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-heading text-sm text-amd-white">Canvas Analysis</h3>
-              <button onClick={() => setAiOpen(false)} className="text-amd-white/50 hover:text-amd-white">
-                <X size={14} />
-              </button>
-            </div>
-            <div className="text-xs text-amd-red/70 mb-2">{aiLoading ? 'Analyzing diagram...' : 'AI summary'}</div>
-            <div className="text-xs text-amd-white/80 whitespace-pre-wrap">{aiText || 'No output yet.'}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 0
+      }}>
+        <Excalidraw
+          ref={excalidrawRef}
+          theme="dark"
+          UIOptions={{
+            canvasActions: { theme: true }
+          }}
+          initialData={initialData}
+          onChange={handleCanvasChange}
+        />
+
+        <AnimatePresence>
+          {aiOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 24 }}
+              className="w-[340px] glass-card p-4 overflow-auto"
+              style={{ position: 'absolute', top: 12, right: 12, maxHeight: '70%', zIndex: 120 }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-heading text-sm text-amd-white">Canvas Analysis</h3>
+                <button onClick={() => setAiOpen(false)} className="text-amd-white/50 hover:text-amd-white">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="text-xs text-amd-red/70 mb-2">{aiLoading ? 'Analyzing diagram...' : 'AI summary'}</div>
+              <div className="text-xs text-amd-white/80 whitespace-pre-wrap">{aiText || 'No output yet.'}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -1,26 +1,22 @@
 // TopBar — shows workspace name, AMD status badge, and peer count
-import React, { useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Users, Wifi, WifiOff, Command } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import { startPeerPolling, stopPeerPolling } from '../../utils/lanDiscovery';
-import AMDbadge from './AMDbadge';
-import ThemeToggle from './ThemeToggle';
 
 export default function TopBar() {
-  const { aiStatus, setAiStatus, peers, setPeers, user, workspace, aiActive, setCommandPaletteOpen } = useStore();
+  const { aiStatus, setAiStatus, peers, setPeers, workspace, setCommandPaletteOpen } = useStore();
+  const [searchHover, setSearchHover] = useState(false);
 
-  // Fetch AMD/system status on mount
+  // Fetch AMD/system status once and rely on shared status cache.
   useEffect(() => {
     const fetchStatus = async () => {
       const status = await detectAMD();
       if (status) setAiStatus(status);
     };
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
-  }, [setAiStatus]);
+  }, [setAiStatus, workspace?.id]);
 
   // Start peer polling
   useEffect(() => {
@@ -29,50 +25,118 @@ export default function TopBar() {
   }, [setPeers]);
 
   return (
-    <header className="h-14 border-b border-white/5 bg-amd-charcoal/80 backdrop-blur-md flex items-center justify-between px-6">
-      {/* Left: breadcrumb */}
-      <div className="flex items-center gap-3">
-        <h2 className="font-heading font-semibold text-amd-white/80 text-sm">
+    <header
+      style={{
+        height: '48px',
+        backgroundColor: '#111111',
+        borderBottom: '1px solid #242424',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 24px',
+        gap: '12px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 30,
+        flexShrink: 0
+      }}
+    >
+      <div style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 'none' }}>
+        <span>
           {workspace?.name || 'RyFlow'}
-        </h2>
+        </span>
       </div>
 
-      {/* Right: status indicators */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => setCommandPaletteOpen(true)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-md border border-white/10 text-amd-white/60 hover:text-amd-white hover:bg-white/5 text-xs"
+      <button
+        onClick={() => setCommandPaletteOpen(true)}
+        onMouseEnter={() => setSearchHover(true)}
+        onMouseLeave={() => setSearchHover(false)}
+        style={{
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          backgroundColor: '#1A1A1A',
+          border: `1px solid ${searchHover ? '#444444' : '#333333'}`,
+          borderRadius: '6px',
+          padding: '6px 12px',
+          cursor: 'pointer',
+          transition: 'border-color 150ms'
+        }}
+      >
+        <Search size={13} color="#666666" />
+        <span style={{ fontSize: '12px', color: '#666666' }}>Search workspace...</span>
+        <span
+          style={{
+            fontSize: '10px',
+            color: '#666666',
+            backgroundColor: '#2A2A2A',
+            padding: '1px 5px',
+            borderRadius: '3px',
+            fontFamily: 'monospace',
+            marginLeft: '8px'
+          }}
         >
-          <Command size={12} /> Search
-        </button>
+          ⌘K
+        </span>
+      </button>
 
-        {/* Ollama status */}
-        {!aiStatus.ollamaRunning && (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amd-orange/10 text-amd-orange text-xs">
-            <WifiOff size={12} />
-            <span>Start Ollama for AI</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+        {aiStatus?.gpuDetected || aiStatus?.rocmAvailable ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backgroundColor: 'rgba(232,0,13,0.08)',
+              border: '1px solid rgba(232,0,13,0.2)',
+              borderRadius: '4px',
+              padding: '2px 8px'
+            }}
+          >
+            <span style={{ fontSize: '11px', fontWeight: '500', color: '#E8000D' }}>⚡ AMD</span>
+          </div>
+        ) : (
+          <div
+            style={{
+              backgroundColor: '#1A1A1A',
+              border: '1px solid #333333',
+              borderRadius: '4px',
+              padding: '2px 8px'
+            }}
+          >
+            <span style={{ fontSize: '11px', color: '#666666' }}>CPU Mode</span>
           </div>
         )}
 
-        {/* AMD badge */}
-        <AMDbadge />
+        {peers.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                backgroundColor: '#3D9970',
+                borderRadius: '50%',
+                flexShrink: 0
+              }}
+            />
+            <span style={{ fontSize: '12px', color: '#999999' }}>{peers.length} online</span>
+          </div>
+        )}
 
-        {/* Peer count */}
-        <div className="flex items-center gap-1.5 text-amd-white/50 text-xs">
-          <Users size={14} />
-          <span>{peers.length} peer{peers.length !== 1 ? 's' : ''}</span>
-        </div>
-
-        {/* Theme toggle */}
-        <ThemeToggle />
-
-        {/* User avatar */}
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-          style={{ backgroundColor: user?.avatar_color || '#E8000D' }}
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          style={{
+            fontSize: '11px',
+            color: '#666666',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer'
+          }}
         >
-          {user?.name?.charAt(0)?.toUpperCase() || '?'}
-        </div>
+          Search
+        </button>
       </div>
     </header>
   );

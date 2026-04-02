@@ -54,10 +54,10 @@ export default function VoiceInput({ onTranscript, placeholder }) {
           whileTap={{ scale: 0.95 }}
           className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all ${
             recording
-              ? 'bg-amd-red text-white amd-pulse'
+              ? 'bg-accent text-[var(--text-on-accent)] amd-pulse'
               : transcribing
               ? 'bg-amd-orange/20 text-amd-orange'
-              : 'bg-amd-gray border border-white/10 text-amd-white/60 hover:text-amd-white hover:border-amd-red/50'
+              : 'bg-surface border border-border-d text-amd-white/60 hover:text-amd-white hover:border-amd-red/50'
           }`}
         >
           {transcribing ? (
@@ -137,11 +137,11 @@ export default function VoiceInput({ onTranscript, placeholder }) {
               onChange={(e) => setManualText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
               placeholder={placeholder || 'Type your text here...'}
-              className="flex-1 bg-amd-gray/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50"
+              className="flex-1 bg-surface border border-border-d rounded-lg px-3 py-2 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50"
             />
             <button
               onClick={handleManualSubmit}
-              className="px-4 py-2 rounded-lg bg-amd-red text-white text-sm"
+              className="px-4 py-2 rounded-lg bg-accent text-[var(--text-on-accent)] text-sm"
             >
               Submit
             </button>

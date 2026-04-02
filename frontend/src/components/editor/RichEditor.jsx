@@ -486,120 +486,162 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
   if (!editor) return null;
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-white/5 bg-amd-gray/30 rounded-t-xl flex-wrap">
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#111111', overflow: 'hidden' }}>
+      <div
+        style={{
+          height: '40px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '2px',
+          padding: '0 12px',
+          backgroundColor: '#1A1A1A',
+          borderBottom: '1px solid #242424',
+          flexShrink: 0,
+          overflowX: 'auto'
+        }}
+      >
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          className="hidden"
+          style={{ display: 'none' }}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) processImageOCR(file);
           }}
         />
-        {/* Formatting buttons */}
         <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} icon={Bold} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} icon={Italic} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} icon={Strikethrough} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} icon={Code} />
-        <div className="w-px h-5 bg-white/10 mx-1" />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333333', margin: '0 4px', flexShrink: 0 }} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} icon={Heading1} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} icon={Heading2} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} active={editor.isActive('heading', { level: 3 })} icon={Heading3} />
-        <div className="w-px h-5 bg-white/10 mx-1" />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333333', margin: '0 4px', flexShrink: 0 }} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} icon={List} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} icon={ListOrdered} />
         <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} icon={Quote} />
-        <div className="w-px h-5 bg-white/10 mx-1" />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333333', margin: '0 4px', flexShrink: 0 }} />
         <ToolbarButton onClick={() => editor.chain().focus().undo().run()} icon={Undo} />
         <ToolbarButton onClick={() => editor.chain().focus().redo().run()} icon={Redo} />
-        <div className="w-px h-5 bg-white/10 mx-1" />
+        <div style={{ width: '1px', height: '16px', backgroundColor: '#333333', margin: '0 4px', flexShrink: 0 }} />
         <ToolbarButton onClick={handleSave} icon={Save} tooltip="Save" />
-        <div className="group relative">
+        <div className="group relative" style={{ flexShrink: 0 }}>
           <ToolbarButton onClick={() => {}} icon={FileDown} tooltip="Export" />
-          <div className="absolute top-full left-0 mt-1 hidden group-hover:block bg-amd-gray border border-white/10 rounded-lg overflow-hidden z-10">
-            <button onClick={() => handleExport('markdown')} className="block w-full text-left px-3 py-2 text-xs hover:bg-white/5">MD</button>
-            <button onClick={() => handleExport('text')} className="block w-full text-left px-3 py-2 text-xs hover:bg-white/5">TXT</button>
+          <div className="absolute top-full left-0 mt-1 hidden group-hover:block" style={{ backgroundColor: '#2A2A2A', border: '1px solid #333333', borderRadius: '4px', overflow: 'hidden', zIndex: 10 }}>
+            <button onClick={() => handleExport('markdown')} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: '11px', color: '#999999', background: 'transparent', border: 'none', cursor: 'pointer' }}>MD</button>
+            <button onClick={() => handleExport('text')} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: '11px', color: '#999999', background: 'transparent', border: 'none', cursor: 'pointer' }}>TXT</button>
           </div>
         </div>
         <button
           onClick={handleExtractTextFromImage}
           disabled={ocrLoading}
-          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10 disabled:opacity-50"
+          style={{
+            height: '28px',
+            borderRadius: '4px',
+            border: '1px solid #333333',
+            backgroundColor: '#1A1A1A',
+            padding: '0 8px',
+            fontSize: '11px',
+            color: '#999999',
+            cursor: ocrLoading ? 'not-allowed' : 'pointer',
+            opacity: ocrLoading ? 0.6 : 1,
+            flexShrink: 0
+          }}
         >
           {ocrLoading ? 'Extracting text...' : '🖼 Extract Text from Image'}
         </button>
         <button
           onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }}
-          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10 relative"
+          style={{
+            height: '28px',
+            borderRadius: '4px',
+            border: '1px solid #333333',
+            backgroundColor: '#1A1A1A',
+            padding: '0 8px',
+            fontSize: '11px',
+            color: '#999999',
+            cursor: 'pointer',
+            position: 'relative',
+            flexShrink: 0
+          }}
         >
-          <LinkIcon size={12} className="inline mr-1" /> Backlinks
-          {Number(backlinks.total || 0) > 0 ? <span className="ml-1 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-amd-red text-white text-[10px] px-1">{backlinks.total}</span> : null}
+          <LinkIcon size={12} style={{ marginRight: '4px', display: 'inline' }} /> Backlinks
+          {Number(backlinks.total || 0) > 0 ? <span style={{ marginLeft: '4px', display: 'inline-flex', minWidth: '16px', height: '16px', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '10px', padding: '0 4px' }}>{backlinks.total}</span> : null}
         </button>
         <button
           onClick={() => { setCommentsOpen((v) => !v); loadComments(); }}
-          className="px-2 py-1 rounded text-xs bg-white/5 text-amd-white/70 hover:bg-white/10"
+          style={{
+            height: '28px',
+            borderRadius: '4px',
+            border: '1px solid #333333',
+            backgroundColor: '#1A1A1A',
+            padding: '0 8px',
+            fontSize: '11px',
+            color: '#999999',
+            cursor: 'pointer',
+            flexShrink: 0
+          }}
         >
-          <MessageCircle size={12} className="inline mr-1" /> 💬 {comments.length}
+          <MessageCircle size={12} style={{ marginRight: '4px', display: 'inline' }} /> 💬 {comments.length}
         </button>
 
-        {/* AI Actions */}
-        <div className="ml-auto flex items-center gap-1">
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <button
             onClick={() => handleAIAction('improve')}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-red/10 text-amd-red hover:bg-amd-red/20 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             <Sparkles size={12} /> Improve
           </button>
           <button
             onClick={() => handleAIAction('summarize')}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-red/10 text-amd-red hover:bg-amd-red/20 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             📝 Summarize
           </button>
           <button
             onClick={() => handleAIAction('translate')}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-red/10 text-amd-red hover:bg-amd-red/20 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             🌐 Translate
           </button>
           <button
             onClick={() => handleAIAction('expand')}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-red/10 text-amd-red hover:bg-amd-red/20 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             ➕ Expand
           </button>
           <button
             onClick={() => setCommentDraftOpen((v) => !v)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-amd-orange/15 text-amd-orange hover:bg-amd-orange/25 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             💬 Comment
           </button>
           <button
             onClick={() => handleExport('markdown')}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/5 text-amd-white/60 hover:bg-white/10 transition-colors"
+            style={{ height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', padding: '0 8px', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
           >
             <FileDown size={12} /> Export
           </button>
         </div>
       </div>
 
-      {/* Editor area */}
-      <div className="flex-1 overflow-hidden bg-amd-charcoal rounded-b-xl flex">
-        <div className="flex-1 overflow-auto">
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', backgroundColor: '#111111' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+          <div style={{ maxWidth: '720px', margin: '0 auto' }}>
           {commentDraftOpen ? (
-            <div className="mx-3 mt-3 rounded border border-amd-orange/30 bg-amd-orange/10 p-2">
-              <div className="text-[11px] text-amd-white/50 mb-1">Selected text:</div>
-              <div className="text-xs italic text-amd-white/70 mb-2">{editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') || 'No selection'}</div>
-              <div className="flex gap-2">
-                <input value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} placeholder="Write a comment" className="flex-1 bg-amd-gray/60 border border-white/10 rounded px-2 py-1 text-xs text-amd-white" />
-                <button onClick={postComment} className="px-2 py-1 rounded bg-amd-red/20 text-amd-red text-xs">Post Comment</button>
+            <div style={{ borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', padding: '10px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '11px', color: '#666666', marginBottom: '4px' }}>Selected text:</div>
+              <div style={{ fontSize: '12px', color: '#999999', marginBottom: '8px' }}>{editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ') || 'No selection'}</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} placeholder="Write a comment" style={{ flex: 1, height: '30px', backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '0 8px', fontSize: '12px', color: '#F0F0F0' }} />
+                <button onClick={postComment} style={{ padding: '0 10px', height: '30px', borderRadius: '4px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', fontSize: '11px', cursor: 'pointer' }}>Post Comment</button>
               </div>
             </div>
           ) : null}
           <EditorContent editor={editor} />
+          </div>
         </div>
         <BacklinksPanel
           open={backlinksOpen}
@@ -626,7 +668,6 @@ export default function RichEditor({ content, onSave, docId, collabDoc }) {
         />
       </div>
 
-      {/* AI Assist Panel */}
       <AnimatePresence>
         {showAIPanel && (
           <AIAssistPanel
@@ -647,9 +688,30 @@ function ToolbarButton({ onClick, active, icon: Icon, tooltip }) {
     <button
       onClick={onClick}
       title={tooltip}
-      className={`p-1.5 rounded transition-colors ${
-        active ? 'bg-amd-red/20 text-amd-red' : 'text-amd-white/60 hover:text-amd-white hover:bg-white/5'
-      }`}
+      style={{
+        width: '28px',
+        height: '28px',
+        borderRadius: '4px',
+        backgroundColor: active ? 'rgba(232,0,13,0.1)' : 'transparent',
+        border: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        flexShrink: 0,
+        transition: 'all 150ms ease',
+        color: active ? '#E8000D' : '#666666'
+      }}
+      onMouseEnter={(e) => {
+        if (!active) {
+          e.currentTarget.style.backgroundColor = '#222222';
+          e.currentTarget.style.color = '#F0F0F0';
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = active ? 'rgba(232,0,13,0.1)' : 'transparent';
+        e.currentTarget.style.color = active ? '#E8000D' : '#666666';
+      }}
     >
       <Icon size={16} />
     </button>

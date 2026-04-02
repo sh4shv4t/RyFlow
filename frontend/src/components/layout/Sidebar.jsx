@@ -1,31 +1,94 @@
 // Sidebar navigation — minimalist dark sidebar with icon links
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Home, FileText, CheckSquare, GitBranch, Cpu,
-  Settings, PanelLeftClose, PanelLeft, Zap, Code2, PencilRuler, CalendarDays, Tags, FolderKanban, PlugZap
+  Home, FileText, CheckSquare, Settings, Code2, PenTool,
+  Sparkles, CalendarDays, Layers, ChevronDown, Network
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
-import { APP_VERSION } from '../../constants/appVersion';
+import { apiFetch } from '../../utils/apiClient';
 
-const navItems = [
-  { to: '/', icon: Home, label: 'Home' },
-  { to: '/editor?daily=today', icon: CalendarDays, label: "Today's Note" },
-  { to: '/editor', icon: FileText, label: 'Editor' },
-  { to: '/tags', icon: Tags, label: 'Tags' },
-  { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  { to: '/graph', icon: GitBranch, label: 'Graph' },
-  { to: '/ai', icon: Cpu, label: 'AI Studio' },
-  { to: '/code', icon: Code2, label: 'Code' },
-  { to: '/canvas', icon: PencilRuler, label: 'Canvas' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+const navSections = [
+  {
+    label: 'WORKSPACE',
+    items: [
+      { to: '/', icon: Home, label: 'Home' },
+      { to: '/editor', icon: FileText, label: 'Documents' },
+      { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
+      { to: '/code', icon: Code2, label: 'Code' },
+      { to: '/canvas', icon: PenTool, label: 'Canvas' }
+    ]
+  },
+  {
+    label: 'AI',
+    items: [
+      { to: '/ai', icon: Sparkles, label: 'AI Studio' },
+      { to: '/graph', icon: Network, label: 'Knowledge Graph' }
+    ]
+  },
+  {
+    label: 'ORGANIZE',
+    items: [
+      { action: 'daily-note', icon: CalendarDays, label: "Today's Note" },
+      { to: '/workspaces', icon: Layers, label: 'Workspaces' }
+    ]
+  }
 ];
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, workspace, remoteMode, setRemoteMode } = useStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { workspace, remoteMode, setRemoteMode, user } = useStore();
+  const [workspaceHover, setWorkspaceHover] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState('');
+  const [settingsHover, setSettingsHover] = useState(false);
+
+  const userInitial = useMemo(() => {
+    return (user?.name || '?').charAt(0).toUpperCase();
+  }, [user?.name]);
+
+  const isItemActive = (to) => {
+    if (to === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname === to;
+  };
+
+  // Opens or creates today's daily note and navigates directly to the resolved document id.
+  const handleTodaysNote = async (e) => {
+    e.preventDefault();
+
+    const workspaceId =
+      useStore.getState().workspaceId ||
+      localStorage.getItem('ryflow_workspace_id');
+
+    if (!workspaceId) {
+      toast('No active workspace', { icon: '⚠️' });
+      return;
+    }
+
+    try {
+      const res = await apiFetch(`/api/docs/daily?workspace_id=${workspaceId}`);
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+
+      const doc = await res.json();
+
+      if (!doc?.id) {
+        throw new Error('No document id returned');
+      }
+
+      navigate(`/editor/${doc.id}`);
+    } catch (err) {
+      console.error('[DailyNote]', err.message);
+      toast.error('Could not open daily note');
+    }
+  };
 
   // Disconnects remote session and falls back to best available local workspace.
   const disconnectRemote = async () => {
@@ -42,89 +105,278 @@ export default function Sidebar() {
   };
 
   return (
-    <motion.aside
-      animate={{ width: sidebarCollapsed ? 64 : 220 }}
-      className="h-screen bg-amd-gray/50 border-r border-white/5 flex flex-col py-4 relative"
+    <aside
+      style={{
+        width: '220px',
+        minWidth: '220px',
+        height: '100vh',
+        backgroundColor: '#1A1A1A',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        zIndex: 40,
+        borderRight: '1px solid #242424'
+      }}
     >
-      {/* Logo */}
-      <div className="px-4 mb-8 flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-amd-red flex items-center justify-center flex-shrink-0">
-          <Zap size={18} className="text-white" />
+      <div style={{ padding: '16px 12px 8px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '6px'
+          }}
+        >
+          <div
+            style={{
+              width: '26px',
+              height: '26px',
+              backgroundColor: '#E8000D',
+              borderRadius: '5px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <span
+              style={{
+                color: '#FFFFFF',
+                fontSize: '13px',
+                fontWeight: '700',
+                lineHeight: 1
+              }}
+            >
+              R
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: '15px',
+              fontWeight: '600',
+              color: '#F0F0F0',
+              letterSpacing: '-0.01em'
+            }}
+          >
+            RyFlow
+          </span>
         </div>
-        {!sidebarCollapsed && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-hidden">
-            <h1 className="font-heading font-bold text-lg text-amd-white leading-none">RyFlow v{APP_VERSION}</h1>
-            <p className="text-[10px] text-amd-white/40 leading-none mt-0.5">Your Campus. Your GPU.</p>
-          </motion.div>
-        )}
+
+        <button
+          onClick={() => { window.location.href = '/workspaces'; }}
+          onMouseEnter={() => setWorkspaceHover(true)}
+          onMouseLeave={() => setWorkspaceHover(false)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '3px 6px',
+            marginLeft: '2px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            transition: 'background 150ms ease',
+            backgroundColor: workspaceHover ? '#222222' : 'transparent',
+            border: 'none'
+          }}
+        >
+          <span
+            style={{
+              fontSize: '11px',
+              color: '#999999',
+              maxWidth: '140px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {workspace?.name || 'Workspace'}
+          </span>
+          <ChevronDown size={10} color="#666666" />
+        </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-2 space-y-1">
-        {!sidebarCollapsed && (
-          <div className="px-3 py-1 text-[10px] text-amd-white/30">Quick Search: Ctrl/Cmd+K</div>
-        )}
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
-              ${isActive
-                ? 'bg-amd-red/10 text-amd-red glow-red-subtle'
-                : 'text-amd-white/60 hover:text-amd-white hover:bg-white/5'
-              }`
-            }
-          >
-            <item.icon size={20} className="flex-shrink-0" />
-            {!sidebarCollapsed && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-sm font-medium"
-              >
-                {item.label}
-              </motion.span>
-            )}
-          </NavLink>
+      <nav
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '8px 8px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1px'
+        }}
+      >
+        {navSections.map((section) => (
+          <div key={section.label}>
+            <p
+              style={{
+                fontSize: '10px',
+                fontWeight: '500',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: '#666666',
+                padding: '0 8px',
+                margin: '14px 0 3px'
+              }}
+            >
+              {section.label}
+            </p>
+
+            {section.items.map((item) => {
+              const active = item.to ? isItemActive(item.to) : (item.action === 'daily-note' && location.pathname === '/editor');
+              const hover = hoveredNav === item.to;
+              const Icon = item.icon;
+              const isHighlighted = active || hover;
+
+              if (item.action === 'daily-note') {
+                return (
+                  <button
+                    key={item.label}
+                    onClick={handleTodaysNote}
+                    onMouseEnter={() => setHoveredNav(item.label)}
+                    onMouseLeave={() => setHoveredNav('')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      height: '32px',
+                      padding: active ? '0 8px 0 6px' : '0 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'all 150ms ease',
+                      width: '100%',
+                      border: 'none',
+                      background: active ? 'rgba(232,0,13,0.1)' : (hoveredNav === item.label ? '#222222' : 'transparent'),
+                      borderLeft: active ? '2px solid #E8000D' : '2px solid transparent',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <Icon
+                      size={15}
+                      color={isHighlighted ? '#F0F0F0' : '#666666'}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        color: isHighlighted ? '#F0F0F0' : '#999999',
+                        fontWeight: active ? '500' : '400'
+                      }}
+                    >
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              }
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onMouseEnter={() => setHoveredNav(item.to)}
+                  onMouseLeave={() => setHoveredNav('')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    height: '32px',
+                    padding: active ? '0 8px 0 6px' : '0 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    transition: 'all 150ms ease',
+                    width: '100%',
+                    border: 'none',
+                    background: active ? 'rgba(232,0,13,0.1)' : (hover ? '#222222' : 'transparent'),
+                    borderLeft: active ? '2px solid #E8000D' : '2px solid transparent',
+                    textDecoration: 'none'
+                  }}
+                >
+                  <Icon
+                    size={15}
+                    color={isHighlighted ? '#F0F0F0' : '#666666'}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '13px',
+                      color: isHighlighted ? '#F0F0F0' : '#999999',
+                      fontWeight: active ? '500' : '400'
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </div>
         ))}
       </nav>
 
-      {/* Workspace info */}
-      {!sidebarCollapsed && workspace && (
-        <div className="px-4 py-3 mx-2 mb-2 glass-card">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-amd-white/40">Workspace</p>
-            <button
-              onClick={() => { window.location.href = '/workspaces'; }}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-amd-white/70 hover:bg-white/20 flex items-center gap-1"
-              title="Open workspace manager"
-            >
-              <FolderKanban size={10} /> Switch
-            </button>
-          </div>
-          <p className="text-sm font-medium text-amd-white truncate">{workspace.name}</p>
-          {remoteMode && (
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amd-orange/20 text-amd-orange">LIVE Remote</span>
-              <button
-                onClick={disconnectRemote}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-amd-red/20 text-amd-red hover:bg-amd-red/30 flex items-center gap-1"
-              >
-                <PlugZap size={10} /> Disconnect
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Collapse toggle */}
-      <button
-        onClick={toggleSidebar}
-        className="absolute -right-3 top-6 w-6 h-6 rounded-full bg-amd-gray border border-white/10 flex items-center justify-center hover:border-amd-red/50 transition-colors"
+      <div
+        style={{
+          padding: '12px',
+          borderTop: '1px solid #242424',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}
       >
-        {sidebarCollapsed ? <PanelLeft size={12} /> : <PanelLeftClose size={12} />}
-      </button>
-    </motion.aside>
+        <div
+          style={{
+            width: '26px',
+            height: '26px',
+            borderRadius: '50%',
+            backgroundColor: '#2A4A7F',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}
+        >
+          <span
+            style={{
+              fontSize: '11px',
+              color: '#FFFFFF',
+              fontWeight: '600'
+            }}
+          >
+            {userInitial}
+          </span>
+        </div>
+
+        <span
+          style={{
+            fontSize: '13px',
+            color: '#999999',
+            flex: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {user?.name || 'Teammate'}
+        </span>
+
+        <NavLink
+          to="/settings"
+          onMouseEnter={() => setSettingsHover(true)}
+          onMouseLeave={() => setSettingsHover(false)}
+          style={{
+            padding: '4px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            background: settingsHover ? '#222222' : 'transparent',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+          title={remoteMode ? 'Connected remotely' : 'Settings'}
+          onClick={remoteMode ? disconnectRemote : undefined}
+        >
+          <Settings size={15} color={settingsHover ? '#F0F0F0' : '#666666'} />
+        </NavLink>
+      </div>
+    </aside>
   );
 }

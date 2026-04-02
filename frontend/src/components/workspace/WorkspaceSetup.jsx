@@ -96,7 +96,7 @@ export default function WorkspaceSetup() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-amd-red flex items-center justify-center mx-auto mb-4 glow-red">
-            <Zap size={32} className="text-white" />
+            <Zap size={32} className="text-[var(--text-on-accent)]" />
           </div>
           <h1 className="font-heading text-3xl font-bold text-amd-white">RyFlow</h1>
           <p className="text-amd-white/50 mt-1">Your Campus. Your GPU. Your AI.</p>
@@ -114,13 +114,13 @@ export default function WorkspaceSetup() {
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep(2)}
                 placeholder="Enter your name"
-                className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
+                className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
                 autoFocus
               />
               <button
                 onClick={() => setStep(2)}
                 disabled={!name.trim()}
-                className="w-full py-3 rounded-xl bg-amd-red text-white font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl bg-accent text-[var(--text-on-accent)] font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
               >
                 Continue <ArrowRight size={16} />
               </button>
@@ -138,15 +138,15 @@ export default function WorkspaceSetup() {
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && workspaceName.trim() && setStep(3)}
                 placeholder="Workspace name"
-                className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
+                className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
                 autoFocus
               />
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl bg-white/5 text-amd-white/60">Back</button>
+                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl bg-surface text-amd-white/60">Back</button>
                 <button
                   onClick={() => setStep(3)}
                   disabled={!workspaceName.trim()}
-                  className="flex-1 py-3 rounded-xl bg-amd-red text-white font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 py-3 rounded-xl bg-accent text-[var(--text-on-accent)] font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
                 >
                   Continue <ArrowRight size={16} />
                 </button>
@@ -167,8 +167,8 @@ export default function WorkspaceSetup() {
                     <button
                       key={c}
                       onClick={() => setAvatarColor(c)}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold transition-all ${
-                        avatarColor === c ? 'ring-2 ring-white ring-offset-2 ring-offset-amd-charcoal scale-110' : 'opacity-60 hover:opacity-100'
+                      className={`w-10 h-10 rounded-full flex items-center justify-center text-[var(--text-on-accent)] font-bold transition-all ${
+                        avatarColor === c ? 'ring-2 ring-border-s ring-offset-2 ring-offset-amd-charcoal scale-110' : 'opacity-60 hover:opacity-100'
                       }`}
                       style={{ backgroundColor: c }}
                     >
@@ -184,7 +184,7 @@ export default function WorkspaceSetup() {
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 text-amd-white outline-none"
+                  className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white outline-none"
                 >
                   {LANGUAGES.map(l => (
                     <option key={l.code} value={l.code}>{l.label}</option>
@@ -217,7 +217,7 @@ export default function WorkspaceSetup() {
 
                 {amdStatus && !amdStatus.ollamaRunning && (
                   <p className="text-xs text-amd-orange/60 mt-2 ml-6">
-                    ⚠ Ollama not detected. Start it with: <code className="bg-black/30 px-1 rounded">ollama serve</code>
+                    ⚠ Ollama not detected. Start it with: <code className="bg-overlay px-1 rounded">ollama serve</code>
                   </p>
                 )}
 
@@ -230,10 +230,10 @@ export default function WorkspaceSetup() {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl bg-white/5 text-amd-white/60">Back</button>
+                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl bg-surface text-amd-white/60">Back</button>
                 <button
                   onClick={handleComplete}
-                  className="flex-1 py-3 rounded-xl bg-amd-red text-white font-medium hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 py-3 rounded-xl bg-accent text-[var(--text-on-accent)] font-medium hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
                 >
                   <Zap size={16} /> Launch RyFlow
                 </button>
@@ -247,7 +247,7 @@ export default function WorkspaceSetup() {
               <div
                 key={s}
                 className={`w-2 h-2 rounded-full transition-colors ${
-                  s === step ? 'bg-amd-red' : s < step ? 'bg-amd-green' : 'bg-white/20'
+                  s === step ? 'bg-amd-red' : s < step ? 'bg-amd-green' : 'bg-elevated'
                 }`}
               />
             ))}

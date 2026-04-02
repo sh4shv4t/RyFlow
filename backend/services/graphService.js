@@ -4,6 +4,20 @@ const { chat } = require('./ollamaService');
 const { enqueueEmbeddingJob } = require('./embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'are', 'but', 'not', 'all',
+  'can', 'had', 'was', 'one', 'get', 'has', 'how',
+  'its', 'may', 'new', 'now', 'see', 'who', 'did',
+  'with', 'have', 'this', 'that', 'from', 'they',
+  'been', 'more', 'when', 'will', 'your', 'each',
+  'into', 'most', 'some', 'than', 'then', 'them',
+  'what', 'which', 'also', 'both', 'does', 'down',
+  'file', 'note', 'notes', 'daily', 'document',
+  'task', 'code', 'canvas', 'chat', 'page', 'text',
+  'data', 'list', 'item', 'using', 'used', 'just',
+  'like', 'about'
+]);
+
 // Serializes node metadata safely for database storage.
 function stringifyMetadata(metadata) {
   if (!metadata) return null;
@@ -25,6 +39,73 @@ function safeParseMetadata(metadataText) {
   }
 }
 
+function extractKeywords(text) {
+  if (!text) return [];
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 3 && !STOP_WORDS.has(word));
+}
+
+function edgeExists(db, sourceId, targetId) {
+  return db.prepare(
+    `SELECT id FROM edges WHERE
+      (source_id = ? AND target_id = ?) OR
+      (source_id = ? AND target_id = ?)
+     LIMIT 1`
+  ).get(sourceId, targetId, targetId, sourceId);
+}
+
+function createKeywordEdges(newNode, workspaceId) {
+  let db;
+  try {
+    db = getDb();
+  } catch {
+    return 0;
+  }
+
+  const newKw = new Set([
+    ...extractKeywords(newNode.title),
+    ...extractKeywords(newNode.content_summary)
+  ]);
+  const titleKwNew = extractKeywords(newNode.title);
+  if (newKw.size === 0) return 0;
+
+  const others = db.prepare(
+    `SELECT id, title, content_summary
+     FROM nodes
+     WHERE workspace_id = ? AND id != ?
+     LIMIT 150`
+  ).all(workspaceId, newNode.id);
+
+  let created = 0;
+  for (const other of others) {
+    const otherKw = new Set([
+      ...extractKeywords(other.title),
+      ...extractKeywords(other.content_summary)
+    ]);
+
+    const shared = [...newKw].filter((k) => otherKw.has(k));
+    const titleKwOther = extractKeywords(other.title);
+    const sharedTitle = titleKwNew.filter((k) => titleKwOther.includes(k));
+
+    if (shared.length < 2 && sharedTitle.length < 1) continue;
+    if (edgeExists(db, newNode.id, other.id)) continue;
+
+    const label = sharedTitle.length > 0
+      ? `shares: ${sharedTitle.slice(0, 2).join(', ')}`
+      : `related: ${shared.slice(0, 2).join(', ')}`;
+
+    db.prepare(
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
+    ).run(uuidv4(), newNode.id, other.id, label, 0.6);
+    created += 1;
+  }
+
+  return created;
+}
+
 // Creates a new node in the knowledge graph and generates its embedding
 async function createNode(workspaceId, type, title, contentSummary, sourceId = null, metadata = null) {
   const db = getDb();
@@ -36,13 +117,13 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
   ).run(id, workspaceId, type, title, contentSummary || '', metadataText, sourceId);
 
   // Queue embedding generation asynchronously (don't block writes).
-  const textForEmbedding = { type, title, content_summary: contentSummary || '', metadata: metadataText };
-  enqueueEmbeddingJob(id, textForEmbedding);
+  enqueueEmbeddingJob(id, workspaceId);
 
-  // Auto-create relationships asynchronously
-  autoCreateRelationships({ id, type, title, content_summary: contentSummary || '', metadata: metadataText }, workspaceId).catch(err => {
-    console.error('[Graph] Auto-relationship creation failed for node', id, err.message);
-  });
+  const newNode = { id, type, title, content_summary: contentSummary || '', metadata: metadataText };
+  await Promise.allSettled([
+    autoCreateRelationships(newNode, workspaceId).catch(() => {}),
+    Promise.resolve().then(() => createKeywordEdges(newNode, workspaceId)).catch(() => {})
+  ]);
 
   return { id, workspaceId, type, title, contentSummary, metadata, sourceId };
 }
@@ -126,4 +207,21 @@ function deleteNode(nodeId) {
   db.prepare('DELETE FROM nodes WHERE id = ?').run(nodeId);
 }
 
-module.exports = { createNode, autoCreateRelationships, getGraph, addEdge, deleteNode };
+function backfillKeywordEdges(workspaceId) {
+  const db = getDb();
+  const nodes = db.prepare(
+    'SELECT id, title, content_summary FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200'
+  ).all(workspaceId);
+
+  let created = 0;
+  nodes.forEach((node) => {
+    const added = createKeywordEdges(node, workspaceId);
+    if (typeof added === 'number') {
+      created += added;
+    }
+  });
+
+  return { processed: nodes.length, created };
+}
+
+module.exports = { createNode, autoCreateRelationships, getGraph, addEdge, deleteNode, backfillKeywordEdges, createKeywordEdges, extractKeywords };

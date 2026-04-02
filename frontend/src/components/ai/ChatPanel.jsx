@@ -23,7 +23,18 @@ const LANGUAGES = [
   { code: 'mr', label: 'Marathi' },
 ];
 
-export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewChat }) {
+function createMessage(role, content, extras = {}) {
+  return {
+    id: (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`,
+    role,
+    content,
+    ...extras
+  };
+}
+
+export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewChat }) {
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -33,6 +44,8 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
   const [chatTitle, setChatTitle] = useState('New Chat');
   const [titleGenerated, setTitleGenerated] = useState(false);
   const messagesEndRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const isCreatingRef = useRef(false);
   const { chatStream, loading, streamingText } = useOllama();
   const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace, setAiActive } = useStore();
 
@@ -58,29 +71,45 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
     return value.length > 50 ? `${value.slice(0, 50)}...` : value;
   }, []);
 
-  // Persists current chat session by creating or updating chat row.
-  const persistChat = useCallback(async (nextMessages, options = {}) => {
-    if (!workspace?.id || !Array.isArray(nextMessages) || nextMessages.length === 0) return null;
-    const payload = {
+  // Creates a chat record once (first-message flow).
+  const createChatRecord = useCallback(async (userMessage) => {
+    if (!workspace?.id) return null;
+    if (isCreatingRef.current) return null;
+
+    isCreatingRef.current = true;
+    try {
+      const firstTitle = fallbackTitle(userMessage);
+      const res = await axios.post('/api/chats', {
+        workspace_id: workspace.id,
+        title: firstTitle,
+        messages: [],
+        model: selectedModel,
+        rag_used: 0
+      });
+      const created = res.data;
+      setCurrentChatId(created.id);
+      setChatTitle(created.title || firstTitle);
+      if (onChatCreated) onChatCreated(created);
+      return created.id;
+    } catch {
+      toast.error('Could not create chat');
+      return null;
+    } finally {
+      isCreatingRef.current = false;
+    }
+  }, [workspace?.id, selectedModel, fallbackTitle, onChatCreated]);
+
+  // Persists updates for an already-created chat.
+  const persistChatUpdate = useCallback(async (chatId, nextMessages, options = {}) => {
+    if (!chatId || !workspace?.id) return;
+    await axios.put(`/api/chats/${chatId}`, {
       workspace_id: workspace.id,
       title: options.title || chatTitle,
       messages: nextMessages,
       model: selectedModel,
       rag_used: options.ragUsed ? 1 : 0
-    };
-
-    if (!currentChatId) {
-      const created = await axios.post('/api/chats', payload);
-      setCurrentChatId(created.data.id);
-      setChatTitle(created.data.title || payload.title);
-      onChatPersisted && onChatPersisted();
-      return created.data.id;
-    }
-
-    await axios.put(`/api/chats/${currentChatId}`, payload);
-    onChatPersisted && onChatPersisted();
-    return currentChatId;
-  }, [workspace?.id, chatTitle, selectedModel, currentChatId, onChatPersisted]);
+    });
+  }, [workspace?.id, chatTitle, selectedModel]);
 
   // Loads a selected chat session into the panel.
   const loadChat = useCallback(async (chatId) => {
@@ -93,7 +122,14 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
     }
     try {
       const res = await axios.get(`/api/chats/${chatId}`);
-      setMessages(Array.isArray(res.data.messages) ? res.data.messages : []);
+      const hydrated = (Array.isArray(res.data.messages) ? res.data.messages : [])
+        .map((msg) => ({
+          ...msg,
+          id: msg.id || ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`)
+        }));
+      setMessages(hydrated);
       setCurrentChatId(res.data.id);
       setChatTitle(res.data.title || 'New Chat');
       setTitleGenerated(true);
@@ -110,13 +146,6 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText]);
-
-  // Persists pending chat state when this panel unmounts.
-  useEffect(() => () => {
-    if (messages.length > 0) {
-      persistChat(messages).catch(() => {});
-    }
-  }, [messages, persistChat]);
 
   // Auto-generates a concise chat title after first full exchange.
   useEffect(() => {
@@ -142,7 +171,6 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
           model: selectedModel
         });
         setTitleGenerated(true);
-        onChatPersisted && onChatPersisted();
       } catch {
         setTitleGenerated(true);
       } finally {
@@ -150,14 +178,16 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
       }
     };
     generateTitle();
-  }, [messages, titleGenerated, currentChatId, selectedModel, fallbackTitle, onChatPersisted, setAiActive]);
+  }, [messages, titleGenerated, currentChatId, selectedModel, fallbackTitle, setAiActive]);
 
   // Sends a message to the LLM and streams the response
   const sendMessage = useCallback(async (text = null) => {
     const msgText = text || input.trim();
-    if (!msgText || !workspace?.id) return;
+    if (!msgText || !workspace?.id || isSendingRef.current) return;
 
-    const userMsg = { role: 'user', content: msgText };
+    isSendingRef.current = true;
+
+    const userMsg = createMessage('user', msgText);
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
@@ -165,8 +195,11 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
     try {
       let workingChatId = currentChatId;
       if (!workingChatId) {
-        const firstTitle = fallbackTitle(msgText);
-        workingChatId = await persistChat(newMessages, { title: firstTitle, ragUsed: false });
+        workingChatId = await createChatRecord(msgText);
+        if (!workingChatId) {
+          isSendingRef.current = false;
+          return;
+        }
       }
 
       const streamResult = await chatStream(
@@ -178,17 +211,16 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
       const ragUsed = typeof streamResult === 'object' ? Boolean(streamResult?.ragUsed) : false;
       const citations = typeof streamResult === 'object' ? (streamResult?.citations || []) : [];
 
-      const finalMessages = [...newMessages, { role: 'assistant', content: fullResponse, ragUsed, citations }];
+      const finalMessages = [...newMessages, createMessage('assistant', fullResponse, { ragUsed, citations })];
       setMessages(finalMessages);
       setCurrentChatId(workingChatId || null);
-      await persistChat(finalMessages, { ragUsed });
+      await persistChatUpdate(workingChatId, finalMessages, { ragUsed });
     } catch {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '⚠️ Could not reach Ollama. Please make sure it\'s running on localhost:11434'
-      }]);
+      setMessages((prev) => [...prev, createMessage('assistant', '⚠️ Could not reach Ollama. Please make sure it\'s running on localhost:11434')]);
+    } finally {
+      isSendingRef.current = false;
     }
-  }, [input, messages, chatStream, workspace?.id, currentChatId, fallbackTitle, persistChat]);
+  }, [input, messages, chatStream, workspace?.id, currentChatId, createChatRecord, persistChatUpdate]);
 
   // Handles template selection
   const useTemplate = (template) => {
@@ -199,14 +231,14 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
   return (
     <div className="flex flex-col h-full">
       {/* Header with model and language selectors */}
-      <div className="flex items-center justify-between p-3 border-b border-white/5">
+      <div className="flex items-center justify-between p-3 border-b border-border-d">
         <div className="flex items-center gap-3">
           <h3 className="font-heading font-semibold text-amd-white">AI Chat</h3>
           {/* Model selector */}
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="text-xs bg-amd-gray border border-white/10 rounded px-2 py-1 text-amd-white outline-none"
+            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
           >
             {(aiStatus.models?.length > 0 ? aiStatus.models : [{ name: 'phi3:mini' }, { name: 'gemma:2b' }, { name: 'tinyllama' }])
               .map(m => (
@@ -218,7 +250,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="text-xs bg-amd-gray border border-white/10 rounded px-2 py-1 text-amd-white outline-none"
+            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
           >
             {LANGUAGES.map(l => (
               <option key={l.code} value={l.code}>{l.label}</option>
@@ -268,7 +300,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
 
         {messages.map((msg, i) => (
           <motion.div
-            key={i}
+            key={msg.id || `${msg.role}-${i}`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -344,7 +376,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
       </div>
 
       {/* Input area */}
-      <div className="p-3 border-t border-white/5">
+      <div className="p-3 border-t border-border-d">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <input
@@ -353,7 +385,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
               placeholder="Ask anything locally..."
-              className="w-full bg-amd-gray/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors"
+              className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors"
               disabled={loading}
             />
             <button
@@ -366,7 +398,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
           <button
             onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
-            className="px-4 py-3 rounded-xl bg-amd-red text-white disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center gap-1"
+            className="px-4 py-3 rounded-xl bg-accent text-[var(--text-on-accent)] disabled:opacity-50 hover:bg-amd-red/80 transition-colors flex items-center gap-1"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
@@ -385,7 +417,7 @@ export default function ChatPanel({ activeChatId, onChatPersisted, onRequestNewC
                 <button
                   key={i}
                   onClick={() => useTemplate(t)}
-                  className="w-full text-left text-xs p-2 rounded hover:bg-white/5 text-amd-white/70 transition-colors"
+                  className="w-full text-left text-xs p-2 rounded hover:bg-elevated text-amd-white/70 transition-colors"
                 >
                   {t.label}
                 </button>

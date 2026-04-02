@@ -85,21 +85,21 @@ export default function StudyGuidePanel() {
   };
 
   return (
-    <div className="h-full glass-card p-4 overflow-auto space-y-4">
+    <div className="h-full rounded-xl border border-border-d bg-surface p-4 overflow-auto space-y-4">
       <h2 className="font-heading text-amd-white">Study Guide</h2>
 
-      <div className="rounded-lg bg-white/5 p-3">
+      <div className="rounded-lg bg-surface border border-border-d p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm text-amd-white">Select Documents</div>
           <div className="flex gap-1">
-            <button onClick={() => setSelectedIds(docs.map((d) => d.id))} className="px-2 py-1 text-xs rounded bg-white/10 text-amd-white/70">Select All</button>
-            <button onClick={() => setSelectedIds([])} className="px-2 py-1 text-xs rounded bg-white/10 text-amd-white/70">Deselect All</button>
+            <button onClick={() => setSelectedIds(docs.map((d) => d.id))} className="px-2 py-1 text-xs rounded bg-elevated text-t-secondary">Select All</button>
+            <button onClick={() => setSelectedIds([])} className="px-2 py-1 text-xs rounded bg-elevated text-t-secondary">Deselect All</button>
           </div>
         </div>
         {loadingDocs ? <div className="text-xs text-amd-white/50">Loading documents...</div> : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-40 overflow-auto">
             {docs.map((doc) => (
-              <label key={doc.id} className="text-xs text-amd-white/75 flex items-center gap-2 p-1 rounded hover:bg-white/5">
+              <label key={doc.id} className="text-xs text-t-secondary flex items-center gap-2 p-1 rounded hover:bg-elevated">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(doc.id)}
@@ -116,7 +116,7 @@ export default function StudyGuidePanel() {
         <button
           onClick={generate}
           disabled={loadingGuide || selectedIds.length === 0}
-          className={`mt-3 px-3 py-2 rounded text-sm text-white ${loadingGuide ? 'bg-amd-red/50 amd-pulse' : 'bg-amd-red'} disabled:opacity-50`}
+          className={`mt-3 px-3 py-2 rounded text-sm text-[var(--text-on-accent)] ${loadingGuide ? 'bg-accent/70' : 'bg-accent'} disabled:opacity-50`}
         >
           {loadingGuide ? 'Generating...' : 'Generate Study Guide'}
         </button>
@@ -124,16 +124,16 @@ export default function StudyGuidePanel() {
 
       {guide ? (
         <>
-          <section className="rounded-lg bg-white/5 p-3">
+          <section className="rounded-lg bg-surface border border-border-d p-3">
             <h3 className="text-sm text-amd-white mb-2">Summary</h3>
             <p className="text-sm text-amd-white/75">{guide.summary}</p>
           </section>
 
-          <section className="rounded-lg bg-white/5 p-3">
+          <section className="rounded-lg bg-surface border border-border-d p-3">
             <h3 className="text-sm text-amd-white mb-2">Key Terms</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {(guide.key_terms || []).map((item, idx) => (
-                <div key={`${item.term}-${idx}`} className="rounded border border-white/10 p-2">
+                <div key={`${item.term}-${idx}`} className="rounded border border-border-d p-2">
                   <div className="text-amd-red text-sm font-medium">{item.term}</div>
                   <div className="text-xs text-amd-white/70 mt-1">{item.definition}</div>
                 </div>
@@ -141,7 +141,7 @@ export default function StudyGuidePanel() {
             </div>
           </section>
 
-          <section className="rounded-lg bg-white/5 p-3">
+          <section className="rounded-lg bg-surface border border-border-d p-3">
             <h3 className="text-sm text-amd-white mb-2">Key Points</h3>
             <div className="space-y-1">
               {(guide.key_points || []).map((point, idx) => (
@@ -153,7 +153,7 @@ export default function StudyGuidePanel() {
             </div>
           </section>
 
-          <section className="rounded-lg bg-white/5 p-3">
+          <section className="rounded-lg bg-surface border border-border-d p-3">
             <h3 className="text-sm text-amd-white mb-2">Quiz</h3>
             {currentQuiz ? (
               <div>
@@ -165,9 +165,9 @@ export default function StudyGuidePanel() {
                     const correctIdx = Number(currentQuiz.correct || 0);
                     const isChosen = answers[quizIndex]?.choice === idx;
                     const isCorrect = idx === correctIdx;
-                    let cls = 'bg-white/10 text-amd-white/75';
-                    if (answered && isCorrect) cls = 'bg-green-600/20 text-green-300';
-                    if (answered && isChosen && !isCorrect) cls = 'bg-red-600/20 text-red-300';
+                    let cls = 'bg-elevated text-t-secondary';
+                    if (answered && isCorrect) cls = 'bg-[rgba(61,153,112,0.15)] text-[var(--success)]';
+                    if (answered && isChosen && !isCorrect) cls = 'bg-[rgba(192,57,43,0.15)] text-[var(--error)]';
                     return (
                       <button
                         key={`${opt}-${idx}`}
@@ -191,7 +191,7 @@ export default function StudyGuidePanel() {
             )}
           </section>
 
-          <button onClick={exportMarkdown} className="px-3 py-2 rounded bg-white/10 text-amd-white/75 text-sm">Download Study Guide</button>
+          <button onClick={exportMarkdown} className="px-3 py-2 rounded bg-elevated text-t-secondary text-sm">Download Study Guide</button>
         </>
       ) : null}
     </div>

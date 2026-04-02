@@ -7,6 +7,24 @@ import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
 
+class MonacoErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 const LANGUAGE_OPTIONS = [
   { label: 'JavaScript', value: 'javascript', ext: 'js' },
   { label: 'TypeScript', value: 'typescript', ext: 'ts' },
@@ -74,9 +92,17 @@ export default function CodeEditor({
   const { selectedModel, workspace, setAiActive } = useStore();
 
   const monacoThemeName = 'ryflow-dark';
+  const editorHeight = '100%';
 
   // Configures custom Monaco theme to match RyFlow colors.
   const handleBeforeMount = useCallback((monaco) => {
+    // Use a safe worker fallback to prevent runtime blank-editor failures.
+    if (typeof window !== 'undefined') {
+      window.MonacoEnvironment = {
+        getWorker: () => null
+      };
+    }
+
     monaco.editor.defineTheme(monacoThemeName, {
       base: 'vs-dark',
       inherit: true,
@@ -204,11 +230,11 @@ export default function CodeEditor({
   return (
     <div className="h-full flex">
       <div className="flex-1 flex flex-col glass-card overflow-hidden">
-        <div className="p-2 border-b border-white/10 bg-amd-gray/40 flex flex-wrap items-center gap-2">
+        <div className="p-2 border-b border-border-d bg-overlay flex flex-wrap items-center gap-2">
           <select
             value={language}
             onChange={(e) => onLanguageChange?.(e.target.value)}
-            className="text-xs bg-amd-gray border border-white/10 rounded px-2 py-1 text-amd-white outline-none"
+            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
           >
             {LANGUAGE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -231,29 +257,29 @@ export default function CodeEditor({
 
           <button
             onClick={() => runAiAction('Add Comments', (code) => `Rewrite this code and add clear inline comments while preserving behavior:\n\n${code}`)}
-            className="px-2 py-1 text-xs rounded bg-white/10 text-amd-white hover:bg-white/20"
+            className="px-2 py-1 text-xs rounded bg-elevated text-t-primary hover:bg-overlay"
           >
             📝 Add Comments
           </button>
 
           <button
             onClick={() => runAiAction('Optimize Code', (code) => `Suggest an optimized version of this code and explain performance tradeoffs:\n\n${code}`)}
-            className="px-2 py-1 text-xs rounded bg-white/10 text-amd-white hover:bg-white/20"
+            className="px-2 py-1 text-xs rounded bg-elevated text-t-primary hover:bg-overlay"
           >
             ⚡ Optimize
           </button>
 
-          <button onClick={handleCopy} className="p-1.5 rounded bg-white/10 text-amd-white hover:bg-white/20" title="Copy">
+          <button onClick={handleCopy} className="p-1.5 rounded bg-elevated text-t-primary hover:bg-overlay" title="Copy">
             <Copy size={14} />
           </button>
 
-          <button onClick={handleDownload} className="p-1.5 rounded bg-white/10 text-amd-white hover:bg-white/20" title="Download">
+          <button onClick={handleDownload} className="p-1.5 rounded bg-elevated text-t-primary hover:bg-overlay" title="Download">
             <Download size={14} />
           </button>
 
           <button
             onClick={() => setWordWrap((w) => !w)}
-            className={`p-1.5 rounded ${wordWrap ? 'bg-amd-red/15 text-amd-red' : 'bg-white/10 text-amd-white'} hover:bg-white/20`}
+            className={`p-1.5 rounded ${wordWrap ? 'bg-amd-red/15 text-amd-red' : 'bg-elevated text-t-primary'} hover:bg-overlay`}
             title="Toggle wrap"
           >
             <WrapText size={14} />
@@ -264,17 +290,33 @@ export default function CodeEditor({
           </div>
         </div>
 
-        <div className="flex-1">
-          <Editor
-            height="100%"
-            language={language}
-            value={content}
-            theme={monacoThemeName}
-            beforeMount={handleBeforeMount}
-            onMount={handleEditorMount}
-            options={options}
-            onChange={(val) => onContentChange?.(val || '')}
-          />
+        <div className="flex-1" style={{ minHeight: '420px', height: editorHeight }}>
+          <MonacoErrorBoundary
+            fallback={(
+              <div className="h-full p-4 bg-surface text-amd-white/80 text-sm overflow-auto">
+                Monaco editor failed to load. You can still edit this file below.
+                <textarea
+                  value={content || ''}
+                  onChange={(e) => onContentChange?.(e.target.value)}
+                  className="mt-3 w-full rounded bg-overlay border border-border-d p-3 text-amd-white outline-none"
+                  style={{ height: 'calc(100% - 48px)' }}
+                />
+              </div>
+            )}
+          >
+            <Editor
+              key="ryflow-monaco-stable"
+              height={editorHeight}
+              language={language}
+              value={content}
+              path={fileName || `untitled.${extensionForLanguage(language)}`}
+              theme={monacoThemeName}
+              beforeMount={handleBeforeMount}
+              onMount={handleEditorMount}
+              options={options}
+              onChange={(val) => onContentChange?.(val || '')}
+            />
+          </MonacoErrorBoundary>
         </div>
       </div>
 

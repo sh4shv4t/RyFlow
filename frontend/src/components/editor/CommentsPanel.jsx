@@ -21,7 +21,7 @@ function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
   const [replyOpen, setReplyOpen] = useState(false);
 
   return (
-    <div className={`rounded-lg border ${item.resolved ? 'border-white/10 bg-white/5 opacity-70' : 'border-amd-orange/30 bg-amd-orange/10'} p-2`} style={{ marginLeft: depth * 14 }}>
+    <div className={`rounded-lg border ${item.resolved ? 'border-border-d bg-surface opacity-70' : 'border-amd-orange/30 bg-amd-orange/10'} p-2`} style={{ marginLeft: depth * 14 }}>
       <button onClick={() => onJump(item)} className="w-full text-left">
         <div className="flex items-center justify-between">
           <span className="text-xs text-amd-white font-medium">{item.author_name}</span>
@@ -39,7 +39,7 @@ function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
 
       {replyOpen ? (
         <div className="mt-2 flex gap-1">
-          <input value={replyText} onChange={(e) => setReplyText(e.target.value)} className="flex-1 bg-amd-gray/60 border border-white/10 rounded px-2 py-1 text-xs text-amd-white" placeholder="Write a reply" />
+          <input value={replyText} onChange={(e) => setReplyText(e.target.value)} className="flex-1 bg-surface border border-border-d rounded px-2 py-1 text-xs text-amd-white" placeholder="Write a reply" />
           <button
             onClick={() => {
               if (!replyText.trim()) return;
@@ -120,14 +120,14 @@ export default function CommentsPanel({ open, comments = [], onRefresh, document
   if (!open) return null;
 
   return (
-    <div className="w-[360px] border-l border-white/10 bg-amd-charcoal/95 p-3 overflow-auto">
+    <div className="w-[360px] border-l border-border-d bg-overlay p-3 overflow-auto">
       <h3 className="font-heading text-amd-white mb-2">Comments</h3>
       <div className="flex gap-1 mb-3">
         {['open', 'resolved', 'all'].map((tab) => (
           <button
             key={tab}
             onClick={() => setFilter(tab)}
-            className={`px-2 py-1 text-xs rounded ${filter === tab ? 'bg-amd-red/20 text-amd-red' : 'bg-white/10 text-amd-white/60'}`}
+            className={`px-2 py-1 text-xs rounded ${filter === tab ? 'bg-amd-red/20 text-amd-red' : 'bg-elevated text-amd-white/60'}`}
           >{tab[0].toUpperCase() + tab.slice(1)}</button>
         ))}
       </div>

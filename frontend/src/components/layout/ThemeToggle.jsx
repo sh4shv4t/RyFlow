@@ -16,8 +16,8 @@ export default function ThemeToggle() {
       whileTap={{ scale: 0.9 }}
       className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
         isDark
-          ? 'text-amd-white/50 hover:text-amd-white hover:bg-white/5'
-          : 'text-gray-500 hover:text-gray-800 hover:bg-black/5'
+          ? 'text-amd-white/50 hover:text-amd-white hover:bg-elevated'
+          : 'text-t-secondary hover:text-t-primary hover:bg-elevated'
       }`}
     >
       <AnimatePresence mode="wait" initial={false}>

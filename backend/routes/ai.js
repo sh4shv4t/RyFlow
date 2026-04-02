@@ -6,15 +6,93 @@ const crypto = require('crypto');
 const ollamaService = require('../services/ollamaService');
 const { getImageUrl, generateImage, createVariations } = require('../services/imageService');
 const { semanticSearch } = require('../services/embeddingService');
-const { buildEmbedText } = require('../services/embeddingService');
 const { getDb } = require('../db/database');
 const { createNode } = require('../services/graphService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
+
+const AMD_STATUS_TTL_MS = 5 * 60 * 1000;
+let amdStatusCache = {
+  expiresAt: 0,
+  value: {
+    gpuDetected: false,
+    gpuName: null,
+    rocmAvailable: false,
+    inferenceMode: 'CPU'
+  }
+};
+
+function detectAmdStatus() {
+  let gpuDetected = false;
+  let gpuName = null;
+  let rocmAvailable = false;
+  let inferenceMode = 'CPU';
+
+  try {
+    const result = execSync('rocm-smi --showproductname', {
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).toString();
+    const gpuLine = result.split('\n').find((l) => l.includes('Card') || l.includes('GPU'));
+    gpuDetected = true;
+    gpuName = gpuLine ? gpuLine.trim() : 'AMD GPU';
+    rocmAvailable = true;
+    inferenceMode = 'AMD ROCm';
+  } catch {
+    try {
+      const wmicResult = execSync('wmic path win32_videocontroller get name', {
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore']
+      }).toString();
+      const lines = wmicResult.split('\n').filter((l) => l.trim() && !l.includes('Name'));
+      if (lines.length > 0) {
+        gpuName = lines[0].trim();
+        gpuDetected = true;
+        if (gpuName.toLowerCase().includes('amd') || gpuName.toLowerCase().includes('radeon')) {
+          inferenceMode = 'AMD GPU (ROCm not detected)';
+        }
+      }
+    } catch {
+      // Keep CPU defaults when no hardware info command succeeds.
+    }
+  }
+
+  return { gpuDetected, gpuName, rocmAvailable, inferenceMode };
+}
+
+function getCachedAmdStatus(force = false) {
+  const now = Date.now();
+  if (!force && now < amdStatusCache.expiresAt) {
+    return amdStatusCache.value;
+  }
+  const detected = detectAmdStatus();
+  amdStatusCache = {
+    value: detected,
+    expiresAt: now + AMD_STATUS_TTL_MS
+  };
+  return detected;
+}
 
 // Builds optional RAG-augmented message list and metadata for AI responses.
 async function buildRagMessages(messages, workspaceId) {
   const safeMessages = Array.isArray(messages) ? [...messages] : [];
   if (!workspaceId || !safeMessages.length) {
+    return { finalMessages: safeMessages, ragUsed: false, citations: [] };
+  }
+
+  let shouldRunRag = false;
+  try {
+    const db = getDb();
+    const row = db.prepare(
+      `SELECT COUNT(*) as c FROM nodes
+       WHERE workspace_id = ?
+       AND embedding IS NOT NULL`
+    ).get(workspaceId);
+    shouldRunRag = (row?.c || 0) > 0;
+  } catch {
+    shouldRunRag = false;
+  }
+
+  if (!shouldRunRag) {
     return { finalMessages: safeMessages, ragUsed: false, citations: [] };
   }
 
@@ -67,52 +145,28 @@ function cleanJsonBlock(text) {
 // GET /api/ai/system-status — Returns GPU, ROCm, and model info
 router.get('/system-status', async (req, res) => {
   try {
-    // Detect AMD ROCm GPU
-    let gpuDetected = false;
-    let gpuName = null;
-    let rocmAvailable = false;
-    let inferenceMode = 'CPU';
-
-    try {
-      const result = execSync('rocm-smi --showproductname', { timeout: 3000 }).toString();
-      const gpuLine = result.split('\n').find(l => l.includes('Card') || l.includes('GPU'));
-      gpuDetected = true;
-      gpuName = gpuLine ? gpuLine.trim() : 'AMD GPU';
-      rocmAvailable = true;
-      inferenceMode = 'AMD ROCm';
-    } catch {
-      // ROCm not available, check for any GPU info
-      try {
-        const wmicResult = execSync('wmic path win32_videocontroller get name', { timeout: 3000 }).toString();
-        const lines = wmicResult.split('\n').filter(l => l.trim() && !l.includes('Name'));
-        if (lines.length > 0) {
-          gpuName = lines[0].trim();
-          gpuDetected = true;
-          if (gpuName.toLowerCase().includes('amd') || gpuName.toLowerCase().includes('radeon')) {
-            inferenceMode = 'AMD GPU (ROCm not detected)';
-          }
-        }
-      } catch {
-        // No GPU detection possible
-      }
-    }
+    const amd = getCachedAmdStatus(String(req.query.refresh || '0') === '1');
 
     // Check Ollama status
     const ollamaRunning = await ollamaService.checkHealth();
-    let modelLoaded = null;
-    if (ollamaRunning) {
-      const models = await ollamaService.listModels();
-      modelLoaded = models.length > 0 ? models[0].name : null;
-    }
+    const models = ollamaRunning ? await ollamaService.listModels() : [];
+    const modelLoaded = models.length > 0 ? models[0].name : null;
 
     res.json({
-      gpuDetected,
-      gpuName,
-      rocmAvailable,
+      gpuDetected: amd.gpuDetected,
+      gpuName: amd.gpuName,
+      rocmAvailable: amd.rocmAvailable,
       modelLoaded,
-      inferenceMode,
+      inferenceMode: amd.inferenceMode,
       ollamaRunning,
-      models: ollamaRunning ? await ollamaService.listModels() : []
+      models,
+      // Legacy snake_case aliases retained for older UI callers.
+      amd_gpu: amd.gpuDetected,
+      gpu_name: amd.gpuName,
+      rocm_available: amd.rocmAvailable,
+      inference_mode: amd.inferenceMode,
+      ollama_running: ollamaRunning,
+      model_loaded: modelLoaded
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -302,12 +356,7 @@ router.post('/study-guide', async (req, res) => {
       message_count: 2,
       rag_used: 0
     });
-    enqueueEmbeddingJob(createdNode.id, buildEmbedText({
-      type: 'ai_chat',
-      title,
-      content_summary: summary,
-      metadata: { model: 'phi3:mini', message_count: 2, rag_used: 0 }
-    }));
+    enqueueEmbeddingJob(createdNode.id, workspace_id);
 
     return res.json(safeGuide);
   } catch (err) {

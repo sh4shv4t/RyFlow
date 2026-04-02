@@ -23,9 +23,12 @@ const useStore = create((set, get) => ({
 
   // Workspace state
   workspace: safeParseJSON('ryflow_workspace', null),
+  workspaceId: safeParseJSON('ryflow_workspace', null)?.id || localStorage.getItem('ryflow_workspace_id') || null,
   setWorkspace: (workspace) => {
     localStorage.setItem('ryflow_workspace', JSON.stringify(workspace));
-    set({ workspace });
+    if (workspace?.id) localStorage.setItem('ryflow_workspace_id', workspace.id);
+    else localStorage.removeItem('ryflow_workspace_id');
+    set({ workspace, workspaceId: workspace?.id || null });
   },
 
   // Tracks whether active session is local or proxied remote.
@@ -101,8 +104,9 @@ const useStore = create((set, get) => ({
     localStorage.removeItem('ryflow_remote_join_code');
     localStorage.removeItem('ryflow_remote_host');
     localStorage.removeItem('ryflow_remote_port');
+    localStorage.removeItem('ryflow_workspace_id');
     localStorage.setItem('ryflow_is_remote', 'false');
-    set({ user: null, workspace: null, remoteMode: false });
+    set({ user: null, workspace: null, workspaceId: null, remoteMode: false });
   }
 }));
 

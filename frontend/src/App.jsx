@@ -15,26 +15,17 @@ import AIStudio from './pages/AIStudio';
 import Settings from './pages/Settings';
 import CodeEditorPage from './pages/CodeEditorPage';
 import CanvasPage from './pages/CanvasPage';
-import Tags from './pages/Tags';
 import WorkspaceManager from './pages/WorkspaceManager';
-import SetupWizard from './pages/SetupWizard';
 import useStore from './store/useStore';
 
 export default function App() {
   const { user, workspace, theme, setWorkspace, setRemoteMode } = useStore();
   const [sessionReady, setSessionReady] = useState(false);
   const [hasActiveSession, setHasActiveSession] = useState(false);
-  const isOnboarded = localStorage.getItem('ryflow_onboarded') === 'true';
-  const setupComplete = localStorage.getItem('ryflow_setup_complete') === 'true';
 
-  // Shows setup wizard only on first launch.
-  if (!setupComplete) {
-    return (
-      <Routes>
-        <Route path="/setup" element={<SetupWizard />} />
-        <Route path="*" element={<Navigate to="/setup" />} />
-      </Routes>
-    );
+  // Remove first-launch wizard friction by marking setup complete immediately.
+  if (localStorage.getItem('ryflow_setup_complete') !== 'true') {
+    localStorage.setItem('ryflow_setup_complete', 'true');
   }
 
   // Restores active local/remote session from backend so app starts in correct mode.
@@ -92,8 +83,19 @@ export default function App() {
   // Defers UI routing until active session status is fetched.
   if (!sessionReady) {
     return (
-      <div className={`h-screen w-screen flex items-center justify-center bg-amd-charcoal ${theme === 'light' ? 'light-mode' : ''}`}>
-        <div className="text-amd-white/60 text-sm">Loading workspace session...</div>
+      <div
+        style={{
+          display: 'flex',
+          height: '100vh',
+          width: '100vw',
+          overflow: 'hidden',
+          backgroundColor: '#111111',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+        className={theme === 'light' ? 'light-mode' : ''}
+      >
+        <div style={{ color: '#999999', fontSize: '13px' }}>Loading workspace session...</div>
       </div>
     );
   }
@@ -101,7 +103,16 @@ export default function App() {
   // Routes to workspace manager when no active session exists.
   if (!hasActiveSession) {
     return (
-      <div className={`min-h-screen bg-amd-charcoal p-6 ${theme === 'light' ? 'light-mode' : ''}`}>
+      <div
+        style={{
+          display: 'flex',
+          height: '100vh',
+          width: '100vw',
+          overflow: 'hidden',
+          backgroundColor: '#111111'
+        }}
+        className={theme === 'light' ? 'light-mode' : ''}
+      >
         <Routes>
           <Route path="/workspaces" element={<WorkspaceManager />} />
           <Route path="*" element={<Navigate to="/workspaces" />} />
@@ -110,18 +121,42 @@ export default function App() {
     );
   }
 
-  // Preserves existing onboarding gate once a workspace session is active.
-  if (!isOnboarded || !user || !workspace) {
+  // Settings remains available when user profile is missing in the active session.
+  if (!user || !workspace) {
     return <Navigate to="/settings" />;
   }
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden bg-amd-charcoal ${theme === 'light' ? 'light-mode' : ''}`}>
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
+        backgroundColor: '#111111'
+      }}
+      className={theme === 'light' ? 'light-mode' : ''}
+    >
       <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div
+        style={{
+          marginLeft: '220px',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          minWidth: 0
+        }}
+      >
         <TopBar />
         <CommandPalette />
-        <main className="flex-1 overflow-auto p-6">
+        <main
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            backgroundColor: '#111111'
+          }}
+        >
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/workspace" element={<Workspace />} />
@@ -134,7 +169,6 @@ export default function App() {
             <Route path="/code/:id" element={<CodeEditorPage />} />
             <Route path="/canvas" element={<CanvasPage />} />
             <Route path="/canvas/:id" element={<CanvasPage />} />
-            <Route path="/tags" element={<Tags />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/workspaces" element={<WorkspaceManager />} />
             <Route path="*" element={<Navigate to="/" />} />

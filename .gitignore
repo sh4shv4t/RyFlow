@@ -30,3 +30,5 @@ backend/uploads/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+TO-DO.md

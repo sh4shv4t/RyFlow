@@ -1,12 +1,11 @@
 // Code editor workspace page with file list, save/load, and AI-augmented Monaco editor
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Code2, FilePlus2, Save, Link as LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
-import TagPicker from '../components/common/TagPicker';
 import BacklinksPanel from '../components/editor/BacklinksPanel';
 
 const LANGUAGE_LABELS = {
@@ -51,31 +50,42 @@ function iconForLanguage(language) {
 export default function CodeEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { workspace, user, setAiActive } = useStore();
+  const { workspace, workspaceId, user, setAiActive } = useStore();
   const [files, setFiles] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isFileLoading, setIsFileLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState(null);
-  const [fileTags, setFileTags] = useState([]);
   const [codeNodeId, setCodeNodeId] = useState(null);
   const [backlinks, setBacklinks] = useState({ incoming: [], outgoing: [], total: 0 });
   const [backlinksOpen, setBacklinksOpen] = useState(false);
   const [backlinksLoading, setBacklinksLoading] = useState(false);
+  const loadingRef = useRef(false);
+  const activeFileRef = useRef(null);
+
+  const resolveWorkspaceId = useCallback(() => {
+    return workspaceId || workspace?.id || localStorage.getItem('ryflow_workspace_id') || null;
+  }, [workspaceId, workspace?.id]);
+
+  useEffect(() => {
+    activeFileRef.current = activeFile;
+  }, [activeFile]);
 
   // Fetches all saved code files for current workspace.
   const fetchFiles = useCallback(async () => {
-    if (!workspace?.id) return;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId) return;
     try {
-      const res = await axios.get('/api/code/list', { params: { workspace_id: workspace.id } });
+      const res = await axios.get('/api/code/list', { params: { workspace_id: activeWorkspaceId } });
       setFiles(res.data.files || []);
     } catch (err) {
       setError('Failed to load code files');
     } finally {
       setLoading(false);
     }
-  }, [workspace?.id]);
+  }, [resolveWorkspaceId]);
 
   useEffect(() => {
     fetchFiles();
@@ -83,28 +93,34 @@ export default function CodeEditorPage() {
 
   // Loads a selected code file by id and updates local editor state.
   const loadFile = useCallback(async (fileId) => {
+    if (!fileId) return;
+    if (loadingRef.current) return;
+    if (fileId === activeFileRef.current?.id) return;
+
+    loadingRef.current = true;
+    setIsFileLoading(true);
+
     try {
       const res = await axios.get(`/api/code/${fileId}`);
       const file = res.data;
       setActiveFile(file);
-      if (workspace?.id) {
-        const tagsRes = await axios.get('/api/tags/by-source', {
-          params: { workspace_id: workspace.id, type: 'code', source_id: file.id }
-        });
-        setFileTags(tagsRes.data.tags || []);
-      }
+      activeFileRef.current = file;
       setLastSavedAt(file.updated_at || file.created_at || null);
       navigate(`/code/${file.id}`);
 
-      if (workspace?.id) {
-        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: 1 } });
+      const activeWorkspaceId = resolveWorkspaceId();
+      if (activeWorkspaceId) {
+        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: activeWorkspaceId, all: 1 } });
         const node = (nodesRes.data.nodes || []).find((n) => n.type === 'code' && n.source_id === file.id);
         setCodeNodeId(node?.id || null);
       }
     } catch (err) {
       toast.error('Failed to load file');
+    } finally {
+      setIsFileLoading(false);
+      loadingRef.current = false;
     }
-  }, [navigate, workspace?.id]);
+  }, [navigate, resolveWorkspaceId]);
 
   // Loads backlinks for current code graph node.
   const loadBacklinks = useCallback(async () => {
@@ -128,13 +144,15 @@ export default function CodeEditorPage() {
   }, [loadBacklinks]);
 
   useEffect(() => {
-    if (!id || !files.length) return;
+    if (!id) return;
     if (activeFile?.id === id) return;
     loadFile(id);
-  }, [id, files.length, activeFile?.id, loadFile]);
+  }, [id, activeFile?.id, loadFile]);
 
   // Creates a new in-memory code file draft.
   const createNewFile = useCallback(() => {
+    loadingRef.current = false;
+    setIsFileLoading(false);
     const now = new Date().toISOString();
     setActiveFile({
       id: null,
@@ -144,41 +162,45 @@ export default function CodeEditorPage() {
       updated_at: now,
       created_at: now
     });
+    activeFileRef.current = {
+      id: null,
+      title: 'untitled.js',
+      content: '',
+      language: 'javascript',
+      updated_at: now,
+      created_at: now
+    };
+    setCodeNodeId(null);
     setLastSavedAt(null);
     navigate('/code');
   }, [navigate]);
 
   // Saves active code file to backend and refreshes sidebar list.
   const saveActiveFile = useCallback(async () => {
-    if (!workspace?.id || !activeFile) return;
+    const snapshot = activeFileRef.current;
+    const activeWorkspaceId = resolveWorkspaceId();
+    if (!activeWorkspaceId || !snapshot) return;
     try {
       setSaving(true);
       setAiActive(true);
-      const normalizedLanguage = activeFile.language || detectLanguageFromFileName(activeFile.title);
+      const normalizedLanguage = snapshot.language || detectLanguageFromFileName(snapshot.title);
       const payload = {
-        id: activeFile.id,
-        workspace_id: workspace.id,
-        title: activeFile.title || 'untitled.js',
-        content: activeFile.content || '',
+        id: snapshot.id,
+        workspace_id: activeWorkspaceId,
+        title: snapshot.title || 'untitled.js',
+        content: snapshot.content || '',
         language: normalizedLanguage,
         created_by: user?.id || null
       };
       const res = await axios.post('/api/code/save', payload);
       const saved = res.data;
       setActiveFile(saved);
+      activeFileRef.current = saved;
       setLastSavedAt(saved.updated_at || saved.created_at || new Date().toISOString());
-      if (workspace?.id && saved.id) {
-        await axios.post('/api/tags/by-source', {
-          workspace_id: workspace.id,
-          type: 'code',
-          source_id: saved.id,
-          tag_ids: fileTags.map((t) => t.id || t)
-        });
-      }
       await fetchFiles();
       if (saved.id) navigate(`/code/${saved.id}`);
-      if (workspace?.id) {
-        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: 1 } });
+      if (activeWorkspaceId) {
+        const nodesRes = await axios.get('/api/graph/nodes', { params: { workspace_id: activeWorkspaceId, all: 1 } });
         const node = (nodesRes.data.nodes || []).find((n) => n.type === 'code' && n.source_id === saved.id);
         setCodeNodeId(node?.id || null);
       }
@@ -190,108 +212,109 @@ export default function CodeEditorPage() {
       setSaving(false);
       setAiActive(false);
     }
-  }, [workspace?.id, activeFile, user?.id, fetchFiles, navigate, setAiActive, fileTags, loadBacklinks]);
-
-  const saveTags = async (nextTags) => {
-    setFileTags(nextTags);
-    if (!workspace?.id || !activeFile?.id) return;
-    try {
-      await axios.post('/api/tags/by-source', {
-        workspace_id: workspace.id,
-        type: 'code',
-        source_id: activeFile.id,
-        tag_ids: nextTags.map((t) => t.id || t)
-      });
-    } catch {
-      toast.error('Failed to save code tags');
-    }
-  };
+  }, [resolveWorkspaceId, user?.id, fetchFiles, navigate, setAiActive, loadBacklinks]);
 
   // Updates local file title and infers language from extension when possible.
   const handleTitleChange = useCallback((title) => {
     setActiveFile((prev) => {
       if (!prev) return prev;
       const inferred = detectLanguageFromFileName(title);
-      return { ...prev, title, language: inferred || prev.language };
+      const next = { ...prev, title, language: inferred || prev.language };
+      activeFileRef.current = next;
+      return next;
     });
   }, []);
 
   // Updates local file content in editor state.
   const handleContentChange = useCallback((next) => {
-    setActiveFile((prev) => (prev ? { ...prev, content: next } : prev));
+    setActiveFile((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, content: next };
+      activeFileRef.current = updated;
+      return updated;
+    });
   }, []);
 
   // Updates local file language from explicit selector change.
   const handleLanguageChange = useCallback((language) => {
-    setActiveFile((prev) => (prev ? { ...prev, language } : prev));
+    setActiveFile((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, language };
+      activeFileRef.current = updated;
+      return updated;
+    });
   }, []);
 
   const languageBadge = useMemo(() => LANGUAGE_LABELS[activeFile?.language] || 'Unknown', [activeFile?.language]);
 
   return (
-    <div className="h-full flex gap-4">
-      <aside className="w-72 glass-card p-3 overflow-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading text-amd-white">Code Files</h2>
-          <button onClick={createNewFile} className="p-2 rounded-lg bg-amd-red/15 text-amd-red hover:bg-amd-red/25" title="New file">
+    <div style={{ backgroundColor: '#111111', height: '100%', display: 'flex' }}>
+      <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid #242424', padding: '12px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666' }}>Code Files</p>
+          <button onClick={createNewFile} style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="New file">
             <FilePlus2 size={14} />
           </button>
         </div>
 
         {loading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => <div key={i} className="skeleton-loader h-12 rounded" />)}
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {[1, 2, 3].map((i) => <div key={i} style={{ height: '44px', borderRadius: '6px', backgroundColor: '#1A1A1A', border: '1px solid #333333' }} />)}
           </div>
         ) : files.length === 0 ? (
-          <div className="text-xs text-amd-white/40">No code files yet. Create your first file.</div>
+          <div style={{ fontSize: '12px', color: '#666666' }}>No code files yet. Create your first file.</div>
         ) : (
-          <div className="space-y-2">
+          <div style={{ display: 'grid', gap: '6px' }}>
             {files.map((f) => (
               <button
                 key={f.id}
                 onClick={() => loadFile(f.id)}
-                className={`w-full text-left p-2 rounded-lg border transition-colors ${activeFile?.id === f.id ? 'border-amd-red/40 bg-amd-red/10' : 'border-white/10 hover:border-white/20'}`}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: activeFile?.id === f.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                  backgroundColor: activeFile?.id === f.id ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
+                  cursor: 'pointer'
+                }}
               >
-                <div className="text-sm text-amd-white truncate">{iconForLanguage(f.language)} {f.title}</div>
-                <div className="text-[10px] text-amd-white/40 mt-1">{new Date(f.updated_at || f.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{iconForLanguage(f.language)} {f.title}</div>
+                <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(f.updated_at || f.created_at).toLocaleString()}</div>
               </button>
             ))}
           </div>
         )}
       </aside>
 
-      <section className="flex-1 flex flex-col gap-3">
-        <div className="glass-card p-3 flex items-center gap-3">
+      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <input
             value={activeFile?.title || ''}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="File name"
-            className="flex-1 bg-amd-gray/50 border border-white/10 rounded px-3 py-2 text-amd-white outline-none"
+            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1 }}
           />
-          <span className="text-xs px-2 py-1 rounded-full border border-white/10 text-amd-white/70">{languageBadge}</span>
-          <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} className="text-xs px-2 py-1 rounded bg-white/10 text-amd-white/70 relative">
-            <LinkIcon size={12} className="inline mr-1" /> Backlinks
-            {Number(backlinks.total || 0) > 0 ? <span className="ml-1 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-amd-red text-white text-[10px]">{backlinks.total}</span> : null}
+          <span style={{ backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#999999' }}>{languageBadge}</span>
+          <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} style={{ height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', padding: '0 8px', fontSize: '11px', cursor: 'pointer', position: 'relative' }}>
+            <LinkIcon size={12} style={{ display: 'inline', marginRight: '4px' }} /> Backlinks
+            {Number(backlinks.total || 0) > 0 ? <span style={{ marginLeft: '4px', display: 'inline-flex', minWidth: '14px', height: '14px', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '10px', padding: '0 4px' }}>{backlinks.total}</span> : null}
           </button>
-          <span className="text-xs text-amd-white/40">Last saved: {lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : 'Not saved yet'}</span>
-          <button onClick={saveActiveFile} disabled={!activeFile || saving} className="px-3 py-2 rounded-lg bg-amd-red text-white disabled:opacity-50 flex items-center gap-2">
+          <span style={{ fontSize: '11px', color: '#666666' }}>Last saved: {lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : 'Not saved yet'}</span>
+          <button onClick={saveActiveFile} disabled={!activeFile || saving} style={{ height: '30px', padding: '0 12px', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', border: 'none', borderRadius: '6px', cursor: !activeFile || saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: !activeFile || saving ? 0.6 : 1 }}>
             <Save size={14} /> {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
 
-        {activeFile && (
-          <TagPicker value={fileTags} onChange={saveTags} compact />
-        )}
-
         {!activeFile ? (
-          <div className="flex-1 glass-card flex items-center justify-center text-amd-white/40">
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666666' }}>
             <div className="text-center">
               <Code2 size={32} className="mx-auto mb-2 text-amd-red/40" />
               Select a code file or create a new one.
             </div>
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex">
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', position: 'relative', height: 'calc(100vh - 96px)' }}>
             <CodeEditor
               fileName={activeFile.title}
               language={activeFile.language || 'javascript'}
@@ -299,6 +322,11 @@ export default function CodeEditorPage() {
               onContentChange={handleContentChange}
               onLanguageChange={handleLanguageChange}
             />
+            {isFileLoading && (
+              <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(17,17,17,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999999', fontSize: '13px', zIndex: 5 }}>
+                Loading file...
+              </div>
+            )}
             <BacklinksPanel
               open={backlinksOpen}
               loading={backlinksLoading}
@@ -316,7 +344,7 @@ export default function CodeEditorPage() {
           </div>
         )}
 
-        {error && <div className="text-xs text-amd-orange">{error}</div>}
+        {error && <div style={{ fontSize: '12px', color: '#B85C00', padding: '8px 16px' }}>{error}</div>}
       </section>
     </div>
   );

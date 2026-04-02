@@ -25,7 +25,7 @@ function BacklinkItem({ entry, incoming, onOpen }) {
   return (
     <button
       onClick={() => onOpen?.(entry, incoming)}
-      className="w-full text-left rounded-lg bg-white/5 hover:bg-white/10 p-2 border border-white/10"
+      className="w-full text-left rounded-lg bg-surface hover:bg-elevated p-2 border border-border-d"
     >
       <div className="flex items-center gap-2">
         <span className={TYPE_COLOR[entry.type] || 'text-amd-white/60'}>{TYPE_ICON[entry.type] || '🔗'}</span>
@@ -45,7 +45,7 @@ export default function BacklinksPanel({ open, loading, backlinks, onClose, onOp
   const empty = !loading && incoming.length === 0 && outgoing.length === 0;
 
   return (
-    <div className="w-[360px] border-l border-white/10 bg-amd-charcoal/95 p-3 overflow-auto">
+    <div className="w-[360px] border-l border-border-d bg-overlay p-3 overflow-auto">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-heading text-amd-white">Backlinks</h3>
         <button onClick={onClose} className="text-amd-white/50 hover:text-amd-white"><X size={14} /></button>
@@ -54,7 +54,7 @@ export default function BacklinksPanel({ open, loading, backlinks, onClose, onOp
       {loading ? <div className="text-sm text-amd-white/50">Loading backlinks...</div> : null}
 
       {empty ? (
-        <div className="rounded-lg bg-white/5 border border-white/10 p-3 text-sm text-amd-white/55">
+        <div className="rounded-lg bg-surface border border-border-d p-3 text-sm text-amd-white/55">
           No connections yet. Save this document to start building your knowledge graph.
         </div>
       ) : null}

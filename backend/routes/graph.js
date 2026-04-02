@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { createNode, getGraph, addEdge, deleteNode } = require('../services/graphService');
+const { createNode, getGraph, addEdge, deleteNode, backfillKeywordEdges } = require('../services/graphService');
 const { semanticSearch, parseMetadata } = require('../services/embeddingService');
 
 // GET /api/graph — Get full knowledge graph for a workspace
@@ -23,7 +23,7 @@ router.get('/nodes', (req, res) => {
   try {
     const { workspace_id } = req.query;
     const loadAll = String(req.query.all || '0') === '1';
-    const limit = Math.max(10, Math.min(1000, Number(req.query.limit || 200)));
+    const limit = parseInt(req.query.limit, 10) || 200;
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
     const nodes = (loadAll
@@ -195,6 +195,18 @@ router.get('/backlinks/:node_id', (req, res) => {
       outgoing,
       total: Number(incoming.length) + Number(outgoing.length)
     });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/graph/backfill-keyword-edges — Build deterministic keyword edges for existing nodes.
+router.post('/backfill-keyword-edges', (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+    const result = backfillKeywordEdges(workspaceId);
+    return res.json({ success: true, ...result });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

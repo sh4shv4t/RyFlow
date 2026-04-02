@@ -1,12 +1,21 @@
 // Canvas workspace page with sidebar list, save/load flow, and Excalidraw integration
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Plus, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import RyCanvas from '../components/canvas/RyCanvas';
-import TagPicker from '../components/common/TagPicker';
+
+function parseMaybeJSON(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+}
 
 // Renders the full-page canvas workspace with saved-canvas sidebar.
 export default function CanvasPage() {
@@ -18,7 +27,7 @@ export default function CanvasPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('Idle');
-  const [canvasTags, setCanvasTags] = useState([]);
+  const latestSceneRef = useRef({ elements: [], appState: {} });
 
   // Fetches saved canvas list for the active workspace.
   const fetchCanvases = useCallback(async () => {
@@ -44,15 +53,13 @@ export default function CanvasPage() {
       const c = res.data;
       setActiveCanvas({
         ...c,
-        elements: JSON.parse(c.elements || '[]'),
-        app_state: JSON.parse(c.app_state || '{}')
+        elements: parseMaybeJSON(c.elements, []),
+        app_state: parseMaybeJSON(c.app_state, {})
       });
-      if (workspace?.id) {
-        const tagsRes = await axios.get('/api/tags/by-source', {
-          params: { workspace_id: workspace.id, type: 'canvas', source_id: c.id }
-        });
-        setCanvasTags(tagsRes.data.tags || []);
-      }
+      latestSceneRef.current = {
+        elements: parseMaybeJSON(c.elements, []),
+        appState: parseMaybeJSON(c.app_state, {})
+      };
       navigate(`/canvas/${c.id}`);
     } catch (err) {
       toast.error('Failed to load canvas');
@@ -72,66 +79,72 @@ export default function CanvasPage() {
       elements: [],
       app_state: {}
     });
+    latestSceneRef.current = { elements: [], appState: {} };
     navigate('/canvas');
   }, [navigate]);
 
-  // Persists the active canvas to backend and refreshes sidebar list.
-  const saveCanvas = useCallback(async ({ elements, appState }) => {
+  // Persists the active canvas to backend and supports silent autosave.
+  const saveCanvas = useCallback(async ({ elements, appState }, options = {}) => {
     if (!workspace?.id || !activeCanvas) return;
+    const silent = Boolean(options.silent);
 
     try {
-      setSaving(true);
-      setSaveStatus('Saving...');
+      if (!silent) {
+        setSaving(true);
+        setSaveStatus('Saving...');
+      } else {
+        setSaveStatus('Auto-saving...');
+      }
+
       const payload = {
         id: activeCanvas.id,
         workspace_id: workspace.id,
         title: activeCanvas.title || 'Untitled Canvas',
-        elements: JSON.stringify(elements || []),
-        app_state: JSON.stringify(appState || {}),
+        elements: elements || [],
+        app_state: appState || {},
         thumbnail: null,
         created_by: user?.id || null
       };
-      const res = await axios.post('/api/canvas/save', payload);
+      const res = await axios.post('/api/canvas/save', payload, { timeout: 20000 });
       const saved = res.data;
       setActiveCanvas({
         ...saved,
-        elements: JSON.parse(saved.elements || '[]'),
-        app_state: JSON.parse(saved.app_state || '{}')
+        elements: parseMaybeJSON(saved.elements, []),
+        app_state: parseMaybeJSON(saved.app_state, {})
       });
-      setSaveStatus('Saved');
-      if (workspace?.id && saved.id) {
-        await axios.post('/api/tags/by-source', {
-          workspace_id: workspace.id,
-          type: 'canvas',
-          source_id: saved.id,
-          tag_ids: canvasTags.map((t) => t.id || t)
-        });
-      }
-      await fetchCanvases();
-      if (saved.id) navigate(`/canvas/${saved.id}`);
-      toast.success('Canvas saved');
-    } catch (err) {
-      setSaveStatus('Save failed');
-      toast.error('Failed to save canvas');
-    } finally {
-      setSaving(false);
-    }
-  }, [activeCanvas, fetchCanvases, navigate, user?.id, workspace?.id, canvasTags]);
 
-  const saveTags = async (nextTags) => {
-    setCanvasTags(nextTags);
-    if (!workspace?.id || !activeCanvas?.id) return;
-    try {
-      await axios.post('/api/tags/by-source', {
-        workspace_id: workspace.id,
-        type: 'canvas',
-        source_id: activeCanvas.id,
-        tag_ids: nextTags.map((t) => t.id || t)
+      setCanvases((prev) => {
+        const nextItem = {
+          id: saved.id,
+          workspace_id: saved.workspace_id,
+          title: saved.title,
+          thumbnail: saved.thumbnail,
+          created_by: saved.created_by,
+          updated_at: saved.updated_at,
+          created_at: saved.created_at
+        };
+        const filtered = prev.filter((c) => c.id !== saved.id);
+        return [nextItem, ...filtered];
       });
-    } catch {
-      toast.error('Failed to save canvas tags');
+
+      setSaveStatus(silent ? 'Auto-saved' : 'Saved');
+      if (saved.id && saved.id !== activeCanvas.id) {
+        navigate(`/canvas/${saved.id}`);
+      }
+      if (!silent) {
+        toast.success('Canvas saved');
+      }
+    } catch (err) {
+      setSaveStatus(silent ? 'Auto-save failed' : 'Save failed');
+      if (!silent) {
+        toast.error('Failed to save canvas');
+      }
+    } finally {
+      if (!silent) {
+        setSaving(false);
+      }
     }
-  };
+  }, [activeCanvas, navigate, user?.id, workspace?.id]);
 
   // Updates active canvas title in local state.
   const handleTitleChange = useCallback((title) => {
@@ -141,55 +154,66 @@ export default function CanvasPage() {
   const collaborators = useMemo(() => [user?.name || 'You'], [user?.name]);
 
   return (
-    <div className="h-full flex gap-4">
-      <aside className="w-72 glass-card p-3 overflow-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-heading text-amd-white">Canvases</h2>
-          <button onClick={createCanvas} className="p-2 rounded bg-amd-red/15 text-amd-red hover:bg-amd-red/25">
+    <div style={{ backgroundColor: '#111111', height: '100%', display: 'flex' }}>
+      <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid #242424', padding: '12px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666' }}>Canvases</p>
+          <button onClick={createCanvas} style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Plus size={14} />
           </button>
         </div>
 
         {loading ? (
-          <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="skeleton-loader h-12 rounded" />)}</div>
+          <div style={{ display: 'grid', gap: '6px' }}>{[1, 2, 3].map((i) => <div key={i} style={{ height: '44px', borderRadius: '6px', backgroundColor: '#1A1A1A', border: '1px solid #333333' }} />)}</div>
         ) : canvases.length === 0 ? (
-          <div className="text-xs text-amd-white/40">No saved canvases yet.</div>
+          <div style={{ fontSize: '12px', color: '#666666' }}>No saved canvases yet.</div>
         ) : (
-          <div className="space-y-2">
+          <div style={{ display: 'grid', gap: '6px' }}>
             {canvases.map((c) => (
               <button
                 key={c.id}
                 onClick={() => loadCanvas(c.id)}
-                className={`w-full text-left p-2 rounded-lg border transition-colors ${activeCanvas?.id === c.id ? 'border-amd-red/40 bg-amd-red/10' : 'border-white/10 hover:border-white/20'}`}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  border: activeCanvas?.id === c.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
+                  backgroundColor: activeCanvas?.id === c.id ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
+                  cursor: 'pointer'
+                }}
               >
-                <div className="text-sm text-amd-white truncate">🧭 {c.title}</div>
-                <div className="text-[10px] text-amd-white/40 mt-1">{new Date(c.updated_at || c.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>🧭 {c.title}</div>
+                <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(c.updated_at || c.created_at).toLocaleString()}</div>
               </button>
             ))}
           </div>
         )}
       </aside>
 
-      <section className="flex-1 flex flex-col gap-3 min-h-0">
-        <div className="glass-card p-3 flex items-center gap-3">
-          <div className="font-heading text-amd-white">{activeCanvas?.title || 'Untitled Canvas'}</div>
-          <div className="text-xs text-amd-white/40">{saveStatus}</div>
-          <div className="text-xs text-amd-white/40">Collaborators: {collaborators.join(', ')}</div>
+      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <input
+            value={activeCanvas?.title || ''}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="Untitled Canvas"
+            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1 }}
+          />
+          <span style={{ backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#999999' }}>{saveStatus}</span>
+          <span style={{ fontSize: '11px', color: '#666666' }}>Collaborators: {collaborators.join(', ')}</span>
           <button
-            onClick={() => saveCanvas({ elements: activeCanvas?.elements || [], appState: activeCanvas?.app_state || {} })}
+            onClick={() => saveCanvas(latestSceneRef.current || { elements: activeCanvas?.elements || [], appState: activeCanvas?.app_state || {} })}
             disabled={!activeCanvas || saving}
-            className="ml-auto px-3 py-2 rounded-lg bg-amd-red text-white disabled:opacity-50 flex items-center gap-1"
+            style={{ marginLeft: 'auto', height: '30px', padding: '0 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: !activeCanvas || saving ? 'not-allowed' : 'pointer', opacity: !activeCanvas || saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Save size={14} /> Save
           </button>
         </div>
 
-        {activeCanvas && <TagPicker value={canvasTags} onChange={saveTags} compact />}
-
         {!activeCanvas ? (
-          <div className="flex-1 glass-card flex items-center justify-center text-amd-white/40">Create or select a canvas.</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666666' }}>Create or select a canvas.</div>
         ) : (
-          <div className="flex-1 min-h-0">
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <RyCanvas
               canvasId={activeCanvas.id}
               title={activeCanvas.title || ''}
@@ -197,6 +221,9 @@ export default function CanvasPage() {
               appState={activeCanvas.app_state || {}}
               onTitleChange={handleTitleChange}
               onSave={saveCanvas}
+              onSceneChange={(scene) => {
+                latestSceneRef.current = scene;
+              }}
             />
           </div>
         )}
