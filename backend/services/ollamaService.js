@@ -1,7 +1,9 @@
 // Wrapper for all Ollama LLM API calls (chat, generate, list models)
 const fetch = require('node-fetch');
 
-const OLLAMA_BASE = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_BASE =
+  process.env.OLLAMA_HOST ||
+  'http://localhost:11434';
 
 let _available = null;
 let _lastPing = 0;

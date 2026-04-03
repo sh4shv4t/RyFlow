@@ -1,11 +1,13 @@
 // Per-workspace SQLite connection manager for portable workspace databases.
 const Database = require('better-sqlite3');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // Stores workspace database files on disk.
-const DATA_DIR = process.env.RYFLOW_DATA_DIR || path.join(os.homedir(), '.ryflow', 'workspaces');
+const DATA_DIR =
+  process.env.RYFLOW_DATA_DIR ||
+  path.join(require('os').homedir(),
+    '.ryflow', 'workspaces');
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });

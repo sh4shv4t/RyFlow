@@ -1,21 +1,34 @@
 // Electron main process — starts Express backend then opens React window
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
-const { fork } = require('child_process');
+const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess;
 
 const BACKEND_PORT = 3001;
-const DEV_URL = `http://localhost:5173`;
-const PROD_URL = `http://localhost:${BACKEND_PORT}`;
 
 function startBackend() {
   return new Promise((resolve, reject) => {
-    const serverPath = path.join(__dirname, '..', 'backend', 'index.js');
-    backendProcess = fork(serverPath, [], {
-      env: { ...process.env, PORT: BACKEND_PORT },
-      silent: true,
+    const isDev = !app.isPackaged;
+
+    const backendPath = isDev
+      ? path.join(__dirname, '..', 'backend', 'index.js')
+      : path.join(process.resourcesPath, 'backend', 'index.js');
+
+    const backendCwd = isDev
+      ? path.join(__dirname, '..', 'backend')
+      : path.join(process.resourcesPath, 'backend');
+
+    backendProcess = spawn('node', [backendPath], {
+      cwd: backendCwd,
+      env: {
+        ...process.env,
+        PORT: String(BACKEND_PORT),
+        OLLAMA_HOST: 'http://localhost:11434',
+        RYFLOW_DATA_DIR: path.join(app.getPath('userData'), 'workspaces')
+      },
+      stdio: 'pipe'
     });
 
     let settled = false;
@@ -56,26 +69,34 @@ function startBackend() {
 }
 
 async function createWindow() {
+  const isDev = !app.isPackaged;
+  const startUrl = isDev
+    ? 'http://localhost:5173'
+    : `file://${path.join(__dirname, '..', 'frontend', 'dist', 'index.html')}`;
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 900,
-    minHeight: 600,
+    minWidth: 1100,
+    minHeight: 700,
     title: 'RyFlow',
     backgroundColor: '#1A1A1A',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false,
+      nodeIntegration: false
     },
     titleBarStyle: 'hiddenInset',
+    show: false,
     frame: process.platform !== 'darwin',
   });
 
-  const isDev = !app.isPackaged;
-  const url = isDev ? DEV_URL : PROD_URL;
-  await mainWindow.loadURL(url);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
+
+  await mainWindow.loadURL(startUrl);
 
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -103,7 +124,7 @@ app.on('ready', async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (backendProcess) backendProcess.kill();
+  if (backendProcess && !backendProcess.killed) backendProcess.kill('SIGTERM');
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -112,5 +133,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
-  if (backendProcess) backendProcess.kill();
+  if (backendProcess && !backendProcess.killed) {
+    backendProcess.kill('SIGTERM');
+  }
 });

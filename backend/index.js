@@ -22,6 +22,8 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+process.env.OLLAMA_HOST = OLLAMA_HOST;
 
 // Detects primary LAN IPv4 address for discoverability endpoints.
 function getLocalIP() {
@@ -170,6 +172,7 @@ io.on('connection', (socket) => {
 // Start the server
 server.listen(PORT, '0.0.0.0', () => {
   console.log('RyFlow backend listening on port 3001');
+  console.log(`Ollama host: ${OLLAMA_HOST}`);
   console.log('LAN access enabled');
   console.log(`📡 Socket.io signaling active at ${LOCAL_IP}:${PORT}`);
 
