@@ -1,251 +1,248 @@
-// Excalidraw-based canvas component with save/export/describe controls
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { Eraser, ImageDown, Save, Sparkles, X, Zap } from 'lucide-react';
-import toast from 'react-hot-toast';
-import useStore from '../../store/useStore';
+import { Save, Download, Sparkles } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
-import LZString from 'lz-string';
 
-// Creates initial Excalidraw data with RyFlow watermark text.
-function initialCanvasData(title) {
-  return {
-    elements: [
-      {
-        id: 'ryflow-watermark',
-        type: 'text',
-        x: 40,
-        y: 30,
-        width: 220,
-        height: 20,
-        angle: 0,
-        strokeColor: '#E8000D',
-        backgroundColor: 'transparent',
-        fillStyle: 'solid',
-        strokeWidth: 1,
-        strokeStyle: 'solid',
-        roughness: 1,
-        opacity: 35,
-        groupIds: [],
-        seed: 1,
-        version: 1,
-        versionNonce: 1,
-        isDeleted: false,
-        boundElements: null,
-        updated: Date.now(),
-        link: null,
-        locked: false,
-        text: `RyFlow Canvas • ${title || 'Untitled'}`,
-        fontSize: 18,
-        fontFamily: 3,
-        textAlign: 'left',
-        verticalAlign: 'top',
-        baseline: 16,
-        containerId: null,
-        originalText: `RyFlow Canvas • ${title || 'Untitled'}`,
-        lineHeight: 1.25
-      }
-    ],
-    appState: {
-      viewBackgroundColor: '#1A1A1A',
-      theme: 'dark'
-    }
-  };
-}
+export default function RyCanvas({
+  canvasId,
+  workspaceId,
+  initialTitle,
+  onSaved
+}) {
+  const [title, setTitle] = useState(
+    initialTitle || 'Untitled Canvas'
+  );
+  const [saveStatus, setSaveStatus] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [initialData, setInitialData] = useState(null);
+  const [aiDescription, setAiDescription] =
+    useState('');
+  const [showAiPanel, setShowAiPanel] =
+    useState(false);
+  const [isDescribing, setIsDescribing] =
+    useState(false);
 
-// Renders an Excalidraw canvas with save/export/describe actions.
-export default function RyCanvas({ canvasId, title, elements, appState, onTitleChange, onSave, onSceneChange }) {
-  const excalidrawRef = useRef(null);
-  const draftTimerRef = useRef(null);
-  const saveTimer = useRef(null);
   const elementsRef = useRef([]);
   const appStateRef = useRef({});
-  const latestSceneRef = useRef({ elements: [], appState: {} });
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiText, setAiText] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('Saved');
-  const { workspace, selectedModel, setAiActive } = useStore();
+  const saveTimerRef = useRef(null);
+  const isSavingRef = useRef(false);
+  const excalidrawApiRef = useRef(null);
+  const titleRef = useRef(title);
 
-  const draftKey = useMemo(() => `ryflow_canvas_draft_${canvasId || 'new'}`, [canvasId]);
-
-  // Restores compressed local draft if available.
-  const initialDraft = useMemo(() => {
-    try {
-      const compressed = localStorage.getItem(draftKey);
-      if (!compressed) return null;
-      const json = LZString.decompress(compressed) || compressed;
-      return JSON.parse(json);
-    } catch {
-      return null;
-    }
-  }, [draftKey]);
-
-  const initialData = useMemo(() => {
-    const base = initialCanvasData(title);
-    const resolved = {
-      ...base,
-      elements: Array.isArray(elements)
-        ? elements
-        : (Array.isArray(initialDraft?.elements) ? initialDraft.elements : base.elements),
-      appState: appState || initialDraft?.appState || base.appState
-    };
-    elementsRef.current = resolved.elements || [];
-    appStateRef.current = resolved.appState || {};
-    latestSceneRef.current = {
-      elements: elementsRef.current,
-      appState: appStateRef.current
-    };
-    return resolved;
-  }, [title, elements, appState, initialDraft]);
-
-  const doSave = useCallback(async (nextElements, nextAppState, options = {}) => {
-    if (!onSave) return;
-    const silent = Boolean(options.silent);
-    setSaveStatus('Saving...');
-    try {
-      await onSave({ elements: nextElements, appState: nextAppState }, { silent });
-      setSaveStatus('Saved');
-    } catch {
-      setSaveStatus('Save failed');
-    }
-  }, [onSave]);
-
-  const debouncedSave = useCallback(() => {
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      doSave(elementsRef.current, appStateRef.current, { silent: true });
-    }, 2500);
-  }, [doSave]);
-
-  // Persists local draft in localStorage whenever canvas content changes.
-  const handleCanvasChange = useCallback((nextElements, nextAppState) => {
-    elementsRef.current = nextElements || [];
-    appStateRef.current = nextAppState || {};
-    latestSceneRef.current = {
-      elements: elementsRef.current,
-      appState: appStateRef.current
-    };
-    onSceneChange?.(latestSceneRef.current);
-
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
-    draftTimerRef.current = setTimeout(() => {
-      localStorage.setItem(draftKey, LZString.compress(JSON.stringify(latestSceneRef.current)));
-    }, 800);
-
-    debouncedSave();
-  }, [draftKey, onSceneChange, debouncedSave]);
-
-  // Saves current canvas state through page-level callback.
-  const handleSave = useCallback(async () => {
-    const api = excalidrawRef.current;
-    if (!api || !onSave) return;
-    elementsRef.current = api.getSceneElements();
-    appStateRef.current = api.getAppState();
-    latestSceneRef.current = {
-      elements: elementsRef.current,
-      appState: appStateRef.current
-    };
-    clearTimeout(saveTimer.current);
-    await doSave(elementsRef.current, appStateRef.current, { silent: false });
-  }, [doSave, onSave]);
-
-  // Clears pending autosave timer when canvas unmounts.
+  // Keep titleRef in sync.
   useEffect(() => {
-    return () => {
-      clearTimeout(saveTimer.current);
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-      }
-      if (latestSceneRef.current?.elements?.length || latestSceneRef.current?.appState) {
-        localStorage.setItem(draftKey, LZString.compress(JSON.stringify(latestSceneRef.current)));
-      }
-    };
-  }, [draftKey]);
-
-  // Exports current canvas scene to PNG and triggers browser download.
-  const handleExportPng = useCallback(async () => {
-    const api = excalidrawRef.current;
-    if (!api) return;
-    const blob = await exportToBlob({
-      elements: api.getSceneElements(),
-      appState: api.getAppState(),
-      files: api.getFiles(),
-      mimeType: 'image/png'
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title || 'canvas'}.png`;
-    a.click();
-    URL.revokeObjectURL(url);
+    titleRef.current = title;
   }, [title]);
 
-  // Sends a canvas structural summary to local LLM and streams back explanation text.
-  const handleDescribeCanvas = useCallback(async () => {
-    const api = excalidrawRef.current;
-    if (!api) return;
+  // Load existing canvas on mount.
+  useEffect(() => {
+    if (!canvasId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    apiFetch(`/api/canvas/${canvasId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          if (data.title) setTitle(data.title);
+          let elements = [];
+          let appState = {};
+          try {
+            elements = typeof data.elements === 'string'
+              ? JSON.parse(data.elements)
+              : (data.elements || []);
+          } catch {}
+          try {
+            appState = typeof data.app_state === 'string'
+              ? JSON.parse(data.app_state)
+              : (data.app_state || {});
+          } catch {}
+          elementsRef.current = elements;
+          appStateRef.current = appState;
+          setInitialData({ elements, appState });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, [canvasId]);
+
+  const performSave = useCallback(async () => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+    setSaveStatus('Saving...');
 
     try {
-      const sceneElements = api.getSceneElements();
-      const prompt = `Describe what is drawn in this diagram in detail. Identify shapes, connections, labels, and what concept this diagram represents.\n\nCanvas elements JSON:\n${JSON.stringify(sceneElements)}`;
-
-      setAiOpen(true);
-      setAiText('');
-      setAiLoading(true);
-      setAiActive(true);
-
-      const response = await apiFetch('/api/ai/chat/stream', {
+      const res = await apiFetch('/api/canvas/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          workspace_id: workspace?.id || null,
-          model: selectedModel,
-          messages: [{ role: 'user', content: prompt }]
+          id: canvasId,
+          workspace_id: workspaceId,
+          title: titleRef.current,
+          elements: JSON.stringify(
+            elementsRef.current || []
+          ),
+          app_state: JSON.stringify(
+            appStateRef.current || {}
+          ),
+          created_by: null
         })
       });
 
-      if (!response.ok || !response.body) throw new Error('Unable to open AI stream');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Save failed');
+      }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let full = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6);
-          if (raw === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(raw);
-            if (parsed.text) {
-              full += parsed.text;
-              setAiText(full);
-            }
-          } catch {
-            // Ignore malformed stream frames.
-          }
-        }
+      const saved = await res.json();
+      setSaveStatus('Saved');
+      setTimeout(() => setSaveStatus(''), 2000);
+
+      if (onSaved) {
+        onSaved({
+          id: canvasId,
+          title: titleRef.current,
+          updated_at: new Date().toISOString(),
+          ...saved
+        });
       }
     } catch (err) {
-      toast.error(`Canvas description failed: ${err.message}`);
+      console.error('[Canvas save]', err);
+      setSaveStatus('Save failed');
+      setTimeout(() => setSaveStatus(''), 3000);
     } finally {
-      setAiLoading(false);
-      setAiActive(false);
+      isSavingRef.current = false;
     }
-  }, [selectedModel, setAiActive, workspace?.id]);
+  }, [canvasId, workspaceId, onSaved]);
 
-  // Clears canvas content after a user confirmation.
-  const handleClear = useCallback(() => {
-    if (!window.confirm('Clear this canvas? This cannot be undone.')) return;
-    const api = excalidrawRef.current;
-    if (!api) return;
-    api.updateScene({ elements: [] });
+  const debouncedSave = useCallback(() => {
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      performSave();
+    }, 2500);
+  }, [performSave]);
+
+  // Cleanup timer on unmount.
+  useEffect(() => {
+    return () => {
+      clearTimeout(saveTimerRef.current);
+    };
   }, []);
+
+  function handleChange(elements, appState) {
+    elementsRef.current = elements || [];
+    appStateRef.current = appState || {};
+    debouncedSave();
+  }
+
+  async function handleExport() {
+    if (!excalidrawApiRef.current) return;
+    try {
+      const blob = await exportToBlob({
+        elements: elementsRef.current,
+        appState: {
+          ...appStateRef.current,
+          exportWithDarkMode: true
+        },
+        files: excalidrawApiRef.current.getFiles()
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${titleRef.current}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[Canvas export]', err);
+    }
+  }
+
+  async function handleDescribe() {
+    if (isDescribing) return;
+    if (!excalidrawApiRef.current) return;
+
+    const elements = elementsRef.current;
+    if (!elements || elements.length === 0) {
+      setAiDescription(
+        'Canvas is empty. Draw something first.'
+      );
+      setShowAiPanel(true);
+      return;
+    }
+
+    setIsDescribing(true);
+    setShowAiPanel(true);
+    setAiDescription('Describing canvas...');
+
+    try {
+      const blob = await exportToBlob({
+        elements,
+        appState: {
+          ...appStateRef.current,
+          exportWithDarkMode: false,
+          exportBackground: true
+        },
+        files: excalidrawApiRef.current.getFiles(),
+        mimeType: 'image/png'
+      });
+
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = String(reader.result || '').split(',')[1];
+        try {
+          const res = await apiFetch(
+            '/api/ai/ocr-fallback',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                imageBase64: base64,
+                mimeType: 'image/png',
+                prompt:
+                  'Describe what is drawn in this' +
+                  ' diagram in detail. Identify shapes,' +
+                  ' connections, labels, and what concept' +
+                  ' this diagram represents.'
+              })
+            }
+          );
+          if (!res.ok) throw new Error('AI failed');
+          const data = await res.json();
+          setAiDescription(
+            data.text || data.content ||
+            'Could not describe this canvas.'
+          );
+        } catch (err) {
+          setAiDescription(
+            'Could not describe canvas: ' + err.message
+          );
+        } finally {
+          setIsDescribing(false);
+        }
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      setAiDescription(
+        'Export failed: ' + err.message
+      );
+      setIsDescribing(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--text-tertiary)',
+        fontSize: '13px'
+      }}>
+        Loading canvas...
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -256,92 +253,211 @@ export default function RyCanvas({ canvasId, title, elements, appState, onTitleC
       overflow: 'hidden'
     }}>
       <div style={{
-        height: '48px',
-        minHeight: '48px',
-        flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        flexWrap: 'nowrap',
-        overflow: 'hidden',
-        padding: '0 16px',
         gap: '8px',
+        padding: '0 16px',
+        height: '44px',
+        minHeight: '44px',
+        flexShrink: 0,
         background: 'var(--bg-surface)',
         borderBottom: '1px solid var(--border-subtle)',
         position: 'relative',
-        zIndex: 100,
-        pointerEvents: 'all'
+        zIndex: 50
       }}>
         <input
           value={title}
-          onChange={(e) => onTitleChange?.(e.target.value)}
-          placeholder="Canvas title"
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => performSave()}
           style={{
-            width: '100%',
-            maxWidth: '200px',
-            minWidth: '80px',
-            flexShrink: 1,
-            height: '32px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            background: 'var(--bg-elevated)',
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontSize: '14px',
+            fontWeight: 500,
             color: 'var(--text-primary)',
-            padding: '0 10px'
+            flex: 1,
+            minWidth: 0,
+            maxWidth: '300px'
           }}
         />
-        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{saveStatus}</span>
-        <button onClick={handleSave} className="px-3 py-2 rounded bg-accent text-[var(--text-on-accent)] text-sm flex items-center gap-1">
-          <Save size={14} /> Save
+
+        {saveStatus && (
+          <span style={{
+            fontSize: '11px',
+            color: saveStatus === 'Saved'
+              ? 'var(--status-success)'
+              : saveStatus === 'Save failed'
+              ? 'var(--status-error)'
+              : 'var(--text-tertiary)',
+            flexShrink: 0
+          }}>
+            {saveStatus}
+          </span>
+        )}
+
+        <button
+          onClick={handleDescribe}
+          disabled={isDescribing}
+          title="Describe canvas with AI"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            background: showAiPanel
+              ? 'rgba(139,92,246,0.12)'
+              : 'var(--bg-elevated)',
+            border: showAiPanel
+              ? '1px solid rgba(139,92,246,0.3)'
+              : '1px solid var(--border-subtle)',
+            borderRadius: '4px',
+            color: showAiPanel
+              ? '#8B5CF6' : 'var(--text-secondary)',
+            fontSize: '12px',
+            cursor: 'pointer',
+            flexShrink: 0
+          }}
+        >
+          <Sparkles size={13} />
+          {isDescribing ? 'Describing...' : 'Describe'}
         </button>
-        <button onClick={handleExportPng} className="px-3 py-2 rounded bg-elevated text-t-primary text-sm flex items-center gap-1 hover:bg-overlay">
-          <ImageDown size={14} /> Export PNG
+
+        <button
+          onClick={performSave}
+          title="Save canvas"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 12px',
+            background: 'var(--accent)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            flexShrink: 0
+          }}
+        >
+          <Save size={13} /> Save
         </button>
-        <button onClick={handleDescribeCanvas} className="px-3 py-2 rounded bg-amd-red/15 text-amd-red text-sm flex items-center gap-1 hover:bg-amd-red/25">
-          <Sparkles size={14} /> Describe Canvas
+
+        <button
+          onClick={handleExport}
+          title="Export as PNG"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 10px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '4px',
+            color: 'var(--text-secondary)',
+            fontSize: '12px',
+            cursor: 'pointer',
+            flexShrink: 0
+          }}
+        >
+          <Download size={13} />
         </button>
-        <button onClick={handleClear} className="px-3 py-2 rounded bg-amd-orange/15 text-amd-orange text-sm flex items-center gap-1 hover:bg-amd-orange/25">
-          <Eraser size={14} /> Clear
-        </button>
-        <div className={`ml-2 text-xs flex items-center gap-1 px-2 py-1 rounded-full border ${aiLoading ? 'amd-pulse border-amd-red/40 text-amd-red' : 'border-amd-red/20 text-amd-red/70'}`}>
-          <Zap size={12} /> ⚡ AMD Accelerated
-        </div>
       </div>
 
       <div style={{
         flex: 1,
-        position: 'relative',
+        display: 'flex',
         overflow: 'hidden',
         minHeight: 0
       }}>
-        <Excalidraw
-          ref={excalidrawRef}
-          theme="dark"
-          UIOptions={{
-            canvasActions: { theme: true }
-          }}
-          initialData={initialData}
-          onChange={handleCanvasChange}
-        />
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          minHeight: 0,
+          minWidth: 0
+        }}>
+          <Excalidraw
+            excalidrawAPI={(api) => {
+              excalidrawApiRef.current = api;
+            }}
+            initialData={initialData || {
+              elements: [],
+              appState: {}
+            }}
+            onChange={handleChange}
+            theme="dark"
+            UIOptions={{
+              canvasActions: {
+                saveToActiveFile: false,
+                loadScene: false,
+                export: false,
+                saveAsImage: false
+              }
+            }}
+          />
+        </div>
 
-        <AnimatePresence>
-          {aiOpen && (
-            <motion.div
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 24 }}
-              className="w-[340px] glass-card p-4 overflow-auto"
-              style={{ position: 'absolute', top: 12, right: 12, maxHeight: '70%', zIndex: 120 }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-heading text-sm text-amd-white">Canvas Analysis</h3>
-                <button onClick={() => setAiOpen(false)} className="text-amd-white/50 hover:text-amd-white">
-                  <X size={14} />
-                </button>
-              </div>
-              <div className="text-xs text-amd-red/70 mb-2">{aiLoading ? 'Analyzing diagram...' : 'AI summary'}</div>
-              <div className="text-xs text-amd-white/80 whitespace-pre-wrap">{aiText || 'No output yet.'}</div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {showAiPanel && (
+          <div style={{
+            width: '280px',
+            flexShrink: 0,
+            borderLeft:
+              '1px solid var(--border-subtle)',
+            background: 'var(--bg-surface)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 14px',
+              borderBottom:
+                '1px solid var(--border-subtle)',
+              flexShrink: 0
+            }}>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: 'var(--text-primary)'
+              }}>
+                Canvas Description
+              </span>
+              <button
+                onClick={() => setShowAiPanel(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-tertiary)',
+                  fontSize: '16px',
+                  lineHeight: 1,
+                  padding: '2px 4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '14px'
+            }}>
+              <p style={{
+                fontSize: '13px',
+                color: 'var(--text-primary)',
+                lineHeight: 1.7,
+                margin: 0,
+                whiteSpace: 'pre-wrap'
+              }}>
+                {aiDescription || '...'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

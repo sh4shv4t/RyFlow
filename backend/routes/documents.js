@@ -216,13 +216,33 @@ router.post('/', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(id, workspace_id, title, content || '', createdBy, now, now);
 
-    // Add to knowledge graph
-    const metadata = { ...buildDocMetadata(content || '', createdBy), is_daily_note: false, daily_note_date: null };
-    await createNode(workspace_id, 'doc', title, (content || '').substring(0, 500), id, metadata);
-
     const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     appendTagsToDocuments(db, [doc]);
     res.status(201).json(doc);
+
+    // Run graph + embedding work in background so creation response is instant.
+    setImmediate(async () => {
+      try {
+        const metadata = {
+          ...buildDocMetadata(content || '', createdBy),
+          is_daily_note: false,
+          daily_note_date: null
+        };
+        const createdNode = await createNode(
+          workspace_id,
+          'doc',
+          title,
+          (content || '').substring(0, 500),
+          id,
+          metadata
+        );
+        try {
+          enqueueEmbeddingJob(createdNode.id, workspace_id);
+        } catch {}
+      } catch (bgErr) {
+        console.error('[Documents create bg] Error:', bgErr.message);
+      }
+    });
   } catch (err) {
     console.error('[Documents create] Error:', err.message);
     res.status(500).json({ error: err.message });

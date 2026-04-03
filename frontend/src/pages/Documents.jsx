@@ -76,6 +76,7 @@ export default function Documents() {
       }
 
       setDocs((prev) => [newDoc, ...prev.filter((d) => d.id !== newDoc.id)]);
+      await new Promise((r) => setTimeout(r, 0));
       navigate(`/editor/${newDoc.id}`);
     } catch (err) {
       console.error('[Documents] create failed:', err);

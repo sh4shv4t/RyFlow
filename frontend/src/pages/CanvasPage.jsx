@@ -1,278 +1,420 @@
-// Canvas workspace page with sidebar list, save/load flow, and Excalidraw integration
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
-import { Plus, Save } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import { apiFetch } from '../utils/apiClient';
 import RyCanvas from '../components/canvas/RyCanvas';
+import {
+  Plus, ChevronDown, Trash2, PenTool
+} from 'lucide-react';
 
-function parseMaybeJSON(value, fallback) {
-  if (value === null || value === undefined) return fallback;
-  if (typeof value === 'object') return value;
-  try {
-    return JSON.parse(String(value));
-  } catch {
-    return fallback;
-  }
-}
-
-// Renders the full-page canvas workspace with saved-canvas sidebar.
 export default function CanvasPage() {
-  const { id } = useParams();
+  const { id: routeId } = useParams();
   const navigate = useNavigate();
-  const { workspace, user } = useStore();
-  const [canvases, setCanvases] = useState([]);
-  const [activeCanvas, setActiveCanvas] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('Idle');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const latestSceneRef = useRef({ elements: [], appState: {} });
+  const workspaceId =
+    useStore((s) => s.workspaceId) ||
+    localStorage.getItem('ryflow_workspace_id');
 
-  // Fetches saved canvas list for the active workspace.
-  const fetchCanvases = useCallback(async () => {
-    if (!workspace?.id) return;
-    try {
-      const res = await axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } });
-      const next = Array.isArray(res.data) ? res.data : (res.data?.canvases || []);
-      setCanvases(next);
-    } catch (err) {
-      toast.error('Failed to load canvases');
-    } finally {
-      setLoading(false);
-    }
-  }, [workspace?.id]);
+  const [canvasList, setCanvasList] = useState([]);
+  const [activeCanvasId, setActiveCanvasId] =
+    useState(routeId || null);
+  const [showPicker, setShowPicker] = useState(false);
+  const isCreatingRef = useRef(false);
 
+  // Load canvas list on mount.
   useEffect(() => {
-    fetchCanvases();
-  }, [fetchCanvases]);
+    if (!workspaceId) return;
+    apiFetch(
+      `/api/canvas/list?workspace_id=${workspaceId}`
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setCanvasList(list);
+        if (!activeCanvasId && list.length > 0) {
+          setActiveCanvasId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [workspaceId, activeCanvasId]);
 
-  // Loads a single canvas by id and normalizes parsed JSON fields.
-  const loadCanvas = useCallback(async (canvasId) => {
+  // When route changes update active canvas.
+  useEffect(() => {
+    if (routeId) setActiveCanvasId(routeId);
+  }, [routeId]);
+
+  async function createNewCanvas() {
+    if (isCreatingRef.current || !workspaceId) return;
+    isCreatingRef.current = true;
+    const newId = crypto.randomUUID();
+    const title = 'Untitled Canvas';
     try {
-      const res = await axios.get(`/api/canvas/${canvasId}`);
-      const c = res.data;
-      setActiveCanvas({
-        ...c,
-        elements: parseMaybeJSON(c.elements, []),
-        app_state: parseMaybeJSON(c.app_state, {})
+      const res = await apiFetch('/api/canvas/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: newId,
+          workspace_id: workspaceId,
+          title,
+          elements: JSON.stringify([]),
+          app_state: JSON.stringify({}),
+          created_by: null
+        })
       });
-      latestSceneRef.current = {
-        elements: parseMaybeJSON(c.elements, []),
-        appState: parseMaybeJSON(c.app_state, {})
+      if (!res.ok) throw new Error('Create failed');
+      const saved = await res.json();
+      const entry = {
+        id: saved.id || newId,
+        title,
+        updated_at: new Date().toISOString()
       };
-      navigate(`/canvas/${c.id}`);
+      setCanvasList((prev) => [entry, ...prev]);
+      setActiveCanvasId(entry.id);
+      navigate(`/canvas/${entry.id}`, { replace: true });
     } catch (err) {
-      toast.error('Failed to load canvas');
+      console.error('[Canvas create]', err);
+    } finally {
+      isCreatingRef.current = false;
     }
-  }, [navigate, workspace?.id]);
+  }
 
-  useEffect(() => {
-    if (!id || activeCanvas?.id === id) return;
-    loadCanvas(id);
-  }, [id, activeCanvas?.id, loadCanvas]);
+  async function deleteCanvas(canvasId, e) {
+    e.stopPropagation();
+    const remaining = canvasList.filter(
+      (c) => c.id !== canvasId
+    );
+    setCanvasList(remaining);
 
-  // Creates a new blank canvas session in memory.
-  const createCanvas = useCallback(() => {
-    setActiveCanvas({
-      id: null,
-      title: `Canvas ${new Date().toLocaleTimeString()}`,
-      elements: [],
-      app_state: {}
-    });
-    latestSceneRef.current = { elements: [], appState: {} };
-    navigate('/canvas');
-  }, [navigate]);
-
-  // Persists the active canvas to backend and supports silent autosave.
-  const saveCanvas = useCallback(async ({ elements, appState }, options = {}) => {
-    if (!workspace?.id || !activeCanvas) return;
-    const silent = Boolean(options.silent);
-
-    try {
-      if (!silent) {
-        setSaving(true);
-        setSaveStatus('Saving...');
+    if (activeCanvasId === canvasId) {
+      if (remaining.length > 0) {
+        setActiveCanvasId(remaining[0].id);
+        navigate(`/canvas/${remaining[0].id}`,
+          { replace: true });
       } else {
-        setSaveStatus('Auto-saving...');
-      }
-
-      const payload = {
-        id: activeCanvas.id,
-        workspace_id: workspace.id,
-        title: activeCanvas.title || 'Untitled Canvas',
-        elements: elements || [],
-        app_state: appState || {},
-        thumbnail: null,
-        created_by: user?.id || null
-      };
-      const res = await axios.post('/api/canvas/save', payload, { timeout: 20000 });
-      const saved = res.data || {};
-      const resolvedId = saved.id || saved.canvas_id || activeCanvas.id;
-      setActiveCanvas({
-        ...saved,
-        id: resolvedId,
-        elements: parseMaybeJSON(saved.elements, []),
-        app_state: parseMaybeJSON(saved.app_state, {})
-      });
-
-      setCanvases((prev) => {
-        const nextItem = {
-          id: resolvedId,
-          workspace_id: saved.workspace_id || workspace.id,
-          title: saved.title || activeCanvas.title || 'Untitled Canvas',
-          thumbnail: saved.thumbnail || null,
-          created_by: saved.created_by || user?.id || null,
-          updated_at: saved.updated_at || new Date().toISOString(),
-          created_at: saved.created_at || new Date().toISOString()
-        };
-        const filtered = prev.filter((c) => c.id !== resolvedId);
-        return [nextItem, ...filtered];
-      });
-
-      setSaveStatus(silent ? 'Auto-saved' : 'Saved');
-      if (resolvedId && resolvedId !== activeCanvas.id) {
-        navigate(`/canvas/${resolvedId}`);
-      }
-      await fetchCanvases();
-      if (!silent) {
-        toast.success('Canvas saved');
-      }
-    } catch (err) {
-      setSaveStatus(silent ? 'Auto-save failed' : 'Save failed');
-      if (!silent) {
-        toast.error('Failed to save canvas');
-      }
-    } finally {
-      if (!silent) {
-        setSaving(false);
+        setActiveCanvasId(null);
+        navigate('/canvas', { replace: true });
       }
     }
-  }, [activeCanvas, fetchCanvases, navigate, user?.id, workspace?.id]);
 
-  // Updates active canvas title in local state.
-  const handleTitleChange = useCallback((title) => {
-    setActiveCanvas((prev) => (prev ? { ...prev, title } : prev));
-  }, []);
+    try {
+      await apiFetch(`/api/canvas/${canvasId}`, {
+        method: 'DELETE'
+      });
+    } catch {
+      // Revert silently.
+    }
+  }
 
-  const collaborators = useMemo(() => [user?.name || 'You'], [user?.name]);
+  function handleCanvasSaved(savedData) {
+    setCanvasList((prev) => {
+      const exists = prev.some(
+        (c) => c.id === savedData.id
+      );
+      if (exists) {
+        return prev.map((c) =>
+          c.id === savedData.id
+            ? {
+                ...c,
+                title: savedData.title,
+                updated_at: savedData.updated_at ||
+                  new Date().toISOString()
+              }
+            : c
+        );
+      }
+      return [savedData, ...prev];
+    });
+  }
+
+  const activeCanvas = canvasList.find(
+    (c) => c.id === activeCanvasId
+  );
 
   return (
-    <div
-      style={{
-        backgroundColor: '#111111',
-        height: '100%',
-        width: '100%',
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      overflow: 'hidden',
+      background: 'var(--bg-base)'
+    }}>
+      <div style={{
         display: 'flex',
-        overflow: 'hidden'
-      }}
-    >
-      <section style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
-        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
+        alignItems: 'center',
+        gap: '8px',
+        padding: '0 16px',
+        height: '48px',
+        minHeight: '48px',
+        flexShrink: 0,
+        background: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)'
+      }}>
+        <PenTool size={15}
+          style={{ color: 'var(--text-tertiary)' }} />
+
+        <div style={{ position: 'relative' }}>
           <button
-            onClick={() => setPickerOpen((v) => !v)}
+            onClick={() => setShowPicker((v) => !v)}
             style={{
-              height: '30px',
-              padding: '0 10px',
-              borderRadius: '6px',
-              border: '1px solid #333333',
-              backgroundColor: '#111111',
-              color: '#999999',
-              fontSize: '12px',
-              cursor: 'pointer'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '4px',
+              padding: '4px 10px',
+              color: 'var(--text-primary)',
+              fontSize: '13px',
+              cursor: 'pointer',
+              maxWidth: '240px'
             }}
           >
-            My Canvases ({canvases.length})
-          </button>
-
-          {pickerOpen && (
-            <div
+            <span style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {activeCanvas?.title || 'No canvas'}
+            </span>
+            <ChevronDown size={12}
               style={{
-                position: 'absolute',
-                top: '40px',
-                left: '16px',
-                width: '280px',
-                maxHeight: '300px',
-                overflowY: 'auto',
-                zIndex: 20,
-                background: '#1A1A1A',
-                border: '1px solid #333333',
-                borderRadius: '8px',
-                padding: '8px'
-              }}
-            >
-              {loading ? (
-                <div style={{ fontSize: '12px', color: '#777777', padding: '8px' }}>Loading canvases...</div>
-              ) : canvases.length === 0 ? (
-                <div style={{ fontSize: '12px', color: '#777777', padding: '8px' }}>No saved canvases yet.</div>
-              ) : (
-                <div style={{ display: 'grid', gap: '6px' }}>
-                  {canvases.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        loadCanvas(c.id);
-                        setPickerOpen(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '8px',
-                        borderRadius: '6px',
-                        border: activeCanvas?.id === c.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                        backgroundColor: activeCanvas?.id === c.id ? 'rgba(232,0,13,0.08)' : '#111111',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
-                      <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(c.updated_at || c.created_at).toLocaleString()}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <button onClick={createCanvas} style={{ width: '30px', height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#111111', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Plus size={14} />
+                color: 'var(--text-tertiary)',
+                flexShrink: 0
+              }} />
           </button>
 
-          <input
-            value={activeCanvas?.title || ''}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Untitled Canvas"
-            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1, minWidth: 0 }}
-          />
-          <span style={{ backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#999999' }}>{saveStatus}</span>
-          <span style={{ fontSize: '11px', color: '#666666' }}>Collaborators: {collaborators.join(', ')}</span>
-          <button
-            onClick={() => saveCanvas(latestSceneRef.current || { elements: activeCanvas?.elements || [], appState: activeCanvas?.app_state || {} })}
-            disabled={!activeCanvas || saving}
-            style={{ marginLeft: 'auto', height: '30px', padding: '0 12px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: !activeCanvas || saving ? 'not-allowed' : 'pointer', opacity: !activeCanvas || saving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Save size={14} /> Save
-          </button>
-        </div>
-
-        {!activeCanvas ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666666' }}>Create or select a canvas.</div>
-        ) : (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <RyCanvas
-              canvasId={activeCanvas.id}
-              title={activeCanvas.title || ''}
-              elements={activeCanvas.elements || []}
-              appState={activeCanvas.app_state || {}}
-              onTitleChange={handleTitleChange}
-              onSave={saveCanvas}
-              onSceneChange={(scene) => {
-                latestSceneRef.current = scene;
+          {showPicker && (
+            <div
+              onClick={() => setShowPicker(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 99
               }}
             />
+          )}
+          {showPicker && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              zIndex: 100,
+              background: 'var(--bg-overlay)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '6px',
+              minWidth: '240px',
+              maxWidth: '320px',
+              boxShadow:
+                '0 8px 24px rgba(0,0,0,0.4)',
+              overflow: 'hidden'
+            }}>
+              {canvasList.length === 0 ? (
+                <p style={{
+                  padding: '12px 16px',
+                  fontSize: '13px',
+                  color: 'var(--text-tertiary)',
+                  margin: 0
+                }}>
+                  No canvases yet
+                </p>
+              ) : (
+                canvasList.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      setActiveCanvasId(c.id);
+                      navigate(`/canvas/${c.id}`,
+                        { replace: true });
+                      setShowPicker(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '9px 14px',
+                      cursor: 'pointer',
+                      background:
+                        c.id === activeCanvasId
+                          ? 'var(--accent-subtle)'
+                          : 'transparent',
+                      borderLeft:
+                        c.id === activeCanvasId
+                          ? '2px solid var(--accent)'
+                          : '2px solid transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (c.id !== activeCanvasId) {
+                        e.currentTarget.style.background =
+                          'var(--bg-elevated)';
+                      }
+                      const btn = e.currentTarget
+                        .querySelector('.cv-del');
+                      if (btn) btn.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (c.id !== activeCanvasId) {
+                        e.currentTarget.style.background =
+                          'transparent';
+                      }
+                      const btn = e.currentTarget
+                        .querySelector('.cv-del');
+                      if (btn) btn.style.opacity = '0';
+                    }}
+                  >
+                    <span style={{
+                      fontSize: '13px',
+                      color: 'var(--text-primary)',
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {c.title}
+                    </span>
+                    <button
+                      className="cv-del"
+                      onClick={(e) =>
+                        deleteCanvas(c.id, e)
+                      }
+                      style={{
+                        opacity: 0,
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--status-error)',
+                        padding: '2px',
+                        borderRadius: '3px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexShrink: 0,
+                        transition: 'opacity 150ms'
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
+              <div style={{
+                borderTop:
+                  '1px solid var(--border-subtle)',
+                padding: '8px'
+              }}>
+                <button
+                  onClick={() => {
+                    setShowPicker(false);
+                    createNewCanvas();
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 10px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    fontSize: '13px',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background =
+                      'var(--bg-elevated)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background =
+                      'transparent';
+                  }}
+                >
+                  <Plus size={13} />
+                  New Canvas
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={createNewCanvas}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '5px 12px',
+            background: 'var(--accent)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: 'pointer'
+          }}
+        >
+          <Plus size={13} /> New
+        </button>
+
+        <span style={{
+          fontSize: '11px',
+          color: 'var(--text-tertiary)',
+          marginLeft: 'auto'
+        }}>
+          {canvasList.length} canvas
+          {canvasList.length !== 1 ? 'es' : ''}
+        </span>
+      </div>
+
+      <div style={{
+        flex: 1,
+        overflow: 'hidden',
+        position: 'relative',
+        minHeight: 0
+      }}>
+        {!activeCanvasId ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            gap: '16px',
+            color: 'var(--text-tertiary)'
+          }}>
+            <PenTool size={32}
+              style={{ opacity: 0.3 }} />
+            <p style={{
+              fontSize: '14px',
+              color: 'var(--text-primary)',
+              fontWeight: 500
+            }}>
+              No canvas open
+            </p>
+            <button
+              onClick={createNewCanvas}
+              style={{
+                padding: '8px 20px',
+                background: 'var(--accent)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              Create Canvas
+            </button>
           </div>
+        ) : (
+          <RyCanvas
+            key={activeCanvasId}
+            canvasId={activeCanvasId}
+            workspaceId={workspaceId}
+            initialTitle={activeCanvas?.title ||
+              'Untitled Canvas'}
+            onSaved={handleCanvasSaved}
+          />
         )}
-      </section>
+      </div>
     </div>
   );
 }

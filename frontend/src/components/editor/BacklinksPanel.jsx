@@ -1,79 +1,134 @@
-// Slide-in backlinks panel showing incoming and outgoing graph references.
 import React from 'react';
-import { X } from 'lucide-react';
-
-const TYPE_ICON = {
-  doc: '📄',
-  task: '✅',
-  code: '💻',
-  canvas: '🎨',
-  ai_chat: '🤖',
-  voice: '🎙'
-};
 
 const TYPE_COLOR = {
-  doc: 'text-amd-red',
-  task: 'text-amd-orange',
-  code: 'text-cyan-300',
-  canvas: 'text-emerald-300',
-  ai_chat: 'text-violet-300',
-  voice: 'text-green-300'
+  doc: '#E8000D',
+  task: '#FF6B00',
+  code: '#3B82F6',
+  canvas: '#10B981',
+  ai_chat: '#8B5CF6',
+  voice: '#22C55E'
 };
 
-// Renders a single backlinks item card.
-function BacklinkItem({ entry, incoming, onOpen }) {
+function renderTypeBadge(type) {
+  const color = TYPE_COLOR[type] || 'var(--text-tertiary)';
   return (
-    <button
-      onClick={() => onOpen?.(entry, incoming)}
-      className="w-full text-left rounded-lg bg-surface hover:bg-elevated p-2 border border-border-d"
+    <span
+      style={{
+        fontSize: '10px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+        color,
+        border: `1px solid ${color}55`,
+        background: `${color}1A`,
+        borderRadius: '10px',
+        padding: '1px 6px',
+        flexShrink: 0
+      }}
     >
-      <div className="flex items-center gap-2">
-        <span className={TYPE_COLOR[entry.type] || 'text-amd-white/60'}>{TYPE_ICON[entry.type] || '🔗'}</span>
-        <span className="text-sm text-amd-white truncate">{entry.title || 'Untitled'}</span>
-      </div>
-      <div className="text-[11px] text-amd-orange mt-1">{entry.relationship_label || 'related'}</div>
-      <div className="text-[11px] text-amd-white/45 mt-1">{String(entry.content_summary || '').slice(0, 80)}</div>
-    </button>
+      {type || 'node'}
+    </span>
   );
 }
 
-export default function BacklinksPanel({ open, loading, backlinks, onClose, onOpenNode }) {
-  if (!open) return null;
+function BacklinkRow({ entry, onOpen }) {
+  const color = TYPE_COLOR[entry.type] || 'var(--text-tertiary)';
+  return (
+    <div
+      onClick={() => onOpen?.(entry)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '8px 0',
+        borderBottom: '1px solid var(--border-subtle)',
+        cursor: 'pointer'
+      }}
+    >
+      <span style={{ fontSize: '14px', color, flexShrink: 0 }}>●</span>
+      <span
+        style={{
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        {entry.title || 'Untitled'}
+      </span>
+      {renderTypeBadge(entry.type)}
+      <span
+        style={{
+          fontSize: '11px',
+          color: 'var(--text-tertiary)',
+          flexShrink: 0,
+          maxWidth: '90px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        {entry.relationship_label || 'related'}
+      </span>
+    </div>
+  );
+}
+
+export default function BacklinksPanel({ open, loading, backlinks, onOpenNode, embedded }) {
+  if (!open && !embedded) return null;
 
   const incoming = backlinks?.incoming || [];
   const outgoing = backlinks?.outgoing || [];
-  const empty = !loading && incoming.length === 0 && outgoing.length === 0;
 
   return (
-    <div className="w-[360px] border-l border-border-d bg-overlay p-3 overflow-auto">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-heading text-amd-white">Backlinks</h3>
-        <button onClick={onClose} className="text-amd-white/50 hover:text-amd-white"><X size={14} /></button>
-      </div>
-
-      {loading ? <div className="text-sm text-amd-white/50">Loading backlinks...</div> : null}
-
-      {empty ? (
-        <div className="rounded-lg bg-surface border border-border-d p-3 text-sm text-amd-white/55">
-          No connections yet. Save this document to start building your knowledge graph.
+    <div style={{
+      height: '100%',
+      overflowY: 'auto',
+      padding: '16px',
+      boxSizing: 'border-box'
+    }}>
+      {loading ? (
+        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+          Loading backlinks...
         </div>
       ) : null}
 
-      <div className="space-y-4">
-        <section>
-          <h4 className="text-xs uppercase tracking-wide text-amd-white/45 mb-2">Referenced By ({incoming.length})</h4>
-          <div className="space-y-2">
-            {incoming.map((entry) => <BacklinkItem key={entry.id} entry={entry} incoming onOpen={onOpenNode} />)}
-          </div>
-        </section>
+      {!loading && incoming.length === 0 && outgoing.length === 0 ? (
+        <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+          No connections yet.
+        </div>
+      ) : null}
 
-        <section>
-          <h4 className="text-xs uppercase tracking-wide text-amd-white/45 mb-2">References ({outgoing.length})</h4>
-          <div className="space-y-2">
-            {outgoing.map((entry) => <BacklinkItem key={entry.id} entry={entry} incoming={false} onOpen={onOpenNode} />)}
-          </div>
-        </section>
-      </div>
+      <section style={{ marginBottom: '14px' }}>
+        <div style={{
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--text-tertiary)',
+          marginBottom: '6px'
+        }}>
+          Referenced By ({incoming.length})
+        </div>
+        {incoming.map((entry) => (
+          <BacklinkRow key={`in-${entry.id}`} entry={entry} onOpen={onOpenNode} />
+        ))}
+      </section>
+
+      <section>
+        <div style={{
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--text-tertiary)',
+          marginBottom: '6px'
+        }}>
+          References ({outgoing.length})
+        </div>
+        {outgoing.map((entry) => (
+          <BacklinkRow key={`out-${entry.id}`} entry={entry} onOpen={onOpenNode} />
+        ))}
+      </section>
     </div>
   );
 }

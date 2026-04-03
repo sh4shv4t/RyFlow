@@ -16,43 +16,55 @@ function downloadText(filename, content) {
   URL.revokeObjectURL(url);
 }
 
-function normalizeGuideShape(parsed) {
+function defaultGuide() {
   return {
-    summary: parsed?.summary || 'No summary available',
-    key_terms: Array.isArray(parsed?.key_terms) ? parsed.key_terms : [],
-    key_points: Array.isArray(parsed?.key_points) ? parsed.key_points : [],
-    quiz: Array.isArray(parsed?.quiz) ? parsed.quiz : []
+    summary: 'Could not generate a study guide. Try selecting different documents.',
+    key_terms: [],
+    key_points: [],
+    quiz: []
   };
 }
 
-function safeParseStudyGuide(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-
-  const stripped = raw
+function parseStudyGuide(raw) {
+  if (!raw || typeof raw !== 'string') {
+    return defaultGuide();
+  }
+  let s = raw
     .replace(/```json\s*/gi, '')
     .replace(/```\s*/gi, '')
     .trim();
 
-  try {
-    return normalizeGuideShape(JSON.parse(stripped));
-  } catch {
-    // Try extracting JSON body from mixed output.
-  }
-
-  const match = stripped.match(/\{[\s\S]*\}/);
-  if (match) {
+  const tryParse = (str) => {
     try {
-      return normalizeGuideShape(JSON.parse(match[0]));
-    } catch {
-      // Ignore parse failure.
-    }
+      const p = JSON.parse(str);
+      if (p && typeof p === 'object') return p;
+    } catch {}
+    return null;
+  };
+
+  let parsed = tryParse(s);
+  if (!parsed) {
+    const m = s.match(/\{[\s\S]*\}/);
+    if (m) parsed = tryParse(m[0]);
   }
+  if (!parsed) return defaultGuide();
 
   return {
-    summary: 'Study guide generation failed. Try selecting fewer documents.',
-    key_terms: [],
-    key_points: [],
-    quiz: []
+    summary: typeof parsed.summary === 'string'
+      ? parsed.summary
+      : 'Summary not available',
+    key_terms: Array.isArray(parsed.key_terms)
+      ? parsed.key_terms.filter((t) =>
+          t && typeof t.term === 'string')
+      : [],
+    key_points: Array.isArray(parsed.key_points)
+      ? parsed.key_points.filter((p) =>
+          typeof p === 'string')
+      : [],
+    quiz: Array.isArray(parsed.quiz)
+      ? parsed.quiz.filter((q) =>
+          q && typeof q.question === 'string')
+      : []
   };
 }
 
@@ -81,7 +93,7 @@ export default function StudyGuidePanel() {
   const generate = async () => {
     if (!workspace?.id || selectedIds.length === 0) return;
     setLoadingGuide(true);
-    setGuideError('Generating study guide... this may take 30-60 seconds');
+    setGuideError('Generating...');
     setGuide(null);
     setQuizIndex(0);
     setAnswers({});
@@ -113,22 +125,17 @@ export default function StudyGuidePanel() {
       if (data && typeof data === 'object' && (
         'summary' in data || 'key_terms' in data || 'key_points' in data || 'quiz' in data
       )) {
-        parsed = normalizeGuideShape(data);
+        parsed = parseStudyGuide(JSON.stringify(data));
       } else if (typeof data?.response === 'string') {
-        parsed = safeParseStudyGuide(data.response);
+        parsed = parseStudyGuide(data.response);
       } else if (typeof data?.guide === 'string') {
-        parsed = safeParseStudyGuide(data.guide);
+        parsed = parseStudyGuide(data.guide);
       } else if (typeof data?.text === 'string') {
-        parsed = safeParseStudyGuide(data.text);
+        parsed = parseStudyGuide(data.text);
       }
 
       if (!parsed) {
-        parsed = {
-          summary: 'Study guide generation failed. Try selecting fewer documents.',
-          key_terms: [],
-          key_points: [],
-          quiz: []
-        };
+        parsed = defaultGuide();
       }
 
       setGuide(parsed);
@@ -136,7 +143,7 @@ export default function StudyGuidePanel() {
     } catch (err) {
       clearTimeout(timeout);
       if (err.name === 'AbortError') {
-        setGuideError('Study guide generation timed out. Try selecting fewer documents or check if Ollama is running.');
+        setGuideError('Generation timed out. Try selecting fewer documents, or ensure Ollama has enough time to respond.');
       } else {
         setGuideError(err.message || 'Generation failed');
       }
@@ -209,7 +216,7 @@ export default function StudyGuidePanel() {
           disabled={loadingGuide || selectedIds.length === 0}
           className={`mt-3 px-3 py-2 rounded text-sm text-[var(--text-on-accent)] ${loadingGuide ? 'bg-accent/70' : 'bg-accent'} disabled:opacity-50`}
         >
-          {loadingGuide ? 'Generating study guide... this may take 30-60 seconds' : 'Generate Study Guide'}
+          {'Generate Study Guide'}
         </button>
 
         {guideError ? <div className="text-xs text-amd-orange mt-2">{guideError}</div> : null}

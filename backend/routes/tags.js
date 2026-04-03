@@ -98,20 +98,6 @@ router.post('/', (req, res) => {
   }
 });
 
-// DELETE /api/tags/:id — Delete tag and all node mappings.
-router.delete('/:id', (req, res) => {
-  try {
-    const db = getDb();
-    ensureTagTables(db);
-    const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.params.id);
-    if (!tag) return res.status(404).json({ error: 'Tag not found' });
-    db.prepare('DELETE FROM tags WHERE id = ?').run(req.params.id);
-    return res.json({ success: true });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 // GET /api/tags/by-source?workspace_id=...&type=...&source_id=... — List tags for one item.
 router.get('/by-source', (req, res) => {
   try {
@@ -167,6 +153,25 @@ router.post('/assign', (req, res) => {
   }
 });
 
+// DELETE /api/tags/assign/:source_id/:tag_id — Remove one source-tag link.
+router.delete('/assign/:source_id/:tag_id', (req, res) => {
+  try {
+    const db = getDb();
+    ensureTagTables(db);
+    const { source_id, tag_id } = req.params;
+
+    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ?').get(source_id);
+    if (node) {
+      db.prepare('DELETE FROM node_tags WHERE node_id = ? AND tag_id = ?').run(node.id, tag_id);
+      syncNodeMetadataTags(db, node.id);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false });
+  }
+});
+
 // GET /api/tags/filter?workspace_id=...&tag_id=...&type=... — Filter nodes by tag.
 router.get('/filter', (req, res) => {
   try {
@@ -190,6 +195,20 @@ router.get('/filter', (req, res) => {
     ).all(workspaceId, tagId, type, type);
 
     return res.json({ items: nodes });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/tags/:id — Delete tag and all node mappings.
+router.delete('/:id', (req, res) => {
+  try {
+    const db = getDb();
+    ensureTagTables(db);
+    const tag = db.prepare('SELECT * FROM tags WHERE id = ?').get(req.params.id);
+    if (!tag) return res.status(404).json({ error: 'Tag not found' });
+    db.prepare('DELETE FROM tags WHERE id = ?').run(req.params.id);
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

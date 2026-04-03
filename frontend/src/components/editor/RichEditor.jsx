@@ -21,6 +21,7 @@ import { apiFetch } from '../../utils/apiClient';
 import AIAssistPanel from './AIAssistPanel';
 import BacklinksPanel from './BacklinksPanel';
 import CommentsPanel from './CommentsPanel';
+import InlineTagPicker from '../shared/InlineTagPicker';
 
 function parseContent(raw) {
   if (!raw) {
@@ -82,15 +83,15 @@ function toolbarButtonStyle(active) {
     alignItems: 'center',
     justifyContent: 'center',
     background: 'transparent',
-    border: '1px solid transparent',
+    border: 'none',
     borderRadius: '4px',
     color: 'var(--text-tertiary)',
     cursor: 'pointer'
   };
 }
 
-function featureButtonStyle(active) {
-  if (active) {
+function featureButtonStyle(active, kind = 'default') {
+  if (active && kind === 'ai') {
     return {
       height: '28px',
       padding: '0 10px',
@@ -101,6 +102,40 @@ function featureButtonStyle(active) {
       border: '1px solid rgba(139,92,246,0.3)',
       borderRadius: '4px',
       color: '#8B5CF6',
+      cursor: 'pointer',
+      fontSize: '12px',
+      fontWeight: 500
+    };
+  }
+
+  if (active && kind === 'links') {
+    return {
+      height: '28px',
+      padding: '0 10px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '5px',
+      background: 'rgba(232,0,13,0.08)',
+      border: '1px solid rgba(232,0,13,0.2)',
+      borderRadius: '4px',
+      color: '#E8000D',
+      cursor: 'pointer',
+      fontSize: '12px',
+      fontWeight: 500
+    };
+  }
+
+  if (active && kind === 'comments') {
+    return {
+      height: '28px',
+      padding: '0 10px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '5px',
+      background: 'rgba(255,107,0,0.08)',
+      border: '1px solid rgba(255,107,0,0.2)',
+      borderRadius: '4px',
+      color: '#FF6B00',
       cursor: 'pointer',
       fontSize: '12px',
       fontWeight: 500
@@ -123,11 +158,11 @@ function featureButtonStyle(active) {
   };
 }
 
-function PanelShell({ panelTitle, onClose, children }) {
+function PanelShell({ panelTitle, onClose, headerBg, accentColor, children }) {
   return (
     <div
       style={{
-        width: '340px',
+        width: '300px',
         flexShrink: 0,
         borderLeft: '1px solid var(--border-subtle)',
         background: 'var(--bg-surface)',
@@ -141,16 +176,20 @@ function PanelShell({ panelTitle, onClose, children }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '14px 16px',
+          padding: '12px 16px',
           borderBottom: '1px solid var(--border-subtle)',
-          flexShrink: 0
+          flexShrink: 0,
+          background: headerBg,
+          borderLeft: `3px solid ${accentColor}`
         }}
       >
         <span
           style={{
-            fontSize: '13px',
+            fontSize: '12px',
             fontWeight: 600,
-            color: 'var(--text-primary)'
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em'
           }}
         >
           {panelTitle}
@@ -169,10 +208,10 @@ function PanelShell({ panelTitle, onClose, children }) {
           }}
           title="Close panel"
         >
-          <X size={14} />
+          ×
         </button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px' }}>{children}</div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{children}</div>
     </div>
   );
 }
@@ -590,7 +629,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
         <button
           onClick={openAI}
           title="AI Assist"
-          style={featureButtonStyle(showAI)}
+          style={featureButtonStyle(showAI, 'ai')}
         >
           <Sparkles size={13} /> AI
         </button>
@@ -602,7 +641,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
             setShowComments(false);
           }}
           title="Backlinks"
-          style={featureButtonStyle(showBacklinks)}
+          style={featureButtonStyle(showBacklinks, 'links')}
         >
           <Link2 size={13} /> Links
         </button>
@@ -614,7 +653,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
             setShowBacklinks(false);
           }}
           title="Comments"
-          style={featureButtonStyle(showComments)}
+          style={featureButtonStyle(showComments, 'comments')}
         >
           <MessageSquare size={13} /> Comments
         </button>
@@ -669,6 +708,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
             color: '#FFFFFF',
             cursor: 'pointer',
             fontSize: '12px',
+            fontWeight: 500,
             flexShrink: 0
           }}
           onMouseEnter={(e) => {
@@ -713,6 +753,16 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
               }}
             />
 
+            {doc?.id && workspaceId && (
+              <div style={{ marginBottom: '16px' }}>
+                <InlineTagPicker
+                  workspaceId={workspaceId}
+                  nodeSourceId={doc.id}
+                  nodeType="doc"
+                />
+              </div>
+            )}
+
             <div
               style={{
                 height: '1px',
@@ -727,27 +777,12 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
         </div>
 
         {showAI && (
-          <PanelShell panelTitle="AI Assist" onClose={() => setShowAI(false)}>
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
-              {['improve', 'summarize', 'translate', 'expand'].map((action) => (
-                <button
-                  key={action}
-                  onClick={() => setAiAction(action)}
-                  style={{
-                    height: '26px',
-                    padding: '0 8px',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '4px',
-                    background: aiAction === action ? 'var(--accent-subtle)' : 'transparent',
-                    color: aiAction === action ? 'var(--accent)' : 'var(--text-tertiary)',
-                    fontSize: '11px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
+          <PanelShell
+            panelTitle="✨ AI Assist"
+            onClose={() => setShowAI(false)}
+            headerBg="rgba(139,92,246,0.06)"
+            accentColor="#8B5CF6"
+          >
             <AIAssistPanel
               text={aiText}
               action={aiAction}
@@ -759,7 +794,12 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
         )}
 
         {showBacklinks && (
-          <PanelShell panelTitle="Backlinks" onClose={() => setShowBacklinks(false)}>
+          <PanelShell
+            panelTitle="🔗 Backlinks"
+            onClose={() => setShowBacklinks(false)}
+            headerBg="rgba(232,0,13,0.06)"
+            accentColor="#E8000D"
+          >
             <BacklinksPanel
               open
               loading={backlinksLoading}
@@ -777,7 +817,12 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
         )}
 
         {showComments && (
-          <PanelShell panelTitle="Comments" onClose={() => setShowComments(false)}>
+          <PanelShell
+            panelTitle="💬 Comments"
+            onClose={() => setShowComments(false)}
+            headerBg="rgba(255,107,0,0.06)"
+            accentColor="#FF6B00"
+          >
             <CommentsPanel
               open
               comments={comments}

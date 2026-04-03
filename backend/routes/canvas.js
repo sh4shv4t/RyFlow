@@ -1,149 +1,196 @@
-// Canvas routes — save, list, load, and delete visual canvases
 const express = require('express');
-const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const LZString = require('lz-string');
-const { getDb } = require('../db/database');
-const { createNode } = require('../services/graphService');
+const { getDb, getActiveWorkspaceId } = require('../db/database');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
-// Builds canonical graph summary for a saved canvas.
-function buildCanvasSummary(canvas, elementCount = 0) {
-  const dateText = canvas.updated_at || canvas.created_at || new Date().toISOString();
-  return `Visual canvas with ${elementCount} elements. Created: ${new Date(dateText).toISOString()}`;
-}
+const router = express.Router();
 
-// Extracts canvas metadata used by semantic search and detail UI.
-function buildCanvasMetadata(elements) {
+function safeJsonString(value, fallback) {
+  if (typeof value === 'string') return value;
   try {
-    if (Array.isArray(elements)) {
-      return { element_count: elements.length };
-    }
-    const raw = String(elements || '');
-    const parsed = JSON.parse(raw || '[]');
-    return { element_count: Array.isArray(parsed) ? parsed.length : 0 };
+    return JSON.stringify(value ?? fallback);
   } catch {
-    return { element_count: 0 };
+    return fallback;
   }
 }
 
-// Compresses serializable values for compact SQLite storage.
-function compressJson(value, fallback) {
-  return LZString.compress(JSON.stringify(value ?? fallback));
+function compressText(raw) {
+  return LZString.compress(String(raw || ''));
 }
 
-// Decompresses canvas JSON with compatibility for old uncompressed rows.
 function decodeCanvasJSON(raw, fallback) {
+  const str = String(raw || '');
   try {
-    const str = String(raw || '');
     const decompressed = LZString.decompress(str);
-    return JSON.parse((decompressed || str || fallback));
+    if (decompressed) return JSON.parse(decompressed);
+  } catch {}
+
+  try {
+    return JSON.parse(str);
   } catch {
     try {
-      return JSON.parse(String(raw || fallback));
-    } catch {
       return JSON.parse(fallback);
+    } catch {
+      return fallback;
     }
   }
 }
 
-// GET /api/canvas/list?workspace_id={} — list saved canvases for a workspace
+function resolveWorkspaceId(db, requestedWorkspaceId) {
+  const requested = String(requestedWorkspaceId || '').trim();
+  if (requested) {
+    const foundRequested = db.prepare('SELECT id FROM workspaces WHERE id = ?').get(requested);
+    if (foundRequested?.id) return foundRequested.id;
+  }
+
+  const activeId = getActiveWorkspaceId();
+  if (activeId) {
+    const foundActive = db.prepare('SELECT id FROM workspaces WHERE id = ?').get(activeId);
+    if (foundActive?.id) return foundActive.id;
+  }
+
+  const fallback = db.prepare(
+    `SELECT id FROM workspaces
+     ORDER BY last_accessed DESC, created_at DESC
+     LIMIT 1`
+  ).get();
+  return fallback?.id || null;
+}
+
+// GET /api/canvas/list?workspace_id={} — plain canvas list.
 router.get('/list', (req, res) => {
   try {
     const { workspace_id } = req.query;
-    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    if (!workspace_id) {
+      return res.status(400).json({ error: 'workspace_id is required' });
+    }
 
     const db = getDb();
+    const resolvedWorkspaceId = resolveWorkspaceId(db, workspace_id);
+    if (!resolvedWorkspaceId) {
+      return res.status(400).json({ error: 'No workspace available' });
+    }
     const canvases = db.prepare(
-      'SELECT id, workspace_id, title, thumbnail, created_by, updated_at, created_at FROM canvases WHERE workspace_id = ? ORDER BY updated_at DESC'
-    ).all(workspace_id);
-    res.json(canvases);
+      `SELECT id, title, updated_at, created_at
+       FROM canvases
+       WHERE workspace_id = ?
+       ORDER BY updated_at DESC`
+    ).all(resolvedWorkspaceId);
+
+    return res.json(canvases);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/canvas/save — create or update canvas data and sync graph embedding
-router.post('/save', async (req, res) => {
+// GET /api/canvas/:id — full canvas with decompressed payload.
+router.get('/:id', (req, res) => {
   try {
-    const { id, workspace_id, title, elements, app_state, thumbnail, created_by } = req.body;
+    const db = getDb();
+    const canvas = db.prepare(
+      `SELECT id, workspace_id, title, elements, app_state, thumbnail, created_by, updated_at, created_at
+       FROM canvases
+       WHERE id = ?`
+    ).get(req.params.id);
+
+    if (!canvas) {
+      return res.status(404).json({ error: 'Canvas not found' });
+    }
+
+    return res.json({
+      ...canvas,
+      elements: decodeCanvasJSON(canvas.elements, '[]'),
+      app_state: decodeCanvasJSON(canvas.app_state, '{}')
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/canvas/save — upsert compressed canvas.
+router.post('/save', (req, res) => {
+  try {
+    const { id, workspace_id, title, elements, app_state, created_by } = req.body || {};
     if (!workspace_id || !title) {
       return res.status(400).json({ error: 'workspace_id and title are required' });
     }
 
     const db = getDb();
-    const canvasId = id || uuidv4();
-    const existing = db.prepare('SELECT id FROM canvases WHERE id = ?').get(canvasId);
-    const compressedElements = compressJson(req.body.elements || [], []);
-    const compressedAppState = compressJson(req.body.app_state || {}, {});
-
-    if (existing) {
-      db.prepare(
-        'UPDATE canvases SET title = ?, elements = ?, app_state = ?, thumbnail = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-      ).run(title, compressedElements, compressedAppState, thumbnail || null, canvasId);
-    } else {
-      db.prepare(
-        'INSERT INTO canvases (id, workspace_id, title, elements, app_state, thumbnail, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(canvasId, workspace_id, title, compressedElements, compressedAppState, thumbnail || null, created_by || null);
+    const resolvedWorkspaceId = resolveWorkspaceId(db, workspace_id);
+    if (!resolvedWorkspaceId) {
+      return res.status(400).json({ error: 'No workspace available' });
     }
+    const canvasId = id || uuidv4();
+    const elementsText = safeJsonString(elements, '[]');
+    const appStateText = safeJsonString(app_state, '{}');
 
-    const saved = db.prepare('SELECT * FROM canvases WHERE id = ?').get(canvasId);
-    const metadata = buildCanvasMetadata(req.body.elements || []);
-    const summary = buildCanvasSummary(saved, metadata.element_count || 0);
+    db.prepare(
+      `INSERT OR REPLACE INTO canvases
+       (id, workspace_id, title, elements, app_state, created_by, updated_at, created_at)
+       VALUES (
+         ?,
+         COALESCE((SELECT workspace_id FROM canvases WHERE id = ?), ?),
+         ?,
+         ?,
+         ?,
+         COALESCE((SELECT created_by FROM canvases WHERE id = ?), ?),
+         CURRENT_TIMESTAMP,
+         COALESCE((SELECT created_at FROM canvases WHERE id = ?), CURRENT_TIMESTAMP)
+       )`
+    ).run(
+      canvasId,
+      canvasId,
+      resolvedWorkspaceId,
+      title,
+      compressText(elementsText),
+      compressText(appStateText),
+      canvasId,
+      created_by || null,
+      canvasId
+    );
 
+    const saved = db.prepare(
+      'SELECT id, title, updated_at FROM canvases WHERE id = ?'
+    ).get(canvasId);
+
+    const summary = `Canvas: ${title}`;
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(canvasId, 'canvas');
     if (node) {
-      db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
-        .run(saved.title, summary, JSON.stringify(metadata), node.id);
-      enqueueEmbeddingJob(node.id, workspace_id);
+      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?').run(title, summary, node.id);
+      enqueueEmbeddingJob(node.id, resolvedWorkspaceId);
     } else {
-      const createdNode = await createNode(workspace_id, 'canvas', saved.title, summary, canvasId, metadata);
-      enqueueEmbeddingJob(createdNode.id, workspace_id);
+      const nodeId = uuidv4();
+      db.prepare(
+        `INSERT INTO nodes (id, workspace_id, type, title, content_summary, source_id)
+         VALUES (?, ?, 'canvas', ?, ?, ?)`
+      ).run(nodeId, resolvedWorkspaceId, title, summary, canvasId);
+      enqueueEmbeddingJob(nodeId, resolvedWorkspaceId);
     }
 
-    res.json({
-      ...saved,
-      canvas_id: saved.id,
-      elements: decodeCanvasJSON(saved.elements, '[]'),
-      app_state: decodeCanvasJSON(saved.app_state, '{}')
-    });
+    return res.json(saved || { id: canvasId, title, updated_at: new Date().toISOString() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/canvas/:id — fetch a single canvas
-router.get('/:id', (req, res) => {
-  try {
-    const db = getDb();
-    const canvas = db.prepare('SELECT * FROM canvases WHERE id = ?').get(req.params.id);
-    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
-    canvas.elements = decodeCanvasJSON(canvas.elements, '[]');
-    canvas.app_state = decodeCanvasJSON(canvas.app_state, '{}');
-    res.json(canvas);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /api/canvas/:id — delete a canvas and linked graph node
+// DELETE /api/canvas/:id — delete canvas and linked node by source_id.
 router.delete('/:id', (req, res) => {
   try {
     const db = getDb();
-    const existing = db.prepare('SELECT * FROM canvases WHERE id = ?').get(req.params.id);
-    if (!existing) return res.status(404).json({ error: 'Canvas not found' });
+    const { id } = req.params;
 
-    db.prepare('DELETE FROM canvases WHERE id = ?').run(req.params.id);
-
-    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'canvas');
-    if (node) {
-      db.prepare('DELETE FROM edges WHERE source_id = ? OR target_id = ?').run(node.id, node.id);
-      db.prepare('DELETE FROM nodes WHERE id = ?').run(node.id);
+    const existing = db.prepare('SELECT id FROM canvases WHERE id = ?').get(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Canvas not found' });
     }
 
-    res.json({ success: true });
+    db.prepare('DELETE FROM canvases WHERE id = ?').run(id);
+    db.prepare('DELETE FROM nodes WHERE source_id = ?').run(id);
+
+    return res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 

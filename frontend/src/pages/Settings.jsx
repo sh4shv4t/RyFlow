@@ -165,8 +165,17 @@ export default function Settings() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ height: '100%', overflowY: 'auto', padding: '40px', backgroundColor: '#111111' }}>
-      <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      style={{
+        height: '100%',
+        overflowY: 'auto',
+        padding: '24px clamp(16px, 4vw, 40px)',
+        backgroundColor: '#111111'
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: '1160px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', marginBottom: '32px' }}>Settings</h1>
 
         <section style={{ marginBottom: '40px' }}>
@@ -290,7 +299,14 @@ export default function Settings() {
           <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
             Workspace Stats
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '8px', marginTop: '8px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: '10px',
+              marginTop: '8px'
+            }}
+          >
             {[ 
               { label: 'Documents', value: stats?.documents?.count || 0 },
               { label: 'Tasks', value: stats?.tasks?.count || 0 },

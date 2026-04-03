@@ -1,88 +1,210 @@
-// AI Assist Panel — processes selected text with AI actions (improve, summarize, translate, expand)
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { X, Check, Loader2, Zap } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import useOllama from '../../hooks/useOllama';
 
 const ACTION_PROMPTS = {
   improve: 'Improve and rewrite this text to be clearer and more professional. Return only the improved text, no explanation:',
   summarize: 'Summarize this text concisely in 2-3 sentences. Return only the summary:',
   translate: 'Translate this text to Hindi. Return only the translation:',
-  expand: 'Expand this text with more detail and explanation. Return only the expanded text:',
+  expand: 'Expand this text with more detail and explanation. Return only the expanded text:'
 };
 
+const ACTION_OPTIONS = ['improve', 'summarize', 'translate', 'expand'];
+
 export default function AIAssistPanel({ text, action, onApply, onClose }) {
+  const [currentAction, setCurrentAction] = useState(action || 'improve');
   const [result, setResult] = useState('');
-  const { chatStream, loading, streamingText } = useOllama();
+  const [error, setError] = useState('');
+  const { chat, loading } = useOllama();
 
-  // Runs the AI action on mount
   useEffect(() => {
-    if (!text || !action) return;
+    if (action) setCurrentAction(action);
+  }, [action]);
 
-    const prompt = `${ACTION_PROMPTS[action]} "${text}"`;
-    chatStream(
-      [{ role: 'user', content: prompt }],
-      (chunk, full) => setResult(full)
-    ).catch(() => {});
-  }, [text, action]);
+  const trimmedText = useMemo(() => String(text || '').trim(), [text]);
+
+  async function runAssist(nextAction = currentAction) {
+    if (!trimmedText) {
+      setError('Select some text before using AI Assist.');
+      setResult('');
+      return;
+    }
+
+    setError('');
+    setCurrentAction(nextAction);
+    setResult('');
+
+    try {
+      const prompt = `${ACTION_PROMPTS[nextAction]}\n\n${trimmedText}`;
+      const res = await chat([{ role: 'user', content: prompt }]);
+      setResult(String(res?.content || '').trim());
+    } catch (err) {
+      setError(err?.message || 'AI Assist failed.');
+    }
+  }
+
+  useEffect(() => {
+    if (!trimmedText) {
+      setResult('');
+      return;
+    }
+    runAssist(action || currentAction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmedText, action]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="absolute bottom-4 right-4 w-96 glass-card p-4 shadow-2xl z-50"
+    <div
+      style={{
+        height: '100%',
+        overflowY: 'auto',
+        padding: '16px',
+        boxSizing: 'border-box'
+      }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Zap size={14} className="text-amd-red" />
-          <span className="text-sm font-medium text-amd-white capitalize">{action} Text</span>
-        </div>
-        <button onClick={onClose} className="text-amd-white/40 hover:text-amd-white">
-          <X size={16} />
-        </button>
+      <div
+        style={{
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--text-tertiary)',
+          marginBottom: '8px'
+        }}
+      >
+        Action
       </div>
 
-      {/* Original text */}
-      <div className="text-xs text-amd-white/40 mb-2">Original:</div>
-      <div className="text-xs text-amd-white/60 bg-surface rounded p-2 mb-3 max-h-20 overflow-auto">
-        {text}
+      <div
+        style={{
+          display: 'flex',
+          gap: '6px',
+          flexWrap: 'wrap',
+          marginBottom: '12px'
+        }}
+      >
+        {ACTION_OPTIONS.map((option) => (
+          <button
+            key={option}
+            onClick={() => runAssist(option)}
+            style={{
+              padding: '5px 10px',
+              background: currentAction === option ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+              border: currentAction === option ? '1px solid rgba(232,0,13,0.28)' : '1px solid var(--border-subtle)',
+              borderRadius: '4px',
+              fontSize: '12px',
+              color: currentAction === option ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
+          >
+            {option}
+          </button>
+        ))}
       </div>
 
-      {/* AI result */}
-      <div className="text-xs text-amd-white/40 mb-2 flex items-center gap-1">
-        AI Result:
-        {loading && <Loader2 size={10} className="animate-spin text-amd-red" />}
-      </div>
-      <div className="text-sm text-amd-white bg-surface rounded p-3 mb-3 max-h-40 overflow-auto min-h-[60px]">
-        {loading ? (
-          <span>{streamingText || result}<span className="animate-pulse">▊</span></span>
-        ) : (
-          result || <span className="text-amd-white/30">Processing...</span>
-        )}
-      </div>
-
-      {/* AMD badge */}
-      <div className="flex items-center gap-1 text-[10px] text-amd-red/60 mb-3">
-        <Zap size={8} /> Powered by AMD ROCm
+      <div
+        style={{
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--text-tertiary)',
+          marginBottom: '8px'
+        }}
+      >
+        Selected Text
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => onApply(result || streamingText)}
-          disabled={loading || !(result || streamingText)}
-          className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-accent text-[var(--text-on-accent)] text-sm font-medium disabled:opacity-50 hover:bg-amd-red/80 transition-colors"
+      <textarea
+        readOnly
+        value={trimmedText}
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          minHeight: '84px',
+          resize: 'vertical',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '6px',
+          color: 'var(--text-secondary)',
+          fontSize: '12px',
+          lineHeight: 1.6,
+          padding: '10px',
+          marginBottom: '12px'
+        }}
+      />
+
+      <div
+        style={{
+          fontSize: '11px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          color: 'var(--text-tertiary)',
+          marginBottom: '8px'
+        }}
+      >
+        Result
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          minHeight: '140px',
+          maxHeight: '45vh',
+          overflowY: 'auto',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '6px',
+          padding: '10px',
+          marginBottom: '12px'
+        }}
+      >
+        <div
+          style={{
+            fontSize: '13px',
+            lineHeight: 1.7,
+            color: 'var(--text-primary)',
+            whiteSpace: 'pre-wrap'
+          }}
         >
-          <Check size={14} /> Apply
+          {loading ? 'Generating...' : (result || error || 'No result yet.')}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          onClick={() => onApply?.(result)}
+          disabled={!result || loading}
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            height: '32px',
+            background: 'var(--accent)',
+            border: 'none',
+            borderRadius: '4px',
+            color: '#FFFFFF',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: !result || loading ? 'not-allowed' : 'pointer',
+            opacity: !result || loading ? 0.65 : 1
+          }}
+        >
+          Apply
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-2 rounded-lg bg-surface text-amd-white/60 text-sm hover:bg-elevated transition-colors"
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            height: '32px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '4px',
+            color: 'var(--text-secondary)',
+            fontSize: '12px',
+            cursor: 'pointer'
+          }}
         >
           Cancel
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 }

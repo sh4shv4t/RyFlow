@@ -188,32 +188,34 @@ router.post('/chat', async (req, res) => {
   }
 });
 
-// POST /api/ai/ocr-fallback — Vision OCR fallback for hard-to-read images
+// POST /api/ai/ocr-fallback — Vision fallback using llava when available.
 router.post('/ocr-fallback', async (req, res) => {
   try {
-    const { imageBase64, mimeType } = req.body;
-    if (!imageBase64 || !mimeType) {
-      return res.status(400).json({ error: 'imageBase64 and mimeType are required' });
+    const { imageBase64, prompt } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'imageBase64 is required' });
     }
 
-    const models = await ollamaService.listModels();
-    const hasLlava = models.some((m) => String(m.name || '').toLowerCase().includes('llava'));
-    if (!hasLlava) {
-      return res.status(422).json({ error: 'Vision model not available', fallback: true });
+    let text = '';
+    try {
+      const cleanImage = normalizeBase64Image(imageBase64);
+      const response = await ollamaService.chat([
+        {
+          role: 'user',
+          content: prompt ||
+            'Describe what you see in this image.',
+          images: [cleanImage]
+        }
+      ], 'llava', false);
+      text = response;
+    } catch {
+      text = 'Vision model (llava) is not available.' +
+        ' Install it with: ollama pull llava';
     }
 
-    const cleanImage = normalizeBase64Image(imageBase64);
-    const response = await ollamaService.chat([
-      {
-        role: 'user',
-        content: 'Extract all text from this image exactly as it appears.',
-        images: [cleanImage]
-      }
-    ], 'llava', false);
-
-    return res.json({ text: String(response || '').trim(), model: 'llava' });
+    return res.json({ text });
   } catch (err) {
-    return res.status(500).json({ error: 'OCR fallback failed', details: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -300,7 +302,7 @@ router.post('/chat/stream', async (req, res) => {
 // POST /api/ai/study-guide — Generates summary, key terms, and quiz for selected docs.
 router.post('/study-guide', async (req, res) => {
   try {
-    const { doc_ids, workspace_id } = req.body || {};
+    const { doc_ids, workspace_id, model } = req.body || {};
     if (!Array.isArray(doc_ids) || doc_ids.length === 0 || !workspace_id) {
       return res.status(400).json({ error: 'doc_ids and workspace_id are required' });
     }
@@ -317,16 +319,28 @@ router.post('/study-guide', async (req, res) => {
     const combinedContent = docs.map((d) => `Document: ${d.title}\n${d.content || ''}`).join('\n\n---\n\n');
     const prompt = `Generate a study guide for the following content.\nReturn ONLY valid JSON with this exact structure:\n{\n  "summary": "A 3-4 sentence overview of all content",\n  "key_terms": [\n    { "term": string, "definition": string }\n  ],\n  "key_points": [string, string, string],\n  "quiz": [\n    {\n      "question": string,\n      "options": [string, string, string, string],\n      "correct": number,\n      "explanation": string\n    }\n  ]\n}\nGenerate 8-10 key terms, 5 key points, 5 quiz questions.\nContent: ${combinedContent}`;
 
-    const raw = await ollamaService.chat([{ role: 'user', content: prompt }], 'phi3:mini', false);
+    const selectedModel = model || 'phi3:mini';
+    const raw = await ollamaService.chat(
+      [{ role: 'user', content: prompt }],
+      selectedModel,
+      false,
+      120000
+    );
     let parsed;
+    let fallbackSummary = '';
     try {
       parsed = JSON.parse(cleanJsonBlock(raw));
     } catch {
-      return res.status(500).json({ error: 'Failed to parse study guide JSON' });
+      parsed = {};
+      fallbackSummary = String(raw || '').trim();
     }
 
     const safeGuide = {
-      summary: String(parsed?.summary || '').trim(),
+      summary: String(
+        parsed?.summary ||
+        fallbackSummary ||
+        'Study guide generated, but structured sections were unavailable for this response.'
+      ).trim(),
       key_terms: Array.isArray(parsed?.key_terms) ? parsed.key_terms : [],
       key_points: Array.isArray(parsed?.key_points) ? parsed.key_points : [],
       quiz: Array.isArray(parsed?.quiz) ? parsed.quiz : []
@@ -345,14 +359,14 @@ router.post('/study-guide', async (req, res) => {
         { role: 'user', content: `Study guide generated for ${docs.length} documents.` },
         { role: 'assistant', content: safeGuide.summary }
       ]),
-      'phi3:mini',
+      selectedModel,
       2,
       0
     );
 
     const summary = String(safeGuide.summary || '').slice(0, 500);
     const createdNode = await createNode(workspace_id, 'ai_chat', title, summary, chatId, {
-      model: 'phi3:mini',
+      model: selectedModel,
       message_count: 2,
       rag_used: 0
     });

@@ -21,7 +21,7 @@ import TagsView from './pages/TagsView';
 import useStore from './store/useStore';
 
 export default function App() {
-  const { user, workspace, theme, setWorkspace, setRemoteMode } = useStore();
+  const { user, workspace, theme, setWorkspace, setRemoteMode, setUser } = useStore();
   const [sessionReady, setSessionReady] = useState(false);
   const [hasActiveSession, setHasActiveSession] = useState(false);
 
@@ -41,6 +41,7 @@ export default function App() {
         if (!active?.workspace_id) {
           if (cancelled) return;
           setHasActiveSession(false);
+          setUser(null);
           setWorkspace(null);
           setRemoteMode(false);
           return;
@@ -57,6 +58,19 @@ export default function App() {
         if (!cancelled) {
           setWorkspace(workspacePayload);
           setRemoteMode(Boolean(active.is_remote));
+          const activeUser = active.active_user;
+          if (activeUser?.id && activeUser?.name) {
+            setUser(activeUser);
+          } else {
+            // Keep app usable if user row was never persisted for this workspace.
+            setUser({
+              id: `session-${active.workspace_id}`,
+              name: active.owner_name || 'You',
+              workspace_id: active.workspace_id,
+              avatar_color: '#E8000D',
+              language: 'en'
+            });
+          }
           setHasActiveSession(true);
         }
       } catch {
@@ -70,7 +84,7 @@ export default function App() {
 
     bootstrapSession();
     return () => { cancelled = true; };
-  }, [setRemoteMode, setWorkspace]);
+  }, [setRemoteMode, setUser, setWorkspace]);
 
   useEffect(() => {
     if (!workspace?.id) return;
@@ -123,9 +137,8 @@ export default function App() {
     );
   }
 
-  // Settings remains available when user profile is missing in the active session.
-  if (!user || !workspace) {
-    return <Navigate to="/settings" />;
+  if (!workspace) {
+    return <Navigate to="/workspaces" replace />;
   }
 
   return (

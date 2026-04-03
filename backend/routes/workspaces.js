@@ -76,6 +76,29 @@ function openWorkspaceDbForRead(workspaceId) {
   return db;
 }
 
+function getActiveWorkspaceUser(workspaceId) {
+  const db = openWorkspaceDbForRead(workspaceId);
+  if (!db) return null;
+  try {
+    const user = db.prepare(
+      `SELECT id, name, workspace_id, avatar_color, language, created_at
+       FROM users
+       WHERE workspace_id = ?
+       ORDER BY datetime(created_at) DESC
+       LIMIT 1`
+    ).get(workspaceId);
+    return user || null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // Ignore close errors on read-only helper handles.
+    }
+  }
+}
+
 // Marks active session row to the provided workspace and mode.
 function setActiveSession(workspaceId, isRemote, remoteHost = null, remotePort = null) {
   registry.prepare(
@@ -119,6 +142,7 @@ router.get('/active', (req, res) => {
   try {
     const active = getActiveSessionRecord();
     if (!active?.workspace_id) return res.json({ active: null });
+    const activeUser = getActiveWorkspaceUser(active.workspace_id);
     return res.json({
       active: {
         workspace_id: active.workspace_id,
@@ -129,7 +153,8 @@ router.get('/active', (req, res) => {
         is_remote: Boolean(active.is_remote),
         remote_host: active.remote_host,
         remote_port: active.remote_port,
-        is_local: Number(active.is_local || 0)
+        is_local: Number(active.is_local || 0),
+        active_user: activeUser
       }
     });
   } catch (err) {
