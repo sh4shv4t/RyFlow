@@ -6,6 +6,7 @@ import axios from 'axios';
 import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import toast from 'react-hot-toast';
+import ryflowSquareLogo from '../../../../assets/RyFlow_squarelogo.png';
 
 const AVATAR_COLORS = ['#E8000D', '#FF6B00', '#00C853', '#9B59B6', '#2196F3', '#FFD700'];
 
@@ -95,9 +96,11 @@ export default function WorkspaceSetup() {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-amd-red flex items-center justify-center mx-auto mb-4 glow-red">
-            <Zap size={32} className="text-[var(--text-on-accent)]" />
-          </div>
+          <img
+            src={ryflowSquareLogo}
+            alt="RyFlow logo"
+            className="w-16 h-16 rounded-2xl mx-auto mb-4"
+          />
           <h1 className="font-heading text-3xl font-bold text-amd-white">RyFlow</h1>
           <p className="text-amd-white/50 mt-1">Your Campus. Your GPU. Your AI.</p>
         </div>

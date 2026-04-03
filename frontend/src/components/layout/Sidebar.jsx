@@ -9,6 +9,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
+import ryflowSquareLogo from '../../../../assets/RyFlow_squarelogo.png';
 
 const navSections = [
   {
@@ -133,29 +134,17 @@ export default function Sidebar() {
             marginBottom: '6px'
           }}
         >
-          <div
+          <img
+            src={ryflowSquareLogo}
+            alt="RyFlow logo"
             style={{
               width: '26px',
               height: '26px',
-              backgroundColor: '#E8000D',
               borderRadius: '5px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              objectFit: 'cover',
               flexShrink: 0
             }}
-          >
-            <span
-              style={{
-                color: '#FFFFFF',
-                fontSize: '13px',
-                fontWeight: '700',
-                lineHeight: 1
-              }}
-            >
-              R
-            </span>
-          </div>
+          />
           <span
             style={{
               fontSize: '15px',

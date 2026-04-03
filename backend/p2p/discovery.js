@@ -2,7 +2,7 @@
 const Bonjour = require('bonjour-service');
 const os = require('os');
 const registry = require('../db/registry');
-const pkg = require('../../package.json');
+const pkg = require('../package.json');
 
 let bonjourInstance = null;
 let browser = null;
