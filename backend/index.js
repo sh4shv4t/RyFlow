@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const path = require('path');
 const os = require('os');
 const { Server } = require('socket.io');
+const { WebSocketServer } = require('ws');
 const registry = require('./db/registry');
 const { switchWorkspace, clearActiveWorkspace } = require('./db/database');
 const { startDiscovery, getPeers, stopDiscovery } = require('./p2p/discovery');
@@ -19,6 +20,136 @@ const server = http.createServer(app);
 // Socket.io for WebRTC signaling and presence
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
+});
+
+// y-webrtc signaling endpoint (topics + pub/sub) mounted at /yjs.
+const yjsWss = new WebSocketServer({ noServer: true });
+const yjsTopics = new Map();
+const wsReadyStateConnecting = 0;
+const wsReadyStateOpen = 1;
+const yjsPingTimeout = 30000;
+
+function setIfMissing(map, key, createValue) {
+  if (!map.has(key)) map.set(key, createValue());
+  return map.get(key);
+}
+
+function yjsSend(conn, message) {
+  if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
+    conn.close();
+    return;
+  }
+
+  try {
+    conn.send(JSON.stringify(message));
+  } catch {
+    conn.close();
+  }
+}
+
+function handleYjsConnection(conn) {
+  const subscribedTopics = new Set();
+  let closed = false;
+  let pongReceived = true;
+
+  const pingInterval = setInterval(() => {
+    if (!pongReceived) {
+      clearInterval(pingInterval);
+      conn.close();
+      return;
+    }
+
+    pongReceived = false;
+    try {
+      conn.ping();
+    } catch {
+      conn.close();
+    }
+  }, yjsPingTimeout);
+
+  conn.on('pong', () => {
+    pongReceived = true;
+  });
+
+  conn.on('close', () => {
+    subscribedTopics.forEach((topicName) => {
+      const subscribers = yjsTopics.get(topicName) || new Set();
+      subscribers.delete(conn);
+      if (subscribers.size === 0) yjsTopics.delete(topicName);
+    });
+    subscribedTopics.clear();
+    closed = true;
+    clearInterval(pingInterval);
+  });
+
+  conn.on('message', (raw) => {
+    if (closed) return;
+
+    let message = raw;
+    if (typeof raw === 'string' || raw instanceof Buffer) {
+      try {
+        message = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+    }
+
+    if (!message || !message.type) return;
+
+    switch (message.type) {
+      case 'subscribe': {
+        (message.topics || []).forEach((topicName) => {
+          if (typeof topicName !== 'string') return;
+          const topic = setIfMissing(yjsTopics, topicName, () => new Set());
+          topic.add(conn);
+          subscribedTopics.add(topicName);
+        });
+        break;
+      }
+      case 'unsubscribe': {
+        (message.topics || []).forEach((topicName) => {
+          const subscribers = yjsTopics.get(topicName);
+          if (subscribers) subscribers.delete(conn);
+          subscribedTopics.delete(topicName);
+        });
+        break;
+      }
+      case 'publish': {
+        if (!message.topic) return;
+        const receivers = yjsTopics.get(message.topic);
+        if (!receivers) return;
+        const payload = { ...message, clients: receivers.size };
+        receivers.forEach((receiver) => yjsSend(receiver, payload));
+        break;
+      }
+      case 'ping':
+        yjsSend(conn, { type: 'pong' });
+        break;
+      default:
+        break;
+    }
+  });
+}
+
+yjsWss.on('connection', handleYjsConnection);
+
+server.on('upgrade', (request, socket, head) => {
+  let pathname = '';
+  try {
+    const url = new URL(request.url, `http://${request.headers.host}`);
+    pathname = url.pathname;
+  } catch {
+    socket.destroy();
+    return;
+  }
+
+  if (pathname !== '/yjs') {
+    return;
+  }
+
+  yjsWss.handleUpgrade(request, socket, head, (ws) => {
+    yjsWss.emit('connection', ws, request);
+  });
 });
 
 const PORT = process.env.PORT || 3001;
@@ -175,6 +306,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`Ollama host: ${OLLAMA_HOST}`);
   console.log('LAN access enabled');
   console.log(`📡 Socket.io signaling active at ${LOCAL_IP}:${PORT}`);
+  console.log(`🔗 Yjs signaling active at ws://${LOCAL_IP}:${PORT}/yjs`);
 
   // Start LAN peer discovery
   try {

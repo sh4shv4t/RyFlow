@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
 import RichEditor from '../components/editor/RichEditor';
+import Skeleton from '../components/common/Skeleton';
 
 export default function Editor() {
   const { id } = useParams();
@@ -54,15 +55,20 @@ export default function Editor() {
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
           height: '100%',
           background: 'var(--bg-base)',
-          color: 'var(--text-tertiary)',
-          fontSize: '13px'
+          paddingTop: '42px'
         }}
       >
-        Loading document...
+        <div style={{ width: 'min(760px, 100%)', padding: '0 28px' }}>
+          <Skeleton width="48%" height={32} radius={6} style={{ marginBottom: '18px' }} />
+          <Skeleton width="100%" height={1} radius={1} style={{ marginBottom: '24px' }} />
+          <Skeleton width="94%" height={14} radius={6} style={{ marginBottom: '10px' }} />
+          <Skeleton width="88%" height={14} radius={6} style={{ marginBottom: '10px' }} />
+          <Skeleton width="62%" height={14} radius={6} />
+        </div>
       </div>
     );
   }

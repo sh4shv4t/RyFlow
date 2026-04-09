@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import {
   Bold,
   Italic,
@@ -13,11 +15,11 @@ import {
   Sparkles,
   Link2,
   Save,
-  MessageSquare,
-  X
+  MessageSquare
 } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
+import useCollaboration from '../../hooks/useCollaboration';
 import AIAssistPanel from './AIAssistPanel';
 import BacklinksPanel from './BacklinksPanel';
 import CommentsPanel from './CommentsPanel';
@@ -218,7 +220,8 @@ function PanelShell({ panelTitle, onClose, headerBg, accentColor, children }) {
 
 export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
   const navigate = useNavigate();
-  const userName = useStore((s) => s.user?.name || 'Teammate');
+  const user = useStore((s) => s.user);
+  const userName = user?.name || 'Teammate';
 
   const [title, setTitle] = useState(doc?.title || 'Untitled');
   const [saveStatus, setSaveStatus] = useState('');
@@ -238,13 +241,33 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
   const saveTimerRef = useRef(null);
   const isSavingRef = useRef(false);
   const docIdRef = useRef(doc?.id || null);
+  const seededCollabDocRef = useRef(null);
+
+  const { ydoc, provider } = useCollaboration({
+    workspaceId,
+    docId: doc?.id
+  });
+
+  const collaborationEnabled = Boolean(ydoc && provider && workspaceId && doc?.id);
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: { depth: 50 } }),
-      Placeholder.configure({ placeholder: 'Start writing...' })
+      StarterKit.configure({ history: collaborationEnabled ? false : { depth: 50 } }),
+      Placeholder.configure({ placeholder: 'Start writing...' }),
+      ...(collaborationEnabled
+        ? [
+            Collaboration.configure({ document: ydoc }),
+            CollaborationCursor.configure({
+              provider,
+              user: {
+                name: userName,
+                color: user?.avatar_color || '#E8000D'
+              }
+            })
+          ]
+        : [])
     ],
-    content: parseContent(doc?.content),
+    content: collaborationEnabled ? undefined : parseContent(doc?.content),
     editorProps: {
       attributes: {
         class: 'ryflow-editor-content',
@@ -257,21 +280,33 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
         saveDoc(false);
       }, 30000);
     }
-  });
+  }, [doc?.id, collaborationEnabled, provider, ydoc, userName, user?.avatar_color]);
 
   useEffect(() => {
     setTitle(doc?.title || 'Untitled');
     docIdRef.current = doc?.id || null;
+    seededCollabDocRef.current = null;
   }, [doc?.id, doc?.title]);
 
   useEffect(() => {
-    if (!editor || !doc) return;
+    if (!editor || !doc || collaborationEnabled) return;
     const incoming = parseContent(doc.content);
     const current = editor.getJSON();
     if (JSON.stringify(current) !== JSON.stringify(incoming)) {
       editor.commands.setContent(incoming, false);
     }
-  }, [doc?.id, doc?.content, editor, doc]);
+  }, [doc?.id, doc?.content, editor, doc, collaborationEnabled]);
+
+  useEffect(() => {
+    if (!editor || !doc?.id || !ydoc || !collaborationEnabled) return;
+    if (seededCollabDocRef.current === doc.id) return;
+
+    const fragment = ydoc.getXmlFragment('default');
+    if (fragment.length === 0) {
+      editor.commands.setContent(parseContent(doc.content), false);
+    }
+    seededCollabDocRef.current = doc.id;
+  }, [collaborationEnabled, doc?.id, doc?.content, editor, ydoc]);
 
   const saveDoc = useCallback(async (manual = false) => {
     if (!editor || isSavingRef.current || !docIdRef.current) return;

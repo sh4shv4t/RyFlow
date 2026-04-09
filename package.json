@@ -9,6 +9,9 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "electron": "electron electron/main.js",
     "build": "cd frontend && npm run build",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
     "start": "npm run build && npm run electron",
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
   },
@@ -20,5 +23,40 @@
     "electron-builder": "^24.9.1"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "build": {
+    "appId": "com.ryflow.app",
+    "productName": "RyFlow",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "frontend/dist/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/RyFlow_squarelogo.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "assets/RyFlow_squarelogo.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/RyFlow_squarelogo.png"
+    }
+  }
 }

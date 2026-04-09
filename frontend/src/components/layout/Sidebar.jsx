@@ -9,6 +9,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
+import Skeleton from '../common/Skeleton';
 import ryflowSquareLogo from '../../../../assets/RyFlow_squarelogo.png';
 
 const navSections = [
@@ -46,6 +47,7 @@ export default function Sidebar() {
   const [workspaceHover, setWorkspaceHover] = useState(false);
   const [hoveredNav, setHoveredNav] = useState('');
   const [settingsHover, setSettingsHover] = useState(false);
+  const isElectron = Boolean(window?.electronAPI?.isElectron);
 
   const userInitial = useMemo(() => {
     return (user?.name || '?').charAt(0).toUpperCase();
@@ -114,13 +116,13 @@ export default function Sidebar() {
       style={{
         width: '220px',
         minWidth: '220px',
-        height: '100vh',
+        height: isElectron ? 'calc(100vh - 40px)' : '100vh',
         backgroundColor: '#1A1A1A',
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         left: 0,
-        top: 0,
+        top: isElectron ? '40px' : 0,
         zIndex: 40,
         borderRight: '1px solid #242424'
       }}
@@ -184,7 +186,9 @@ export default function Sidebar() {
               whiteSpace: 'nowrap'
             }}
           >
-            {workspace?.name || 'Workspace'}
+            {workspace?.name ? workspace.name : (
+              <Skeleton width="90px" height={10} radius={999} />
+            )}
           </span>
           <ChevronDown size={10} color="#666666" />
         </button>

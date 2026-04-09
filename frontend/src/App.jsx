@@ -5,6 +5,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
+import TitleBar from './components/layout/TitleBar';
 import CommandPalette from './components/layout/CommandPalette';
 import Home from './pages/Home';
 import Workspace from './pages/Workspace';
@@ -24,6 +25,7 @@ export default function App() {
   const { user, workspace, theme, setWorkspace, setRemoteMode, setUser } = useStore();
   const [sessionReady, setSessionReady] = useState(false);
   const [hasActiveSession, setHasActiveSession] = useState(false);
+  const isElectron = Boolean(window?.electronAPI?.isElectron);
 
   // Remove first-launch wizard friction by marking setup complete immediately.
   if (localStorage.getItem('ryflow_setup_complete') !== 'true') {
@@ -152,10 +154,12 @@ export default function App() {
       }}
       className={theme === 'light' ? 'light-mode' : ''}
     >
+      {isElectron && <TitleBar />}
       <Sidebar />
       <div
         style={{
           marginLeft: '220px',
+          marginTop: isElectron ? '40px' : 0,
           flex: 1,
           display: 'flex',
           flexDirection: 'column',

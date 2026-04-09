@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { Trash2 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
+import Skeleton from '../components/common/Skeleton';
 
 function defaultDocContent() {
   return JSON.stringify({
@@ -157,8 +158,16 @@ export default function Documents() {
             {[1, 2, 3, 4].map((item) => (
               <div
                 key={item}
-                style={{ height: '56px', borderRadius: '8px', background: '#1A1A1A', border: '1px solid #2C2C2C' }}
-              />
+                style={{
+                  borderRadius: '8px',
+                  background: '#1A1A1A',
+                  border: '1px solid #2C2C2C',
+                  padding: '10px 12px'
+                }}
+              >
+                <Skeleton width="52%" height={13} radius={4} style={{ marginBottom: '8px' }} />
+                <Skeleton width="34%" height={10} radius={4} />
+              </div>
             ))}
           </div>
         ) : docs.length === 0 ? (

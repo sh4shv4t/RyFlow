@@ -11,6 +11,7 @@ import { apiFetch } from '../utils/apiClient';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
 import AMDbadge from '../components/layout/AMDbadge';
+import Skeleton from '../components/common/Skeleton';
 
 // Formats ISO dates into compact relative labels.
 function timeAgo(iso) {
@@ -43,6 +44,7 @@ export default function Home() {
   const [recentChats, setRecentChats] = useState([]);
   const [codeFiles, setCodeFiles] = useState([]);
   const [canvases, setCanvases] = useState([]);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingSpeaking, setBriefingSpeaking] = useState(false);
   const [briefingText, setBriefingText] = useState('');
@@ -103,23 +105,32 @@ export default function Home() {
 
   // Loads all dashboard data in one batch.
   const fetchDashboard = useCallback(async () => {
-    if (!workspace?.id) return;
-    const [statsRes, activityRes, tasksRes, chatsRes, codeRes, canvasRes] = await Promise.all([
-      axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/workspace/activity', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/tasks', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/chats', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/code/list', { params: { workspace_id: workspace.id } }),
-      axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } })
-    ]);
+    if (!workspace?.id) {
+      setDashboardLoading(false);
+      return;
+    }
 
-    setStats(statsRes.data);
-    setActivity(activityRes.data.activity || []);
-    setTasks(tasksRes.data.tasks || []);
-    setRecentChats((chatsRes.data.chats || []).slice(0, 2));
-    setCodeFiles((codeRes.data.files || []).slice(0, 3));
-    const canvasList = Array.isArray(canvasRes.data) ? canvasRes.data : (canvasRes.data?.canvases || []);
-    setCanvases(canvasList.slice(0, 3));
+    setDashboardLoading(true);
+    try {
+      const [statsRes, activityRes, tasksRes, chatsRes, codeRes, canvasRes] = await Promise.all([
+        axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/workspace/activity', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/tasks', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/chats', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/code/list', { params: { workspace_id: workspace.id } }),
+        axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } })
+      ]);
+
+      setStats(statsRes.data);
+      setActivity(activityRes.data.activity || []);
+      setTasks(tasksRes.data.tasks || []);
+      setRecentChats((chatsRes.data.chats || []).slice(0, 2));
+      setCodeFiles((codeRes.data.files || []).slice(0, 3));
+      const canvasList = Array.isArray(canvasRes.data) ? canvasRes.data : (canvasRes.data?.canvases || []);
+      setCanvases(canvasList.slice(0, 3));
+    } finally {
+      setDashboardLoading(false);
+    }
   }, [workspace?.id]);
 
   useEffect(() => {
@@ -255,7 +266,15 @@ export default function Home() {
           </div>
 
           <div>
-            {inProgressTasks.length === 0 ? (
+            {dashboardLoading ? (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {[1, 2, 3].map((item) => (
+                  <div key={item} style={{ padding: '0 8px' }}>
+                    <Skeleton width="100%" height={24} radius={4} />
+                  </div>
+                ))}
+              </div>
+            ) : inProgressTasks.length === 0 ? (
               <div style={{ fontSize: '13px', color: '#666666', padding: '8px 8px' }}>No active tasks</div>
             ) : inProgressTasks.map((task) => (
               <button
@@ -315,7 +334,15 @@ export default function Home() {
           </div>
 
           <div>
-            {activity.slice(0, 7).map((item) => {
+            {dashboardLoading ? (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} style={{ padding: '0 8px' }}>
+                    <Skeleton width="100%" height={24} radius={4} />
+                  </div>
+                ))}
+              </div>
+            ) : activity.slice(0, 7).map((item) => {
               const ItemIcon = iconForType(item.type);
               const badge = TYPE_BADGE_COLORS[item.type] || TYPE_BADGE_COLORS.document;
               return (
@@ -451,7 +478,12 @@ export default function Home() {
           <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
             RECENT CHATS
           </p>
-          {recentChats.length === 0 ? (
+          {dashboardLoading ? (
+            <div style={{ display: 'grid', gap: '7px' }}>
+              <Skeleton width="100%" height={22} radius={4} />
+              <Skeleton width="88%" height={22} radius={4} />
+            </div>
+          ) : recentChats.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#666666' }}>No recent chats</p>
           ) : recentChats.slice(0, 2).map((chat) => (
             <button

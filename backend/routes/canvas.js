@@ -6,12 +6,20 @@ const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 const router = express.Router();
 
-function safeJsonString(value, fallback) {
-  if (typeof value === 'string') return value;
+function safeJsonString(value, fallbackJSON) {
+  if (typeof value === 'string') {
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      return fallbackJSON;
+    }
+  }
+
   try {
-    return JSON.stringify(value ?? fallback);
+    return JSON.stringify(value);
   } catch {
-    return fallback;
+    return fallbackJSON;
   }
 }
 
@@ -98,10 +106,14 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ error: 'Canvas not found' });
     }
 
+    const decodedElements = decodeCanvasJSON(canvas.elements, '[]');
+    const decodedAppState = decodeCanvasJSON(canvas.app_state, '{}');
+
     return res.json({
       ...canvas,
-      elements: decodeCanvasJSON(canvas.elements, '[]'),
-      app_state: decodeCanvasJSON(canvas.app_state, '{}')
+      elements: Array.isArray(decodedElements) ? decodedElements : [],
+      app_state: (decodedAppState && typeof decodedAppState === 'object') ? decodedAppState : {},
+      appState: (decodedAppState && typeof decodedAppState === 'object') ? decodedAppState : {}
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -111,7 +123,16 @@ router.get('/:id', (req, res) => {
 // POST /api/canvas/save — upsert compressed canvas.
 router.post('/save', (req, res) => {
   try {
-    const { id, workspace_id, title, elements, app_state, created_by } = req.body || {};
+    const {
+      id,
+      workspace_id,
+      title,
+      elements,
+      app_state,
+      appState,
+      created_by
+    } = req.body || {};
+
     if (!workspace_id || !title) {
       return res.status(400).json({ error: 'workspace_id and title are required' });
     }
@@ -122,8 +143,8 @@ router.post('/save', (req, res) => {
       return res.status(400).json({ error: 'No workspace available' });
     }
     const canvasId = id || uuidv4();
-    const elementsText = safeJsonString(elements, '[]');
-    const appStateText = safeJsonString(app_state, '{}');
+    const elementsText = safeJsonString(elements ?? [], '[]');
+    const appStateText = safeJsonString(app_state ?? appState ?? {}, '{}');
 
     db.prepare(
       `INSERT OR REPLACE INTO canvases

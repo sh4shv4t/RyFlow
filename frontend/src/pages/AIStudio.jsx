@@ -9,6 +9,7 @@ import ImageGen from '../components/ai/ImageGen';
 import VoiceInput from '../components/ai/VoiceInput';
 import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
+import Skeleton from '../components/common/Skeleton';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
@@ -189,7 +190,16 @@ export default function AIStudio() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
-          {chatLoading && <p style={{ fontSize: '12px', color: '#666666', textAlign: 'center', padding: '12px 8px' }}>Loading chats...</p>}
+          {chatLoading && (
+            <div style={{ display: 'grid', gap: '6px', padding: '8px 6px' }}>
+              {[1, 2, 3, 4].map((item) => (
+                <div key={item} style={{ border: '1px solid #2D2D2D', borderRadius: '6px', padding: '8px' }}>
+                  <Skeleton width="70%" height={12} radius={4} style={{ marginBottom: '8px' }} />
+                  <Skeleton width="46%" height={10} radius={4} />
+                </div>
+              ))}
+            </div>
+          )}
           {!chatLoading && filteredChats.length === 0 && (
             <p style={{ padding: '20px 10px', fontSize: '13px', color: '#666666', textAlign: 'center' }}>No chats yet</p>
           )}

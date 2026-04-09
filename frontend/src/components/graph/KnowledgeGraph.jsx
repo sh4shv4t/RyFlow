@@ -7,6 +7,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useGraph from '../../hooks/useGraph';
 import useStore from '../../store/useStore';
+import Skeleton from '../common/Skeleton';
 
 const NODE_COLORS = {
   document: '#E8000D',
@@ -625,8 +626,21 @@ export default function KnowledgeGraph() {
       </div>
 
       {loading && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666666', fontSize: '13px', backgroundColor: 'rgba(17,17,17,0.45)' }}>
-          Loading graph...
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(17,17,17,0.45)'
+          }}
+        >
+          <div style={{ width: '260px', background: '#1A1A1A', border: '1px solid #333333', borderRadius: '8px', padding: '14px' }}>
+            <Skeleton width="52%" height={12} radius={4} style={{ marginBottom: '10px' }} />
+            <Skeleton width="100%" height={10} radius={4} style={{ marginBottom: '7px' }} />
+            <Skeleton width="84%" height={10} radius={4} />
+          </div>
         </div>
       )}
     </div>

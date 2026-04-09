@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import TaskBoard from '../components/tasks/TaskBoard';
 import NLTaskInput from '../components/tasks/NLTaskInput';
+import Skeleton from '../components/common/Skeleton';
 
 export default function Tasks() {
   const { workspace } = useStore();
@@ -112,7 +113,22 @@ export default function Tasks() {
         {loading ? (
           <div style={{ display: 'flex', gap: '20px', width: '100%' }}>
             {[1, 2, 3].map(i => (
-              <div key={i} style={{ width: '280px', minWidth: '280px', height: '100%', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px' }} />
+              <div
+                key={i}
+                style={{
+                  width: '280px',
+                  minWidth: '280px',
+                  height: '100%',
+                  backgroundColor: '#1A1A1A',
+                  border: '1px solid #333333',
+                  borderRadius: '6px',
+                  padding: '10px'
+                }}
+              >
+                <Skeleton width="45%" height={12} radius={4} style={{ marginBottom: '12px' }} />
+                <Skeleton width="100%" height={56} radius={6} style={{ marginBottom: '8px' }} />
+                <Skeleton width="100%" height={56} radius={6} />
+              </div>
             ))}
           </div>
         ) : (

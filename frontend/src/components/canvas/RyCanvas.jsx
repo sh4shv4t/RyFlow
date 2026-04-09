@@ -4,6 +4,32 @@ import '@excalidraw/excalidraw/index.css';
 import { Save, Download, Sparkles } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 
+function parseCanvasElements(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function parseCanvasAppState(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 export default function RyCanvas({
   canvasId,
   workspaceId,
@@ -47,18 +73,8 @@ export default function RyCanvas({
       .then((data) => {
         if (data) {
           if (data.title) setTitle(data.title);
-          let elements = [];
-          let appState = {};
-          try {
-            elements = typeof data.elements === 'string'
-              ? JSON.parse(data.elements)
-              : (data.elements || []);
-          } catch {}
-          try {
-            appState = typeof data.app_state === 'string'
-              ? JSON.parse(data.app_state)
-              : (data.app_state || {});
-          } catch {}
+          const elements = parseCanvasElements(data.elements);
+          const appState = parseCanvasAppState(data.app_state ?? data.appState);
           elementsRef.current = elements;
           appStateRef.current = appState;
           setInitialData({ elements, appState });
@@ -80,12 +96,8 @@ export default function RyCanvas({
           id: canvasId,
           workspace_id: workspaceId,
           title: titleRef.current,
-          elements: JSON.stringify(
-            elementsRef.current || []
-          ),
-          app_state: JSON.stringify(
-            appStateRef.current || {}
-          ),
+          elements: elementsRef.current || [],
+          app_state: appStateRef.current || {},
           created_by: null
         })
       });

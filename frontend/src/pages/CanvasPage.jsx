@@ -35,7 +35,7 @@ export default function CanvasPage() {
         }
       })
       .catch(() => {});
-  }, [workspaceId, activeCanvasId]);
+  }, [workspaceId]);
 
   // When route changes update active canvas.
   useEffect(() => {
@@ -54,8 +54,8 @@ export default function CanvasPage() {
           id: newId,
           workspace_id: workspaceId,
           title,
-          elements: JSON.stringify([]),
-          app_state: JSON.stringify({}),
+          elements: [],
+          app_state: {},
           created_by: null
         })
       });
@@ -78,6 +78,7 @@ export default function CanvasPage() {
 
   async function deleteCanvas(canvasId, e) {
     e.stopPropagation();
+    const previous = canvasList;
     const remaining = canvasList.filter(
       (c) => c.id !== canvasId
     );
@@ -95,11 +96,16 @@ export default function CanvasPage() {
     }
 
     try {
-      await apiFetch(`/api/canvas/${canvasId}`, {
+      const res = await apiFetch(`/api/canvas/${canvasId}`, {
         method: 'DELETE'
       });
+      if (!res.ok) throw new Error('Delete failed');
     } catch {
-      // Revert silently.
+      setCanvasList(previous);
+      if (activeCanvasId === canvasId) {
+        setActiveCanvasId(canvasId);
+        navigate(`/canvas/${canvasId}`, { replace: true });
+      }
     }
   }
 
