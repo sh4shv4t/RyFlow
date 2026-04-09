@@ -11,7 +11,12 @@ import { apiFetch } from '../utils/apiClient';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
 import AMDbadge from '../components/layout/AMDbadge';
-import Skeleton from '../components/common/Skeleton';
+import {
+  ActivityRowSkeleton,
+  ListSkeleton,
+  TaskCardSkeleton
+} from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 // Formats ISO dates into compact relative labels.
 function timeAgo(iso) {
@@ -44,6 +49,10 @@ export default function Home() {
   const [recentChats, setRecentChats] = useState([]);
   const [codeFiles, setCodeFiles] = useState([]);
   const [canvases, setCanvases] = useState([]);
+  const [isLoadingActivity, setIsLoadingActivity] =
+    useState(true);
+  const [isLoadingTasks, setIsLoadingTasks] =
+    useState(true);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [briefingLoading, setBriefingLoading] = useState(false);
   const [briefingSpeaking, setBriefingSpeaking] = useState(false);
@@ -110,25 +119,23 @@ export default function Home() {
       return;
     }
 
+    const startedAt = Date.now();
     setDashboardLoading(true);
     try {
-      const [statsRes, activityRes, tasksRes, chatsRes, codeRes, canvasRes] = await Promise.all([
+      const [statsRes, chatsRes, codeRes, canvasRes] = await Promise.all([
         axios.get('/api/workspace/stats', { params: { workspace_id: workspace.id } }),
-        axios.get('/api/workspace/activity', { params: { workspace_id: workspace.id } }),
-        axios.get('/api/tasks', { params: { workspace_id: workspace.id } }),
         axios.get('/api/chats', { params: { workspace_id: workspace.id } }),
         axios.get('/api/code/list', { params: { workspace_id: workspace.id } }),
         axios.get('/api/canvas/list', { params: { workspace_id: workspace.id } })
       ]);
 
       setStats(statsRes.data);
-      setActivity(activityRes.data.activity || []);
-      setTasks(tasksRes.data.tasks || []);
       setRecentChats((chatsRes.data.chats || []).slice(0, 2));
       setCodeFiles((codeRes.data.files || []).slice(0, 3));
       const canvasList = Array.isArray(canvasRes.data) ? canvasRes.data : (canvasRes.data?.canvases || []);
       setCanvases(canvasList.slice(0, 3));
     } finally {
+      await waitForMinimumLoading(startedAt);
       setDashboardLoading(false);
     }
   }, [workspace?.id]);
@@ -136,6 +143,54 @@ export default function Home() {
   useEffect(() => {
     fetchDashboard().catch(() => {});
   }, [fetchDashboard]);
+
+  useEffect(() => {
+    if (!workspace?.id) {
+      setActivity([]);
+      setIsLoadingActivity(false);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setIsLoadingActivity(true);
+    axios.get('/api/workspace/activity', {
+      params: { workspace_id: workspace.id }
+    })
+      .then((res) => {
+        setActivity(res.data?.activity || []);
+      })
+      .catch(() => {
+        setActivity([]);
+      })
+      .finally(async () => {
+        await waitForMinimumLoading(startedAt);
+        setIsLoadingActivity(false);
+      });
+  }, [workspace?.id]);
+
+  useEffect(() => {
+    if (!workspace?.id) {
+      setTasks([]);
+      setIsLoadingTasks(false);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setIsLoadingTasks(true);
+    axios.get('/api/tasks', {
+      params: { workspace_id: workspace.id }
+    })
+      .then((res) => {
+        setTasks(res.data?.tasks || []);
+      })
+      .catch(() => {
+        setTasks([]);
+      })
+      .finally(async () => {
+        await waitForMinimumLoading(startedAt);
+        setIsLoadingTasks(false);
+      });
+  }, [workspace?.id]);
 
   const inProgressTasks = useMemo(
     () => tasks.filter((t) => ['in_progress', 'in-progress'].includes(t.status)).slice(0, 3),
@@ -266,14 +321,12 @@ export default function Home() {
           </div>
 
           <div>
-            {dashboardLoading ? (
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {[1, 2, 3].map((item) => (
-                  <div key={item} style={{ padding: '0 8px' }}>
-                    <Skeleton width="100%" height={24} radius={4} />
-                  </div>
-                ))}
-              </div>
+            {isLoadingTasks ? (
+              <>
+                <TaskCardSkeleton />
+                <TaskCardSkeleton />
+                <TaskCardSkeleton />
+              </>
             ) : inProgressTasks.length === 0 ? (
               <div style={{ fontSize: '13px', color: '#666666', padding: '8px 8px' }}>No active tasks</div>
             ) : inProgressTasks.map((task) => (
@@ -334,14 +387,11 @@ export default function Home() {
           </div>
 
           <div>
-            {dashboardLoading ? (
-              <div style={{ display: 'grid', gap: '8px' }}>
-                {[1, 2, 3, 4].map((item) => (
-                  <div key={item} style={{ padding: '0 8px' }}>
-                    <Skeleton width="100%" height={24} radius={4} />
-                  </div>
-                ))}
-              </div>
+            {isLoadingActivity ? (
+              <ListSkeleton
+                rows={4}
+                RowComponent={ActivityRowSkeleton}
+              />
             ) : activity.slice(0, 7).map((item) => {
               const ItemIcon = iconForType(item.type);
               const badge = TYPE_BADGE_COLORS[item.type] || TYPE_BADGE_COLORS.document;
@@ -479,10 +529,7 @@ export default function Home() {
             RECENT CHATS
           </p>
           {dashboardLoading ? (
-            <div style={{ display: 'grid', gap: '7px' }}>
-              <Skeleton width="100%" height={22} radius={4} />
-              <Skeleton width="88%" height={22} radius={4} />
-            </div>
+            <ListSkeleton rows={2} RowComponent={ActivityRowSkeleton} />
           ) : recentChats.length === 0 ? (
             <p style={{ fontSize: '13px', color: '#666666' }}>No recent chats</p>
           ) : recentChats.slice(0, 2).map((chat) => (

@@ -7,7 +7,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useGraph from '../../hooks/useGraph';
 import useStore from '../../store/useStore';
-import Skeleton from '../common/Skeleton';
+import { GraphLoadingSkeleton } from '../shared/Skeleton';
 
 const NODE_COLORS = {
   document: '#E8000D',
@@ -333,6 +333,11 @@ export default function KnowledgeGraph() {
   const selectedType = normalizeType(selectedNode?.type);
   const selectedBadge = TYPE_BADGE_COLORS[selectedType] || TYPE_BADGE_COLORS.default;
 
+  // Show skeleton while nodes are loading before first render.
+  if (loading) {
+    return <GraphLoadingSkeleton />;
+  }
+
   return (
     <div ref={containerRef} style={{ height: '100%', position: 'relative', backgroundColor: '#111111', overflow: 'hidden' }}>
       <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
@@ -624,25 +629,6 @@ export default function KnowledgeGraph() {
           Open
         </button>
       </div>
-
-      {loading && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: 'rgba(17,17,17,0.45)'
-          }}
-        >
-          <div style={{ width: '260px', background: '#1A1A1A', border: '1px solid #333333', borderRadius: '8px', padding: '14px' }}>
-            <Skeleton width="52%" height={12} radius={4} style={{ marginBottom: '10px' }} />
-            <Skeleton width="100%" height={10} radius={4} style={{ marginBottom: '7px' }} />
-            <Skeleton width="84%" height={10} radius={4} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

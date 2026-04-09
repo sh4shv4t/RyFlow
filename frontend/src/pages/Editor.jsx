@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
 import RichEditor from '../components/editor/RichEditor';
-import Skeleton from '../components/common/Skeleton';
+import { EditorSkeleton } from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 export default function Editor() {
   const { id } = useParams();
@@ -30,6 +31,7 @@ export default function Editor() {
     }
 
     setStatus('loading');
+    const startedAt = Date.now();
 
     apiFetch(`/api/docs/${id}`)
       .then((res) => {
@@ -41,36 +43,21 @@ export default function Editor() {
           throw new Error('Document not found');
         }
         setDoc(data);
-        setStatus('ready');
+        return waitForMinimumLoading(startedAt).then(() => {
+          setStatus('ready');
+        });
       })
       .catch((err) => {
         console.error('[Editor] fetch failed:', err);
-        setErrorMsg(err.message || 'Failed to load');
-        setStatus('error');
+        waitForMinimumLoading(startedAt).finally(() => {
+          setErrorMsg(err.message || 'Failed to load');
+          setStatus('error');
+        });
       });
   }, [id, workspaceId]);
 
   if (status === 'loading') {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'center',
-          height: '100%',
-          background: 'var(--bg-base)',
-          paddingTop: '42px'
-        }}
-      >
-        <div style={{ width: 'min(760px, 100%)', padding: '0 28px' }}>
-          <Skeleton width="48%" height={32} radius={6} style={{ marginBottom: '18px' }} />
-          <Skeleton width="100%" height={1} radius={1} style={{ marginBottom: '24px' }} />
-          <Skeleton width="94%" height={14} radius={6} style={{ marginBottom: '10px' }} />
-          <Skeleton width="88%" height={14} radius={6} style={{ marginBottom: '10px' }} />
-          <Skeleton width="62%" height={14} radius={6} />
-        </div>
-      </div>
-    );
+    return <EditorSkeleton />;
   }
 
   if (status === 'error') {

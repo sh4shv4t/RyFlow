@@ -7,6 +7,11 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
 import BacklinksPanel from '../components/editor/BacklinksPanel';
+import {
+  CodeFileRowSkeleton,
+  ListSkeleton
+} from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 const LANGUAGE_LABELS = {
   javascript: 'JavaScript',
@@ -53,7 +58,8 @@ export default function CodeEditorPage() {
   const { workspace, workspaceId, user, setAiActive } = useStore();
   const [files, setFiles] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoadingFiles, setIsLoadingFiles] =
+    useState(true);
   const [saving, setSaving] = useState(false);
   const [isFileLoading, setIsFileLoading] = useState(false);
   const [error, setError] = useState('');
@@ -76,14 +82,21 @@ export default function CodeEditorPage() {
   // Fetches all saved code files for current workspace.
   const fetchFiles = useCallback(async () => {
     const activeWorkspaceId = resolveWorkspaceId();
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceId) {
+      setFiles([]);
+      setIsLoadingFiles(false);
+      return;
+    }
+    const startedAt = Date.now();
+    setIsLoadingFiles(true);
     try {
       const res = await axios.get('/api/code/list', { params: { workspace_id: activeWorkspaceId } });
       setFiles(res.data.files || []);
     } catch (err) {
       setError('Failed to load code files');
     } finally {
-      setLoading(false);
+      await waitForMinimumLoading(startedAt);
+      setIsLoadingFiles(false);
     }
   }, [resolveWorkspaceId]);
 
@@ -257,10 +270,11 @@ export default function CodeEditorPage() {
           </button>
         </div>
 
-        {loading ? (
-          <div style={{ display: 'grid', gap: '6px' }}>
-            {[1, 2, 3].map((i) => <div key={i} style={{ height: '44px', borderRadius: '6px', backgroundColor: '#1A1A1A', border: '1px solid #333333' }} />)}
-          </div>
+        {isLoadingFiles ? (
+          <ListSkeleton
+            rows={6}
+            RowComponent={CodeFileRowSkeleton}
+          />
         ) : files.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#666666' }}>No code files yet. Create your first file.</div>
         ) : (

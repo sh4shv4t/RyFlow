@@ -24,24 +24,49 @@ function safeJsonString(value, fallbackJSON) {
 }
 
 function compressText(raw) {
-  return LZString.compress(String(raw || ''));
+  return LZString.compressToUTF16(String(raw || ''));
 }
 
 function decodeCanvasJSON(raw, fallback) {
   const str = String(raw || '');
-  try {
-    const decompressed = LZString.decompress(str);
-    if (decompressed) return JSON.parse(decompressed);
-  } catch {}
+
+  const parseJson = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const tryDecode = (decoder) => {
+    try {
+      const parsed = parseJson(decoder(str));
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const utf16Decoded = tryDecode((v) => LZString.decompressFromUTF16(v));
+  if (utf16Decoded !== null) return utf16Decoded;
+
+  const base64Decoded = tryDecode((v) => LZString.decompressFromBase64(v));
+  if (base64Decoded !== null) return base64Decoded;
+
+  const encodedUriDecoded = tryDecode((v) => LZString.decompressFromEncodedURIComponent(v));
+  if (encodedUriDecoded !== null) return encodedUriDecoded;
+
+  const legacyDecoded = tryDecode((v) => LZString.decompress(v));
+  if (legacyDecoded !== null) return legacyDecoded;
+
+  const rawJson = parseJson(str);
+  if (rawJson !== null) return rawJson;
 
   try {
-    return JSON.parse(str);
+    return JSON.parse(fallback);
   } catch {
-    try {
-      return JSON.parse(fallback);
-    } catch {
-      return fallback;
-    }
+    return fallback;
   }
 }
 
@@ -97,10 +122,15 @@ router.get('/:id', (req, res) => {
   try {
     const db = getDb();
     const canvas = db.prepare(
-      `SELECT id, workspace_id, title, elements, app_state, thumbnail, created_by, updated_at, created_at
-       FROM canvases
-       WHERE id = ?`
+      'SELECT * FROM canvases WHERE id = ?'
     ).get(req.params.id);
+
+    console.log('[Canvas GET]',
+      'id:', req.params.id,
+      'found:', !!canvas,
+      'elements in DB:',
+      canvas?.elements ? canvas.elements.length : 0
+    );
 
     if (!canvas) {
       return res.status(404).json({ error: 'Canvas not found' });
@@ -108,6 +138,13 @@ router.get('/:id', (req, res) => {
 
     const decodedElements = decodeCanvasJSON(canvas.elements, '[]');
     const decodedAppState = decodeCanvasJSON(canvas.app_state, '{}');
+
+    console.log('[Canvas GET decompressed]',
+      'elements count:',
+      Array.isArray(decodedElements) ? decodedElements.length : 'ERROR',
+      'appState keys:',
+      Object.keys(decodedAppState || {}).length
+    );
 
     return res.json({
       ...canvas,
@@ -122,6 +159,17 @@ router.get('/:id', (req, res) => {
 
 // POST /api/canvas/save — upsert compressed canvas.
 router.post('/save', (req, res) => {
+  console.log('[Canvas backend save]',
+    'id:', req.body.id,
+    'elements type:', typeof req.body.elements,
+    'elements length:',
+    typeof req.body.elements === 'string'
+      ? req.body.elements.length : 'not string',
+    'elements preview:',
+    typeof req.body.elements === 'string'
+      ? req.body.elements.substring(0, 80) : req.body.elements
+  );
+
   try {
     const {
       id,
@@ -169,6 +217,15 @@ router.post('/save', (req, res) => {
       canvasId,
       created_by || null,
       canvasId
+    );
+
+    const savedRow = db.prepare(
+      'SELECT id, title, LENGTH(elements) as elem_len FROM canvases WHERE id = ?'
+    ).get(canvasId);
+
+    console.log('[Canvas saved to DB]',
+      'id:', savedRow?.id,
+      'elements bytes in DB:', savedRow?.elem_len
     );
 
     const saved = db.prepare(

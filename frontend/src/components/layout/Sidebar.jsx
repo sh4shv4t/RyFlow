@@ -1,5 +1,5 @@
 // Sidebar navigation — minimalist dark sidebar with icon links
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, FileText, CheckSquare, Settings, Code2, PenTool,
@@ -9,7 +9,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { apiFetch } from '../../utils/apiClient';
-import Skeleton from '../common/Skeleton';
+import { SidebarWorkspaceSkeleton } from '../shared/Skeleton';
 import ryflowSquareLogo from '../../../../assets/RyFlow_squarelogo.png';
 
 const navSections = [
@@ -47,7 +47,13 @@ export default function Sidebar() {
   const [workspaceHover, setWorkspaceHover] = useState(false);
   const [hoveredNav, setHoveredNav] = useState('');
   const [settingsHover, setSettingsHover] = useState(false);
+  const [showWorkspaceSkeleton, setShowWorkspaceSkeleton] = useState(true);
   const isElectron = Boolean(window?.electronAPI?.isElectron);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowWorkspaceSkeleton(false), 450);
+    return () => clearTimeout(timer);
+  }, []);
 
   const userInitial = useMemo(() => {
     return (user?.name || '?').charAt(0).toUpperCase();
@@ -176,20 +182,22 @@ export default function Sidebar() {
             border: 'none'
           }}
         >
-          <span
-            style={{
-              fontSize: '11px',
-              color: '#999999',
-              maxWidth: '140px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {workspace?.name ? workspace.name : (
-              <Skeleton width="90px" height={10} radius={999} />
-            )}
-          </span>
+          {!showWorkspaceSkeleton && workspace?.name ? (
+            <span
+              style={{
+                fontSize: '11px',
+                color: '#999999',
+                maxWidth: '140px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {workspace.name}
+            </span>
+          ) : (
+            <SidebarWorkspaceSkeleton />
+          )}
           <ChevronDown size={10} color="#666666" />
         </button>
       </div>

@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import axios from 'axios';
 import useStore from '../store/useStore';
 import toast from 'react-hot-toast';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 export default function useGraph() {
   const [nodes, setNodes] = useState([]);
@@ -16,6 +17,7 @@ export default function useGraph() {
   // Fetches the full knowledge graph for the current workspace
   const fetchGraph = useCallback(async (options = {}) => {
     if (!workspace) return;
+    const startedAt = Date.now();
     setLoading(true);
     try {
       const loadAll = Boolean(options.all);
@@ -36,12 +38,14 @@ export default function useGraph() {
     } catch (err) {
       toast.error('Failed to load knowledge graph');
     } finally {
+      await waitForMinimumLoading(startedAt);
       setLoading(false);
     }
   }, [workspace]);
 
   const fetchNeighborhood = useCallback(async (nodeId, hops = 2) => {
     if (!workspace || !nodeId) return;
+    const startedAt = Date.now();
     setLoading(true);
     try {
       const res = await axios.get('/api/graph/neighborhood', {
@@ -56,6 +60,7 @@ export default function useGraph() {
       toast.error('Failed to load neighborhood graph');
       return null;
     } finally {
+      await waitForMinimumLoading(startedAt);
       setLoading(false);
     }
   }, [workspace]);
@@ -63,6 +68,7 @@ export default function useGraph() {
   // Performs semantic search across graph nodes
   const search = useCallback(async (query) => {
     if (!workspace || !query.trim()) return;
+    const startedAt = Date.now();
     setLoading(true);
     setAiActive(true);
     try {
@@ -77,6 +83,7 @@ export default function useGraph() {
       toast.error('Semantic search failed. Is Ollama running?');
       return [];
     } finally {
+      await waitForMinimumLoading(startedAt);
       setLoading(false);
       setAiActive(false);
     }

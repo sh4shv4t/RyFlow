@@ -18,16 +18,28 @@ function parseCanvasElements(value) {
 }
 
 function parseCanvasAppState(value) {
-  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  const ensureCompatibleAppState = (candidate) => {
+    const safe = (candidate && typeof candidate === 'object' && !Array.isArray(candidate))
+      ? { ...candidate }
+      : {};
+
+    if (!safe.collaborators || typeof safe.collaborators.forEach !== 'function') {
+      safe.collaborators = new Map();
+    }
+
+    return safe;
+  };
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) return ensureCompatibleAppState(value);
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
-      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      return ensureCompatibleAppState(parsed);
     } catch {
-      return {};
+      return ensureCompatibleAppState({});
     }
   }
-  return {};
+  return ensureCompatibleAppState({});
 }
 
 export default function RyCanvas({
@@ -55,6 +67,7 @@ export default function RyCanvas({
   const isSavingRef = useRef(false);
   const excalidrawApiRef = useRef(null);
   const titleRef = useRef(title);
+  const isInitializedRef = useRef(false);
 
   // Keep titleRef in sync.
   useEffect(() => {
@@ -64,9 +77,11 @@ export default function RyCanvas({
   // Load existing canvas on mount.
   useEffect(() => {
     if (!canvasId) {
+      setInitialData(null);
       setIsLoading(false);
       return;
     }
+    setInitialData(null);
     setIsLoading(true);
     apiFetch(`/api/canvas/${canvasId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -84,19 +99,46 @@ export default function RyCanvas({
       .finally(() => setIsLoading(false));
   }, [canvasId]);
 
+  useEffect(() => {
+    if (initialData && initialData.elements) {
+      elementsRef.current = initialData.elements || [];
+      isInitializedRef.current = initialData.elements.length > 0;
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    isInitializedRef.current = false;
+  }, [canvasId]);
+
   const performSave = useCallback(async () => {
+    const currentElements = elementsRef.current;
+    console.log('[Canvas performSave]',
+      'elementsRef count:',
+      Array.isArray(currentElements)
+        ? currentElements.length : 'NOT ARRAY',
+      'value:', currentElements
+    );
+
     if (isSavingRef.current) return;
     isSavingRef.current = true;
     setSaveStatus('Saving...');
 
     try {
+      const elementsJson = JSON.stringify(
+        currentElements || []
+      );
+      console.log('[Canvas sending to backend]',
+        'elementsJson length:', elementsJson.length,
+        'first 100 chars:', elementsJson.substring(0, 100)
+      );
+
       const res = await apiFetch('/api/canvas/save', {
         method: 'POST',
         body: JSON.stringify({
           id: canvasId,
           workspace_id: workspaceId,
           title: titleRef.current,
-          elements: elementsRef.current || [],
+          elements: elementsJson,
           app_state: appStateRef.current || {},
           created_by: null
         })
@@ -143,6 +185,23 @@ export default function RyCanvas({
   }, []);
 
   function handleChange(elements, appState) {
+    console.log('[Canvas onChange]',
+      'elements received:', elements?.length,
+      'type:', typeof elements,
+      'isArray:', Array.isArray(elements)
+    );
+
+    // Don't overwrite loaded elements with initial
+    // empty state from Excalidraw on mount
+    if (!isInitializedRef.current) {
+      if (!elements || elements.length === 0) {
+        // Skip the first empty onChange from Excalidraw
+        // It fires before initialData is applied
+        return;
+      }
+      isInitializedRef.current = true;
+    }
+
     elementsRef.current = elements || [];
     appStateRef.current = appState || {};
     debouncedSave();
@@ -336,7 +395,12 @@ export default function RyCanvas({
         </button>
 
         <button
-          onClick={performSave}
+          onClick={async () => {
+            // Cancel any pending debounced save
+            clearTimeout(saveTimerRef.current);
+            // Immediately save current state
+            await performSave();
+          }}
           title="Save canvas"
           style={{
             display: 'flex',
@@ -391,12 +455,16 @@ export default function RyCanvas({
           minWidth: 0
         }}>
           <Excalidraw
+            key={canvasId}
             excalidrawAPI={(api) => {
               excalidrawApiRef.current = api;
             }}
             initialData={initialData || {
               elements: [],
-              appState: {}
+              appState: {
+                theme: 'dark',
+                collaborators: new Map()
+              }
             }}
             onChange={handleChange}
             theme="dark"

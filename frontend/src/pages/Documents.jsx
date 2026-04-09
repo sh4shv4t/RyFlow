@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import { Trash2 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
-import Skeleton from '../components/common/Skeleton';
+import { DocumentRowSkeleton, ListSkeleton } from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 function defaultDocContent() {
   return JSON.stringify({
@@ -20,17 +21,18 @@ export default function Documents() {
   const isDeletingRef = useRef(false);
 
   const [docs, setDocs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const loadDocs = useCallback(async () => {
     if (!workspaceId) {
       setDocs([]);
-      setLoading(false);
+      setIsLoading(false);
       return;
     }
 
-    setLoading(true);
+    const startedAt = Date.now();
+    setIsLoading(true);
     try {
       const res = await apiFetch(`/api/docs?workspace_id=${workspaceId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -44,7 +46,8 @@ export default function Documents() {
       toast.error('Failed to load documents');
       setDocs([]);
     } finally {
-      setLoading(false);
+      await waitForMinimumLoading(startedAt);
+      setIsLoading(false);
     }
   }, [workspaceId]);
 
@@ -150,40 +153,35 @@ export default function Documents() {
         </button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {!workspaceId ? (
-          <div style={{ color: '#999999', fontSize: '13px' }}>No active workspace selected.</div>
-        ) : loading ? (
-          <div style={{ display: 'grid', gap: '8px' }}>
-            {[1, 2, 3, 4].map((item) => (
-              <div
-                key={item}
-                style={{
-                  borderRadius: '8px',
-                  background: '#1A1A1A',
-                  border: '1px solid #2C2C2C',
-                  padding: '10px 12px'
-                }}
-              >
-                <Skeleton width="52%" height={13} radius={4} style={{ marginBottom: '8px' }} />
-                <Skeleton width="34%" height={10} radius={4} />
-              </div>
-            ))}
-          </div>
+          <div style={{ color: '#999999', fontSize: '13px', padding: '12px' }}>No active workspace selected.</div>
+        ) : isLoading ? (
+          <ListSkeleton
+            rows={8}
+            RowComponent={DocumentRowSkeleton}
+          />
         ) : docs.length === 0 ? (
           <div
             style={{
-              border: '1px solid #2C2C2C',
-              borderRadius: '8px',
-              padding: '16px',
-              color: '#999999',
-              fontSize: '13px'
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '200px',
+              gap: '12px',
+              color: 'var(--text-tertiary)'
             }}
           >
-            No documents yet. Create your first note.
+            <p style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 500 }}>
+              No documents yet
+            </p>
+            <p style={{ fontSize: '13px' }}>
+              Click New Document to get started
+            </p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <div style={{ display: 'grid', gap: '8px', padding: '12px' }}>
             {docs.map((doc) => (
               <div
                 key={doc.id}

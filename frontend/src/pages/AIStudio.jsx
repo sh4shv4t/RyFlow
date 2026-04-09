@@ -9,7 +9,8 @@ import ImageGen from '../components/ai/ImageGen';
 import VoiceInput from '../components/ai/VoiceInput';
 import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
-import Skeleton from '../components/common/Skeleton';
+import { ChatListSkeleton, ListSkeleton } from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
@@ -21,7 +22,7 @@ const tabs = [
 export default function AIStudio() {
   const [activeTab, setActiveTab] = useState('chat');
   const [chats, setChats] = useState([]);
-  const [chatLoading, setChatLoading] = useState(false);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [activeChatId, setActiveChatId] = useState(null);
   const [searchText, setSearchText] = useState('');
   const workspaceId = useStore((s) => s.workspace?.id || null);
@@ -29,10 +30,15 @@ export default function AIStudio() {
 
   // Loads saved chats for the active workspace.
   const fetchChats = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      setChats([]);
+      setIsLoadingChats(false);
+      return;
+    }
     const token = fetchTokenRef.current + 1;
     fetchTokenRef.current = token;
-    setChatLoading(true);
+    const startedAt = Date.now();
+    setIsLoadingChats(true);
     try {
       const res = await axios.get('/api/chats', { params: { workspace_id: workspaceId } });
       if (token !== fetchTokenRef.current) return;
@@ -41,7 +47,8 @@ export default function AIStudio() {
       toast.error('Failed to load chat history');
     } finally {
       if (token === fetchTokenRef.current) {
-        setChatLoading(false);
+        await waitForMinimumLoading(startedAt);
+        setIsLoadingChats(false);
       }
     }
   }, [workspaceId]);
@@ -190,20 +197,16 @@ export default function AIStudio() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px' }}>
-          {chatLoading && (
-            <div style={{ display: 'grid', gap: '6px', padding: '8px 6px' }}>
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} style={{ border: '1px solid #2D2D2D', borderRadius: '6px', padding: '8px' }}>
-                  <Skeleton width="70%" height={12} radius={4} style={{ marginBottom: '8px' }} />
-                  <Skeleton width="46%" height={10} radius={4} />
-                </div>
-              ))}
-            </div>
-          )}
-          {!chatLoading && filteredChats.length === 0 && (
+          {isLoadingChats ? (
+            <ListSkeleton
+              rows={5}
+              RowComponent={ChatListSkeleton}
+            />
+          ) : null}
+          {!isLoadingChats && filteredChats.length === 0 && (
             <p style={{ padding: '20px 10px', fontSize: '13px', color: '#666666', textAlign: 'center' }}>No chats yet</p>
           )}
-          {!chatLoading && filteredChats.map((chat) => (
+          {!isLoadingChats && filteredChats.map((chat) => (
             <div
               key={chat.id}
               style={{ position: 'relative' }}

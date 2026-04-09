@@ -7,15 +7,23 @@ import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import TaskBoard from '../components/tasks/TaskBoard';
 import NLTaskInput from '../components/tasks/NLTaskInput';
-import Skeleton from '../components/common/Skeleton';
+import { TaskCardSkeleton } from '../components/shared/Skeleton';
+import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 export default function Tasks() {
   const { workspace } = useStore();
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoadingTasks, setIsLoadingTasks] =
+    useState(true);
 
   const fetchTasks = useCallback(async () => {
-    if (!workspace) return;
+    if (!workspace) {
+      setTasks([]);
+      setIsLoadingTasks(false);
+      return;
+    }
+    const startedAt = Date.now();
+    setIsLoadingTasks(true);
     try {
       const res = await axios.get('/api/tasks', {
         params: { workspace_id: workspace.id }
@@ -24,7 +32,8 @@ export default function Tasks() {
     } catch (err) {
       toast.error('Failed to load tasks');
     } finally {
-      setLoading(false);
+      await waitForMinimumLoading(startedAt);
+      setIsLoadingTasks(false);
     }
   }, [workspace]);
 
@@ -88,7 +97,7 @@ export default function Tasks() {
         </span>
         <div style={{ marginLeft: 'auto' }}>
           <button
-            onClick={() => { setLoading(true); fetchTasks(); }}
+            onClick={() => { setIsLoadingTasks(true); fetchTasks(); }}
             style={{
               width: '32px',
               height: '32px',
@@ -102,32 +111,40 @@ export default function Tasks() {
               justifyContent: 'center'
             }}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isLoadingTasks ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
       <NLTaskInput onTasksCreated={handleTasksCreated} />
 
-      <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'auto', paddingBottom: '16px' }}>
-        {loading ? (
-          <div style={{ display: 'flex', gap: '20px', width: '100%' }}>
-            {[1, 2, 3].map(i => (
-              <div
-                key={i}
-                style={{
-                  width: '280px',
-                  minWidth: '280px',
-                  height: '100%',
-                  backgroundColor: '#1A1A1A',
-                  border: '1px solid #333333',
-                  borderRadius: '6px',
-                  padding: '10px'
-                }}
-              >
-                <Skeleton width="45%" height={12} radius={4} style={{ marginBottom: '12px' }} />
-                <Skeleton width="100%" height={56} radius={6} style={{ marginBottom: '8px' }} />
-                <Skeleton width="100%" height={56} radius={6} />
+      <div style={{ flex: 1, overflow: 'auto', paddingBottom: '16px' }}>
+        {isLoadingTasks ? (
+          <div style={{
+            display: 'flex', gap: 20,
+            padding: '0 40px'
+          }}>
+            {['Todo', 'In Progress', 'Done'].map(col => (
+              <div key={col} style={{ width: 280 }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 12,
+                  paddingBottom: 8,
+                  borderBottom:
+                    '1px solid var(--border-subtle)'
+                }}>
+                  <div className="skeleton" style={{
+                    width: 60, height: 11, borderRadius: 3
+                  }} />
+                  <div className="skeleton" style={{
+                    width: 22, height: 18, borderRadius: 10
+                  }} />
+                </div>
+                {[1,2,3].map(i => (
+                  <TaskCardSkeleton key={i} />
+                ))}
               </div>
             ))}
           </div>
