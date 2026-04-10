@@ -30,33 +30,38 @@
 
 /* Light mode */
 [data-theme="light"] {
-  --bg-base:        #F5F5F0;
+  --bg-base:        #F7F6F2;
   --bg-surface:     #FFFFFF;
-  --bg-elevated:    #F0EFE9;
-  --bg-overlay:     #E8E7E0;
+  --bg-elevated:    #F0EEE8;
+  --bg-overlay:     #E8E6DF;
 
-  --border-subtle:  #E0DFD8;
-  --border-default: #CCCBC3;
-  --border-strong:  #B0AFA8;
+  --border-subtle:  #E2E0D8;
+  --border-default: #C8C6BE;
+  --border-strong:  #A8A6A0;
 
-  --text-primary:   #1A1A1A;
-  --text-secondary: #555550;
-  --text-tertiary:  #999994;
+  --text-primary:   #1C1C1A;
+  --text-secondary: #4A4A46;
+  --text-tertiary:  #8A8A84;
   --text-inverse:   #FFFFFF;
 
-  --accent:         #C8000B;
-  --accent-subtle:  rgba(200, 0, 11, 0.07);
-  --accent-border:  rgba(200, 0, 11, 0.25);
+  --accent:         #CC0008;
+  --accent-subtle:  rgba(204, 0, 8, 0.08);
+  --accent-border:  rgba(204, 0, 8, 0.25);
 
-  --status-success: #2D7A5A;
-  --status-warning: #8F4A00;
-  --status-error:   #A02020;
-  --status-info:    #1E6FA0;
+  --status-success: #1A6B42;
+  --status-warning: #8A4200;
+  --status-error:   #9A1818;
+  --status-info:    #1A5E8A;
 
-  --success:        #2D7A5A;
-  --warning:        #8F4A00;
-  --error:          #A02020;
-  --info:           #1E6FA0;
+  --success:        #1A6B42;
+  --warning:        #8A4200;
+  --error:          #9A1818;
+  --info:           #1A5E8A;
+}
+
+[data-theme="light"] .active-nav-item {
+  background: rgba(204, 0, 8, 0.1);
+  border-left-color: #CC0008;
 }
 
 *, *::before, *::after {
@@ -138,18 +143,12 @@ a:hover { opacity: 0.8; }
 
 /* Smooth page content entrance */
 @keyframes page-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .page-enter {
-  animation: page-enter 200ms ease-out forwards;
+  animation: page-enter 120ms ease-out forwards;
 }
 
 /* List item entrance — staggered */
@@ -405,6 +404,7 @@ select {
 .ryflow-editor-content {
   min-height: 50vh;
   color: var(--text-primary);
+  background: var(--bg-base);
   font-size: 14px;
   line-height: 1.75;
   caret-color: var(--accent);
@@ -414,6 +414,29 @@ select {
 }
 .ryflow-editor-content > * + * {
   margin-top: 0.5rem;
+}
+.ryflow-editor-content p,
+.ryflow-editor-content li {
+  color: var(--text-primary);
+}
+.ryflow-editor-content h1,
+.ryflow-editor-content h2,
+.ryflow-editor-content h3 {
+  color: var(--text-primary);
+}
+.ryflow-editor-content blockquote {
+  border-left-color: var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+.ryflow-editor-content code {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+.ryflow-editor-content pre {
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
 }
 .ryflow-editor-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
@@ -445,9 +468,9 @@ select {
 [data-theme="light"] .skeleton {
   background: linear-gradient(
     90deg,
-    #E8E7E0 25%,
-    #D8D7D0 50%,
-    #E8E7E0 75%
+    #EDECEA 25%,
+    #E0DED7 50%,
+    #EDECEA 75%
   );
   background-size: 1200px 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;

@@ -42,7 +42,7 @@ function topItems(items, n = 3) {
 // Stats card component used throughout the workspace stats grid.
 function StatCard({ label, value, subValue, icon: Icon, footer }) {
   return (
-    <div className="rounded-xl bg-[#2C2C2C] p-4 border border-border-d">
+    <div className="rounded-xl p-4 border border-border-d" style={{ background: 'var(--bg-elevated)' }}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-amd-white/60">{label}</span>
         <Icon size={14} className="text-amd-white/40" />
@@ -172,63 +172,63 @@ export default function Settings() {
         height: '100%',
         overflowY: 'auto',
         padding: '24px clamp(16px, 4vw, 40px)',
-        backgroundColor: '#111111'
+        backgroundColor: 'var(--bg-base)'
       }}
     >
       <div style={{ width: '100%', maxWidth: '1160px', margin: '0 auto' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', marginBottom: '32px' }}>Settings</h1>
+        <h1 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '32px' }}>Settings</h1>
 
         <section style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             System Status
           </h2>
           {loading ? (
-            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Loading status...</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', padding: '14px 0' }}>Loading status...</div>
           ) : status ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Ollama</p>
-                  <p style={{ fontSize: '12px', color: '#999999' }}>Model service availability</p>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>Ollama</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Model service availability</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   <StatusDot ok={Boolean(status.ollamaRunning ?? status.ollama_running)} /> {Boolean(status.ollamaRunning ?? status.ollama_running) ? 'Running' : 'Offline'}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>AMD GPU</p>
-                  <p style={{ fontSize: '12px', color: '#999999' }}>{status.gpuName || status.gpu_name || 'Hardware acceleration status'}</p>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>AMD GPU</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{status.gpuName || status.gpu_name || 'Hardware acceleration status'}</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   <StatusDot ok={Boolean(status.gpuDetected ?? status.amd_gpu)} /> {Boolean(status.gpuDetected ?? status.amd_gpu) ? 'Detected' : 'Not found'}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Inference Mode</p>
-                  <p style={{ fontSize: '12px', color: '#999999' }}>Current processing runtime</p>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>Inference Mode</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Current processing runtime</p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#999999' }}>
-                  <Zap size={12} color={Boolean(status.gpuDetected ?? status.amd_gpu) ? '#3D9970' : '#B85C00'} /> {Boolean(status.gpuDetected ?? status.amd_gpu) ? 'GPU (ROCm)' : 'CPU'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <Zap size={12} color={Boolean(status.gpuDetected ?? status.amd_gpu) ? 'var(--status-success)' : 'var(--status-warning)'} /> {Boolean(status.gpuDetected ?? status.amd_gpu) ? 'GPU (ROCm)' : 'CPU'}
                 </div>
               </div>
               {(status.vram || status.gpuVram) ? (
-                <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>VRAM</p>
-                    <p style={{ fontSize: '12px', color: '#999999' }}>{status.vram || status.gpuVram}</p>
+                    <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>VRAM</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{status.vram || status.gpuVram}</p>
                   </div>
                 </div>
               ) : null}
             </>
           ) : (
-            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Unavailable</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', padding: '14px 0' }}>Unavailable</div>
           )}
         </section>
 
         <section style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             AI Model
           </h2>
           {models.length > 0 ? (
@@ -236,11 +236,11 @@ export default function Settings() {
               <div
                 key={m.name}
                 onClick={() => handleSelectModel(m.name)}
-                style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424', cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}
               >
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>{m.name}</p>
-                  <p style={{ fontSize: '12px', color: '#999999' }}>Click to activate this model</p>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>{m.name}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Click to activate this model</p>
                 </div>
                 <button
                   onClick={(e) => {
@@ -250,9 +250,9 @@ export default function Settings() {
                   style={{
                     height: '30px',
                     borderRadius: '6px',
-                    border: selectedModel === m.name ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                    backgroundColor: selectedModel === m.name ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
-                    color: selectedModel === m.name ? '#E8000D' : '#999999',
+                    border: selectedModel === m.name ? '1px solid rgba(232,0,13,0.3)' : '1px solid var(--border-default)',
+                    backgroundColor: selectedModel === m.name ? 'rgba(232,0,13,0.1)' : 'var(--bg-surface)',
+                    color: selectedModel === m.name ? 'var(--accent)' : 'var(--text-secondary)',
                     fontSize: '12px',
                     padding: '0 10px',
                     cursor: 'pointer'
@@ -263,14 +263,14 @@ export default function Settings() {
               </div>
             ))
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#B85C00', padding: '14px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--status-warning)', padding: '14px 0' }}>
               <AlertTriangle size={14} /> No models found. Install with ollama pull phi3:mini
             </div>
           )}
         </section>
 
         <section style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             Language
           </h2>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '8px' }}>
@@ -281,9 +281,9 @@ export default function Settings() {
                 style={{
                   height: '30px',
                   borderRadius: '6px',
-                  border: language === item.code ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                  backgroundColor: language === item.code ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
-                  color: language === item.code ? '#E8000D' : '#999999',
+                  border: language === item.code ? '1px solid rgba(232,0,13,0.3)' : '1px solid var(--border-default)',
+                  backgroundColor: language === item.code ? 'rgba(232,0,13,0.1)' : 'var(--bg-surface)',
+                  color: language === item.code ? 'var(--accent)' : 'var(--text-secondary)',
                   fontSize: '12px',
                   padding: '0 10px',
                   cursor: 'pointer'
@@ -296,7 +296,7 @@ export default function Settings() {
         </section>
 
         <section style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             Workspace Stats
           </h2>
           <div
@@ -315,57 +315,57 @@ export default function Settings() {
               { label: 'Graph Nodes', value: stats?.knowledge_graph?.total_nodes || 0 },
               { label: 'Voice Notes', value: stats?.voice_logs?.count || 0 }
             ].map((stat) => (
-              <div key={stat.label} style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '16px' }}>
-                <div style={{ fontSize: '24px', fontWeight: '600', color: '#E8000D', marginBottom: '4px' }}>{stat.value}</div>
-                <div style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#666666' }}>{stat.label}</div>
+              <div key={stat.label} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '16px' }}>
+                <div style={{ fontSize: '24px', fontWeight: '600', color: 'var(--accent)', marginBottom: '4px' }}>{stat.value}</div>
+                <div style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-tertiary)' }}>{stat.label}</div>
               </div>
             ))}
           </div>
         </section>
 
         <section style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             Storage
           </h2>
           {storage ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>Total Usage</p>
-                  <p style={{ fontSize: '12px', color: '#999999' }}>{formatBytes(storage.total_bytes || 0)}</p>
+                  <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>Total Usage</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{formatBytes(storage.total_bytes || 0)}</p>
                 </div>
-                <button onClick={clearEmbeddings} style={{ height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>
+                <button onClick={clearEmbeddings} style={{ height: '30px', borderRadius: '6px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>
                   Clear Embeddings
                 </button>
               </div>
               <div style={{ padding: '10px 0 0' }}>
-                <p style={{ fontSize: '11px', color: '#999999', marginBottom: '6px' }}>Estimated .ryflow size: {formatBytes(Math.round(Number(storage.total_bytes || 0) * 0.7))}</p>
-                <div style={{ height: '3px', backgroundColor: '#222222', borderRadius: '2px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', backgroundColor: '#E8000D', borderRadius: '2px', width: '45%' }} />
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Estimated .ryflow size: {formatBytes(Math.round(Number(storage.total_bytes || 0) * 0.7))}</p>
+                <div style={{ height: '3px', backgroundColor: 'var(--bg-elevated)', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', backgroundColor: 'var(--accent)', borderRadius: '2px', width: '45%' }} />
                 </div>
               </div>
             </>
           ) : (
-            <div style={{ fontSize: '13px', color: '#666666', padding: '14px 0' }}>Storage data unavailable.</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', padding: '14px 0' }}>Storage data unavailable.</div>
           )}
         </section>
 
         <section style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', paddingBottom: '12px', borderBottom: '1px solid #242424', marginBottom: '4px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
             About RyFlow
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #242424' }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border-subtle)' }}>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', marginBottom: '2px' }}>RyFlow</p>
-              <p style={{ fontSize: '12px', color: '#999999' }}>Offline-first collaborative workspace</p>
+              <p style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>RyFlow</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Offline-first collaborative workspace</p>
             </div>
-            <span style={{ fontSize: '12px', color: '#666666' }}>v{APP_VERSION}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>v{APP_VERSION}</span>
           </div>
           {insights.length > 0 && (
             <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
               {insights.map((insight, i) => (
-                <div key={i} style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '10px 12px' }}>
-                  <p style={{ fontSize: '12px', color: '#999999' }}><Lightbulb size={12} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />{insight}</p>
+                <div key={i} style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '10px 12px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><Lightbulb size={12} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} />{insight}</p>
                 </div>
               ))}
             </div>
@@ -387,3 +387,4 @@ function InfoRow({ label, value, children }) {
     </div>
   );
 }
+

@@ -3,6 +3,8 @@ import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { Save, Download } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
+import useStore from '../../store/useStore';
+import { formatRelativeTime } from '../../utils/time';
 
 function parseCanvasElements(value) {
   if (Array.isArray(value)) return value;
@@ -51,9 +53,11 @@ export default function RyCanvas({
   const [title, setTitle] = useState(
     initialTitle || 'Untitled Canvas'
   );
-  const [saveStatus, setSaveStatus] = useState('');
+  const [lastSaved, setLastSaved] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [initialData, setInitialData] = useState(null);
+  const theme = useStore((s) => s.theme);
 
   const elementsRef = useRef([]);
   const appStateRef = useRef({});
@@ -104,6 +108,14 @@ export default function RyCanvas({
     isInitializedRef.current = false;
   }, [canvasId]);
 
+  useEffect(() => {
+    if (!lastSaved) return;
+    const interval = setInterval(() => {
+      setLastSaved((prev) => (prev ? new Date(prev) : null));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [lastSaved]);
+
   const performSave = useCallback(async () => {
     const currentElements = elementsRef.current;
     console.log('[Canvas performSave]',
@@ -115,7 +127,7 @@ export default function RyCanvas({
 
     if (isSavingRef.current) return;
     isSavingRef.current = true;
-    setSaveStatus('Saving...');
+    setIsSaving(true);
 
     try {
       const elementsJson = JSON.stringify(
@@ -144,8 +156,7 @@ export default function RyCanvas({
       }
 
       const saved = await res.json();
-      setSaveStatus('Saved');
-      setTimeout(() => setSaveStatus(''), 2000);
+      setLastSaved(new Date());
 
       if (onSaved) {
         onSaved({
@@ -157,10 +168,9 @@ export default function RyCanvas({
       }
     } catch (err) {
       console.error('[Canvas save]', err);
-      setSaveStatus('Save failed');
-      setTimeout(() => setSaveStatus(''), 3000);
     } finally {
       isSavingRef.current = false;
+      setIsSaving(false);
     }
   }, [canvasId, workspaceId, onSaved]);
 
@@ -276,17 +286,15 @@ export default function RyCanvas({
           }}
         />
 
-        {saveStatus && (
+        {(isSaving || lastSaved) && (
           <span style={{
             fontSize: '11px',
-            color: saveStatus === 'Saved'
-              ? 'var(--status-success)'
-              : saveStatus === 'Save failed'
-              ? 'var(--status-error)'
-              : 'var(--text-tertiary)',
+            color: isSaving ? 'var(--text-tertiary)' : 'var(--text-secondary)',
             flexShrink: 0
           }}>
-            {saveStatus}
+            {isSaving
+              ? 'Saving...'
+              : `Saved ${formatRelativeTime(lastSaved)}`}
           </span>
         )}
 
@@ -358,12 +366,12 @@ export default function RyCanvas({
             initialData={initialData || {
               elements: [],
               appState: {
-                theme: 'dark',
+                theme: theme === 'light' ? 'light' : 'dark',
                 collaborators: new Map()
               }
             }}
             onChange={handleChange}
-            theme="dark"
+            theme={theme === 'light' ? 'light' : 'dark'}
             UIOptions={{
               canvasActions: {
                 saveToActiveFile: false,

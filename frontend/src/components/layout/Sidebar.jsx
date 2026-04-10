@@ -1,5 +1,5 @@
 // Sidebar navigation — minimalist dark sidebar with icon links
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, FileText, CheckSquare, Settings, Code2, PenTool,
@@ -47,13 +47,7 @@ export default function Sidebar() {
   const [workspaceHover, setWorkspaceHover] = useState(false);
   const [hoveredNav, setHoveredNav] = useState('');
   const [settingsHover, setSettingsHover] = useState(false);
-  const [showWorkspaceSkeleton, setShowWorkspaceSkeleton] = useState(true);
   const isElectron = Boolean(window?.electronAPI?.isElectron);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowWorkspaceSkeleton(false), 450);
-    return () => clearTimeout(timer);
-  }, []);
 
   const userInitial = useMemo(() => {
     return (user?.name || '?').charAt(0).toUpperCase();
@@ -182,7 +176,7 @@ export default function Sidebar() {
             border: 'none'
           }}
         >
-          {!showWorkspaceSkeleton && workspace?.name ? (
+          {workspace?.name ? (
             <span
               style={{
                 fontSize: '11px',
@@ -240,6 +234,7 @@ export default function Sidebar() {
                 return (
                   <button
                     key={item.label}
+                    className={active ? 'active-nav-item' : ''}
                     onClick={handleTodaysNote}
                     onMouseEnter={() => setHoveredNav(item.label)}
                     onMouseLeave={() => setHoveredNav('')}
@@ -281,6 +276,7 @@ export default function Sidebar() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  className={active ? 'active-nav-item' : ''}
                   onMouseEnter={() => setHoveredNav(item.to)}
                   onMouseLeave={() => setHoveredNav('')}
                   style={{
@@ -334,7 +330,7 @@ export default function Sidebar() {
             width: '26px',
             height: '26px',
             borderRadius: '50%',
-            backgroundColor: '#2A4A7F',
+            backgroundColor: 'var(--bg-overlay)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -344,7 +340,7 @@ export default function Sidebar() {
           <span
             style={{
               fontSize: '11px',
-              color: '#FFFFFF',
+              color: 'var(--text-primary)',
               fontWeight: '600'
             }}
           >

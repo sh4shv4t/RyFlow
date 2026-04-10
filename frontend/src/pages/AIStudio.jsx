@@ -10,7 +10,7 @@ import VoiceInput from '../components/ai/VoiceInput';
 import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
 import { ChatListSkeleton, ListSkeleton } from '../components/shared/Skeleton';
-import { waitForMinimumLoading } from '../utils/loadingDelay';
+import { formatRelativeTime } from '../utils/time';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
@@ -37,7 +37,6 @@ export default function AIStudio() {
     }
     const token = fetchTokenRef.current + 1;
     fetchTokenRef.current = token;
-    const startedAt = Date.now();
     setIsLoadingChats(true);
     try {
       const res = await axios.get('/api/chats', { params: { workspace_id: workspaceId } });
@@ -47,7 +46,6 @@ export default function AIStudio() {
       toast.error('Failed to load chat history');
     } finally {
       if (token === fetchTokenRef.current) {
-        await waitForMinimumLoading(startedAt);
         setIsLoadingChats(false);
       }
     }
@@ -89,18 +87,6 @@ export default function AIStudio() {
     });
   }, []);
 
-  // Formats timestamps into short relative text for chat cards.
-  const timeAgo = useCallback((iso) => {
-    if (!iso) return 'just now';
-    const delta = Date.now() - new Date(iso).getTime();
-    const mins = Math.max(1, Math.floor(delta / 60000));
-    if (mins < 60) return `${mins} min ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days} day${days !== 1 ? 's' : ''} ago`;
-  }, []);
-
   // Filters chat history by title text.
   const filteredChats = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -109,13 +95,13 @@ export default function AIStudio() {
   }, [chats, searchText]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', height: '100%', overflow: 'hidden', backgroundColor: '#111111' }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', height: '100%', overflow: 'hidden', backgroundColor: 'var(--bg-base)' }}>
       <div
         style={{
           width: '240px',
           minWidth: '240px',
-          backgroundColor: '#1A1A1A',
-          borderRight: '1px solid #242424',
+          backgroundColor: 'var(--bg-surface)',
+          borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden'
@@ -124,12 +110,12 @@ export default function AIStudio() {
         <div
           style={{
             padding: '14px 12px 10px',
-            borderBottom: '1px solid #242424',
+            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center'
           }}
         >
-          <span style={{ fontSize: '13px', fontWeight: '600', color: '#F0F0F0', flex: 1 }}>Chats</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', flex: 1 }}>Chats</span>
           <button
             onClick={handleNewChat}
             style={{
@@ -144,13 +130,13 @@ export default function AIStudio() {
               justifyContent: 'center'
             }}
           >
-            <Plus size={14} color="#666666" />
+            <Plus size={14} color="var(--text-tertiary)" />
           </button>
         </div>
 
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #242424' }}>
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ position: 'relative' }}>
-            <Search size={13} color="#666666" style={{ position: 'absolute', left: '8px', top: '7px' }} />
+            <Search size={13} color="var(--text-tertiary)" style={{ position: 'absolute', left: '8px', top: '7px' }} />
             <input
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
@@ -159,17 +145,17 @@ export default function AIStudio() {
                 width: '100%',
                 height: '28px',
                 padding: '0 10px 0 28px',
-                backgroundColor: '#222222',
-                border: '1px solid #333333',
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '4px',
                 fontSize: '12px',
-                color: '#F0F0F0'
+                color: 'var(--text-primary)'
               }}
             />
           </div>
         </div>
 
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #242424' }}>
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
             {tabs.map(({ key, label, icon: Icon }) => (
               <button
@@ -178,9 +164,9 @@ export default function AIStudio() {
                 style={{
                   height: '24px',
                   borderRadius: '4px',
-                  border: activeTab === key ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                  backgroundColor: activeTab === key ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
-                  color: activeTab === key ? '#E8000D' : '#666666',
+                  border: activeTab === key ? '1px solid rgba(232,0,13,0.3)' : '1px solid var(--border-default)',
+                  backgroundColor: activeTab === key ? 'rgba(232,0,13,0.08)' : 'var(--bg-surface)',
+                  color: activeTab === key ? 'var(--accent)' : 'var(--text-tertiary)',
                   fontSize: '11px',
                   padding: '0 8px',
                   cursor: 'pointer',
@@ -204,7 +190,7 @@ export default function AIStudio() {
             />
           ) : null}
           {!isLoadingChats && filteredChats.length === 0 && (
-            <p style={{ padding: '20px 10px', fontSize: '13px', color: '#666666', textAlign: 'center' }}>No chats yet</p>
+            <p style={{ padding: '20px 10px', fontSize: '13px', color: 'var(--text-tertiary)', textAlign: 'center' }}>No chats yet</p>
           )}
           {!isLoadingChats && filteredChats.map((chat) => (
             <div
@@ -214,7 +200,7 @@ export default function AIStudio() {
                 const btn = e.currentTarget.querySelector('.chat-delete-btn');
                 if (btn) btn.style.opacity = '1';
                 const card = e.currentTarget.querySelector('.chat-item-card');
-                if (card && activeChat?.id !== chat.id) card.style.backgroundColor = '#222222';
+                if (card && activeChat?.id !== chat.id) card.style.backgroundColor = 'var(--bg-elevated)';
               }}
               onMouseLeave={(e) => {
                 const btn = e.currentTarget.querySelector('.chat-delete-btn');
@@ -233,7 +219,7 @@ export default function AIStudio() {
                   cursor: 'pointer',
                   marginBottom: '1px',
                   transition: 'background 150ms',
-                  borderLeft: activeChat?.id === chat.id ? '2px solid #E8000D' : '2px solid transparent',
+                  borderLeft: activeChat?.id === chat.id ? '2px solid var(--accent)' : '2px solid transparent',
                   backgroundColor: activeChat?.id === chat.id ? 'rgba(232,0,13,0.08)' : 'transparent',
                   borderTop: 'none',
                   borderRight: 'none',
@@ -245,7 +231,7 @@ export default function AIStudio() {
                   style={{
                     fontSize: '13px',
                     fontWeight: '500',
-                    color: '#F0F0F0',
+                    color: 'var(--text-primary)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
@@ -255,9 +241,9 @@ export default function AIStudio() {
                   {chat.title}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: '#2A2A2A', color: '#666666', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
+                  <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'var(--bg-overlay)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
                   {chat.rag_used ? <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '2px' }}>RAG</span> : null}
-                  <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{timeAgo(chat.updated_at)}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{formatRelativeTime(chat.updated_at)}</span>
                 </div>
               </button>
 
@@ -291,7 +277,7 @@ export default function AIStudio() {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#111111' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: 'var(--bg-base)' }}>
         <div style={{ padding: '14px 20px 10px' }}>
           <h1
             style={{
@@ -356,8 +342,8 @@ export default function AIStudio() {
               style={{ flex: 1, padding: '20px', overflowY: 'auto' }}
             >
               <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: '600', color: '#F0F0F0', marginBottom: '4px' }}>Voice Input</h2>
-                <p style={{ fontSize: '13px', color: '#999999', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>Voice Input</h2>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                   Record speech and transcribe with Whisper.cpp — fully offline
                 </p>
                 <VoiceInput onTranscript={(text) => {}} />
@@ -369,3 +355,4 @@ export default function AIStudio() {
     </motion.div>
   );
 }
+

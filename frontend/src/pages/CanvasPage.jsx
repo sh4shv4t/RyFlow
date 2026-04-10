@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
+import { formatRelativeTime } from '../utils/time';
 import RyCanvas from '../components/canvas/RyCanvas';
 import {
   Plus, ChevronDown, Trash2, PenTool
@@ -275,6 +276,14 @@ export default function CanvasPage() {
                       whiteSpace: 'nowrap'
                     }}>
                       {c.title}
+                    </span>
+                    <span style={{
+                      fontSize: '10px',
+                      color: 'var(--text-tertiary)',
+                      flexShrink: 0,
+                      marginRight: '4px'
+                    }}>
+                      {formatRelativeTime(c.updated_at || c.created_at)}
                     </span>
                     <button
                       className="cv-del"

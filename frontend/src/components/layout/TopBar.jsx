@@ -86,32 +86,80 @@ export default function TopBar() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
         <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          onClick={() =>
+            setTheme(theme === 'dark' ? 'light' : 'dark')
+          }
+          title={theme === 'dark'
+            ? 'Switch to light mode'
+            : 'Switch to dark mode'}
           style={{
-            width: 28,
-            height: 28,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 4,
+            gap: 0,
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 20,
+            padding: '3px',
             cursor: 'pointer',
-            color: 'var(--text-tertiary)',
-            transition: 'all 150ms ease',
-            flexShrink: 0
+            flexShrink: 0,
+            position: 'relative',
+            width: 52,
+            height: 26,
+            transition: 'border-color 150ms ease'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--bg-elevated)';
-            e.currentTarget.style.color = 'var(--text-primary)';
+            e.currentTarget.style.borderColor =
+              'var(--border-strong)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-tertiary)';
+            e.currentTarget.style.borderColor =
+              'var(--border-default)';
           }}
         >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          <span style={{
+            position: 'absolute',
+            left: 7,
+            display: 'flex',
+            alignItems: 'center',
+            color: theme === 'dark'
+              ? 'var(--text-tertiary)'
+              : 'var(--accent)',
+            transition: 'color 200ms ease'
+          }}>
+            <Sun size={12} strokeWidth={2} />
+          </span>
+          <span style={{
+            position: 'absolute',
+            right: 7,
+            display: 'flex',
+            alignItems: 'center',
+            color: theme === 'dark'
+              ? 'var(--text-secondary)'
+              : 'var(--text-tertiary)',
+            transition: 'color 200ms ease'
+          }}>
+            <Moon size={11} strokeWidth={2} />
+          </span>
+
+          <span style={{
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: 'var(--accent)',
+            position: 'absolute',
+            top: 2,
+            left: theme === 'dark' ? 'calc(100% - 22px)' : 2,
+            transition: 'left 200ms ease',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            {theme === 'dark'
+              ? <Moon size={10} color="white" strokeWidth={2} />
+              : <Sun size={10} color="white" strokeWidth={2} />
+            }
+          </span>
         </button>
 
         {aiStatus?.gpuDetected || aiStatus?.rocmAvailable ? (

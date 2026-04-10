@@ -17,6 +17,15 @@ if (window.location.protocol === 'file:' || window.electronAPI?.isElectron) {
 // Configures API auth/disconnect interceptors once at startup.
 configureApiClient();
 
+// Apply theme immediately to avoid flash.
+const savedTheme =
+  localStorage.getItem('ryflow_theme') || 'dark';
+document.documentElement.setAttribute(
+  'data-theme', savedTheme
+);
+document.documentElement.style.background =
+  savedTheme === 'light' ? '#F7F6F2' : '#111111';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

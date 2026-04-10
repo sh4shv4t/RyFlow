@@ -17,19 +17,7 @@ import {
   ListSkeleton,
   TaskCardSkeleton
 } from '../components/shared/Skeleton';
-import { waitForMinimumLoading } from '../utils/loadingDelay';
-
-// Formats ISO dates into compact relative labels.
-function timeAgo(iso) {
-  if (!iso) return 'just now';
-  const delta = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.floor(delta / 60000));
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
+import { formatRelativeTime } from '../utils/time';
 
 const TYPE_COLORS = {
   document: '#E8000D',
@@ -120,7 +108,6 @@ export default function Home() {
       return;
     }
 
-    const startedAt = Date.now();
     setDashboardLoading(true);
     try {
       const [statsRes, chatsRes, codeRes, canvasRes] = await Promise.all([
@@ -136,7 +123,6 @@ export default function Home() {
       const canvasList = Array.isArray(canvasRes.data) ? canvasRes.data : (canvasRes.data?.canvases || []);
       setCanvases(canvasList.slice(0, 3));
     } finally {
-      await waitForMinimumLoading(startedAt);
       setDashboardLoading(false);
     }
   }, [workspace?.id]);
@@ -152,7 +138,6 @@ export default function Home() {
       return;
     }
 
-    const startedAt = Date.now();
     setIsLoadingActivity(true);
     axios.get('/api/workspace/activity', {
       params: { workspace_id: workspace.id }
@@ -163,8 +148,7 @@ export default function Home() {
       .catch(() => {
         setActivity([]);
       })
-      .finally(async () => {
-        await waitForMinimumLoading(startedAt);
+      .finally(() => {
         setIsLoadingActivity(false);
       });
   }, [workspace?.id]);
@@ -176,7 +160,6 @@ export default function Home() {
       return;
     }
 
-    const startedAt = Date.now();
     setIsLoadingTasks(true);
     axios.get('/api/tasks', {
       params: { workspace_id: workspace.id }
@@ -187,8 +170,7 @@ export default function Home() {
       .catch(() => {
         setTasks([]);
       })
-      .finally(async () => {
-        await waitForMinimumLoading(startedAt);
+      .finally(() => {
         setIsLoadingTasks(false);
       });
   }, [workspace?.id]);
@@ -215,14 +197,14 @@ export default function Home() {
             style={{
               fontSize: '22px',
               fontWeight: '600',
-              color: '#F0F0F0',
+              color: 'var(--text-primary)',
               lineHeight: '1.2',
               marginBottom: '4px'
             }}
           >
             Welcome back, {user?.name || 'Teammate'}
           </h1>
-          <p style={{ fontSize: '13px', color: '#999999' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             {workspace?.name || 'Workspace'} • {clock.toLocaleString()}
           </p>
         </div>
@@ -241,20 +223,20 @@ export default function Home() {
                   key={action.label}
                   onClick={action.onClick}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#222222';
-                    e.currentTarget.style.borderColor = '#444444';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#1A1A1A';
-                    e.currentTarget.style.borderColor = '#333333';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+                    e.currentTarget.style.borderColor = 'var(--border-default)';
                   }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                     padding: '8px 14px',
-                    backgroundColor: '#1A1A1A',
-                    border: '1px solid #333333',
+                    backgroundColor: 'var(--bg-surface)',
+                    border: '1px solid var(--border-default)',
                     borderLeft: `3px solid ${action.accent}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
@@ -262,7 +244,7 @@ export default function Home() {
                   }}
                 >
                   <ActionIcon size={14} color={action.accent} />
-                  <span style={{ fontSize: '13px', color: '#999999' }}>{action.label}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{action.label}</span>
                 </button>
               );
             })}
@@ -273,31 +255,31 @@ export default function Home() {
           <div
             style={{
               marginBottom: '20px',
-              border: '1px solid #333333',
-              backgroundColor: '#1A1A1A',
+              border: '1px solid var(--border-default)',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '6px',
               padding: '10px 12px',
-              color: '#999999',
+              color: 'var(--text-secondary)',
               fontSize: '13px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px'
             }}
           >
-            <AlertCircle size={14} color="#B85C00" /> Ollama is offline. AI features may be limited.
+            <AlertCircle size={14} color="var(--status-warning)" /> Ollama is offline. AI features may be limited.
           </div>
         )}
 
         {showTranscript && briefingText ? (
           <div
             style={{
-              backgroundColor: '#1A1A1A',
-              border: '1px solid #333333',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
               borderRadius: '6px',
               padding: '16px 20px',
               marginBottom: '24px',
               fontSize: '13px',
-              color: '#999999',
+              color: 'var(--text-secondary)',
               lineHeight: '1.7'
             }}
           >
@@ -307,7 +289,7 @@ export default function Home() {
 
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
+            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', flex: 1 }}>
               ACTIVE TASKS
             </p>
           </div>
@@ -320,12 +302,12 @@ export default function Home() {
                 <TaskCardSkeleton />
               </>
             ) : inProgressTasks.length === 0 ? (
-              <div style={{ fontSize: '13px', color: '#666666', padding: '8px 8px' }}>No active tasks</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', padding: '8px 8px' }}>No active tasks</div>
             ) : inProgressTasks.map((task) => (
               <button
                 key={task.id}
                 onClick={() => navigate('/tasks')}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                 style={{
                   display: 'flex',
@@ -348,13 +330,13 @@ export default function Home() {
                     height: '6px',
                     borderRadius: '50%',
                     flexShrink: 0,
-                    backgroundColor: task.priority === 'high' ? '#C0392B' : task.priority === 'medium' ? '#B85C00' : '#666666'
+                    backgroundColor: task.priority === 'high' ? 'var(--status-error)' : task.priority === 'medium' ? 'var(--status-warning)' : 'var(--text-tertiary)'
                   }}
                 />
                 <span
                   style={{
                     fontSize: '13px',
-                    color: '#F0F0F0',
+                    color: 'var(--text-primary)',
                     flex: 1,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -363,7 +345,7 @@ export default function Home() {
                 >
                   {task.title}
                 </span>
-                <span style={{ fontSize: '11px', color: '#666666', flexShrink: 0 }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>
                   {task.due_date || 'No due'}
                 </span>
               </button>
@@ -373,7 +355,7 @@ export default function Home() {
 
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', flex: 1 }}>
+            <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', flex: 1 }}>
               RECENT ACTIVITY
             </p>
           </div>
@@ -397,7 +379,7 @@ export default function Home() {
                     if (item.type === 'ai_chat') navigate('/ai');
                     if (item.type === 'voice') navigate('/ai');
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                   style={{
                     display: 'flex',
@@ -414,11 +396,11 @@ export default function Home() {
                     textAlign: 'left'
                   }}
                 >
-                  <ItemIcon size={14} color={TYPE_COLORS[item.type] || '#666666'} />
+                  <ItemIcon size={14} color={TYPE_COLORS[item.type] || 'var(--text-tertiary)'} />
                   <span
                     style={{
                       fontSize: '13px',
-                      color: '#F0F0F0',
+                      color: 'var(--text-primary)',
                       flex: 1,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -428,7 +410,7 @@ export default function Home() {
                     {item.title}
                   </span>
                   <TypeBadge type={item.type} />
-                  <span style={{ fontSize: '11px', color: '#666666', flexShrink: 0 }}>{timeAgo(item.updated_at)}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>{formatRelativeTime(item.updated_at)}</span>
                 </button>
               );
             })}
@@ -442,8 +424,8 @@ export default function Home() {
         style={{
           width: '260px',
           flexShrink: 0,
-          backgroundColor: '#1A1A1A',
-          borderLeft: '1px solid #242424',
+          backgroundColor: 'var(--bg-surface)',
+          borderLeft: '1px solid var(--border-subtle)',
           padding: '20px 16px',
           overflowY: 'auto',
           display: 'flex',
@@ -452,24 +434,24 @@ export default function Home() {
         }}
       >
         <div style={{ marginBottom: '20px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
             AMD STATUS
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '32px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? '#3D9970' : '#666666' }} />
-            <span style={{ fontSize: '13px', color: '#999999' }}>{aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? 'ROCm Active' : 'CPU Mode'}</span>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? '#3D9970' : 'var(--text-tertiary)' }} />
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{aiStatus?.rocmAvailable || aiStatus?.gpuDetected ? 'ROCm Active' : 'CPU Mode'}</span>
           </div>
           <div style={{ marginTop: '8px' }}><AMDbadge /></div>
         </div>
 
-        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
+        <div style={{ height: '1px', backgroundColor: 'var(--border-subtle)', margin: '0 0 20px' }} />
 
         <div style={{ marginBottom: '20px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
             PEERS ONLINE
           </p>
           {peers.length === 0 ? (
-            <p style={{ fontSize: '13px', color: '#666666' }}>No peers online</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No peers online</p>
           ) : peers.map((peer) => {
             const name = peer.name || 'Peer';
             const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
@@ -484,36 +466,36 @@ export default function Home() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: '#2A3A5A',
+                    backgroundColor: 'var(--bg-overlay)',
                     fontSize: '11px',
-                    color: '#FFFFFF',
+                    color: 'var(--text-inverse)',
                     fontWeight: '600'
                   }}
                 >
                   {initials || 'P'}
                 </div>
-                <span style={{ fontSize: '13px', color: '#F0F0F0', fontWeight: '500', flex: 1 }}>{name}</span>
-                <span style={{ fontSize: '11px', color: '#666666' }}>online</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '500', flex: 1 }}>{name}</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>online</span>
               </div>
             );
           })}
         </div>
 
-        <div style={{ height: '1px', backgroundColor: '#242424', margin: '0 0 20px' }} />
+        <div style={{ height: '1px', backgroundColor: 'var(--border-subtle)', margin: '0 0 20px' }} />
 
         <div style={{ marginBottom: '20px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '10px' }}>
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '10px' }}>
             RECENT CHATS
           </p>
           {dashboardLoading ? (
             <ListSkeleton rows={2} RowComponent={ActivityRowSkeleton} />
           ) : recentChats.length === 0 ? (
-            <p style={{ fontSize: '13px', color: '#666666' }}>No recent chats</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No recent chats</p>
           ) : recentChats.slice(0, 2).map((chat) => (
             <button
               key={chat.id}
               onClick={() => navigate('/ai')}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#222222'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               style={{
                 display: 'flex',
@@ -530,11 +512,11 @@ export default function Home() {
                 textAlign: 'left'
               }}
             >
-              <MessageSquare size={13} color="#666666" />
-              <span style={{ fontSize: '12px', color: '#F0F0F0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <MessageSquare size={13} color="var(--text-tertiary)" />
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {chat.title}
               </span>
-              <span style={{ fontSize: '10px', color: '#666666' }}>{timeAgo(chat.updated_at)}</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatRelativeTime(chat.updated_at)}</span>
             </button>
           ))}
         </div>
@@ -545,9 +527,9 @@ export default function Home() {
             style={{
               height: '34px',
               borderRadius: '6px',
-              border: '1px solid #333333',
-              backgroundColor: briefingSpeaking ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
-              color: briefingSpeaking ? '#E8000D' : '#999999',
+              border: '1px solid var(--border-default)',
+              backgroundColor: briefingSpeaking ? 'rgba(232,0,13,0.1)' : 'var(--bg-surface)',
+              color: briefingSpeaking ? 'var(--accent)' : 'var(--text-secondary)',
               fontSize: '12px',
               cursor: 'pointer'
             }}
@@ -559,7 +541,7 @@ export default function Home() {
               onClick={() => setShowTranscript((v) => !v)}
               style={{
                 fontSize: '11px',
-                color: '#666666',
+                color: 'var(--text-tertiary)',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer'
@@ -573,3 +555,4 @@ export default function Home() {
     </div>
   );
 }
+

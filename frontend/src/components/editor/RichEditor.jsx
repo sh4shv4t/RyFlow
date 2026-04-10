@@ -18,6 +18,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import useStore from '../../store/useStore';
+import { formatRelativeTime } from '../../utils/time';
 import { apiFetch } from '../../utils/apiClient';
 import useCollaboration from '../../hooks/useCollaboration';
 import AIAssistPanel from './AIAssistPanel';
@@ -211,7 +212,7 @@ function PanelShell({ panelTitle, onClose, headerBg, accentColor, children }) {
           }}
           title="Close panel"
         >
-          ×
+          +�
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{children}</div>
@@ -226,6 +227,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
   const [title, setTitle] = useState(doc?.title || 'Untitled');
   const [saveStatus, setSaveStatus] = useState('');
+  const [lastSaved, setLastSaved] = useState(null);
 
   const [showAI, setShowAI] = useState(false);
   const [showBacklinks, setShowBacklinks] = useState(false);
@@ -329,10 +331,11 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
       const updated = await res.json();
       onDocUpdate?.(updated);
+      setLastSaved(new Date());
 
       if (manual) {
         setSaveStatus('Saved');
-        setTimeout(() => setSaveStatus(''), 2000);
+        setTimeout(() => setSaveStatus(''), 1200);
       }
     } catch (err) {
       console.error('[RichEditor] save error:', err);
@@ -400,6 +403,14 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
   useEffect(() => {
     if (showBacklinks) refreshBacklinks();
   }, [showBacklinks, refreshBacklinks]);
+
+  useEffect(() => {
+    if (!lastSaved) return;
+    const interval = setInterval(() => {
+      setLastSaved((prev) => (prev ? new Date(prev) : null));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [lastSaved]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -717,11 +728,24 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         <div style={{ flex: 1, minWidth: 8 }} />
 
+        {lastSaved && (
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-tertiary)',
+              marginRight: '8px',
+              flexShrink: 0
+            }}
+          >
+            Saved {formatRelativeTime(lastSaved)}
+          </span>
+        )}
+
         {saveStatus && (
           <span
             style={{
               fontSize: '11px',
-              color: saveStatus === 'Saved' ? 'var(--success)' : saveStatus === 'Save failed' ? 'var(--error)' : 'var(--text-tertiary)',
+              color: saveStatus === 'Save failed' ? 'var(--error)' : 'var(--text-tertiary)',
               marginRight: '8px'
             }}
           >
@@ -741,17 +765,11 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
             background: 'var(--accent)',
             border: 'none',
             borderRadius: '4px',
-            color: '#FFFFFF',
+            color: 'var(--text-on-accent)',
             cursor: 'pointer',
             fontSize: '12px',
             fontWeight: 500,
             flexShrink: 0
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#CC0000';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'var(--accent)';
           }}
         >
           <Save size={13} /> Save
@@ -814,7 +832,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showAI && (
           <PanelShell
-            panelTitle="✨ AI Assist"
+            panelTitle="G�� AI Assist"
             onClose={() => setShowAI(false)}
             headerBg="rgba(139,92,246,0.06)"
             accentColor="#8B5CF6"
@@ -831,7 +849,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showBacklinks && (
           <PanelShell
-            panelTitle="🔗 Backlinks"
+            panelTitle="=��� Backlinks"
             onClose={() => setShowBacklinks(false)}
             headerBg="rgba(232,0,13,0.06)"
             accentColor="#E8000D"
@@ -854,7 +872,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showComments && (
           <PanelShell
-            panelTitle="💬 Comments"
+            panelTitle="=�Ƽ Comments"
             onClose={() => setShowComments(false)}
             headerBg="rgba(255,107,0,0.06)"
             accentColor="#FF6B00"

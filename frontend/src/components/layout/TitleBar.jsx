@@ -60,6 +60,14 @@ export default function TitleBar() {
         <button
           onClick={() => window.electronAPI.minimize()}
           style={buttonStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-elevated)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
           aria-label="Minimize"
           title="Minimize"
         >
@@ -69,6 +77,14 @@ export default function TitleBar() {
         <button
           onClick={() => window.electronAPI.maximize()}
           style={buttonStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-elevated)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
           aria-label={isMaximized ? 'Restore' : 'Maximize'}
           title={isMaximized ? 'Restore' : 'Maximize'}
         >
@@ -77,7 +93,15 @@ export default function TitleBar() {
 
         <button
           onClick={() => window.electronAPI.close()}
-          style={{ ...buttonStyle, color: '#E35D5D' }}
+          style={buttonStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#E8000D';
+            e.currentTarget.style.color = '#FFFFFF';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
           aria-label="Close"
           title="Close"
         >
@@ -94,7 +118,7 @@ const buttonStyle = {
   border: 'none',
   borderRadius: '5px',
   background: 'transparent',
-  color: 'var(--text-secondary)',
+  color: 'var(--text-tertiary)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

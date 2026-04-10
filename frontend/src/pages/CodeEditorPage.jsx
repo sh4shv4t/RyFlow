@@ -2,16 +2,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Code2, FilePlus2, Save, Link as LinkIcon } from 'lucide-react';
+import { Code2, FilePlus2, Save, Trash2, Link as LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
 import BacklinksPanel from '../components/editor/BacklinksPanel';
+import { formatRelativeTime } from '../utils/time';
 import {
   CodeFileRowSkeleton,
   ListSkeleton
 } from '../components/shared/Skeleton';
-import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 const LANGUAGE_LABELS = {
   javascript: 'JavaScript',
@@ -69,6 +69,7 @@ export default function CodeEditorPage() {
   const [backlinksOpen, setBacklinksOpen] = useState(false);
   const [backlinksLoading, setBacklinksLoading] = useState(false);
   const loadingRef = useRef(false);
+  const isDeletingRef = useRef(false);
   const activeFileRef = useRef(null);
 
   const resolveWorkspaceId = useCallback(() => {
@@ -87,7 +88,6 @@ export default function CodeEditorPage() {
       setIsLoadingFiles(false);
       return;
     }
-    const startedAt = Date.now();
     setIsLoadingFiles(true);
     try {
       const res = await axios.get('/api/code/list', { params: { workspace_id: activeWorkspaceId } });
@@ -95,7 +95,6 @@ export default function CodeEditorPage() {
     } catch (err) {
       setError('Failed to load code files');
     } finally {
-      await waitForMinimumLoading(startedAt);
       setIsLoadingFiles(false);
     }
   }, [resolveWorkspaceId]);
@@ -188,6 +187,38 @@ export default function CodeEditorPage() {
     navigate('/code');
   }, [navigate]);
 
+  const handleDeleteFile = useCallback(async (fileId, e) => {
+    e.stopPropagation();
+    if (isDeletingRef.current) return;
+    isDeletingRef.current = true;
+
+    const previousFiles = files;
+    const remaining = files.filter((f) => f.id !== fileId);
+    setFiles(remaining);
+
+    if (activeFile?.id === fileId) {
+      if (remaining.length > 0) {
+        await loadFile(remaining[0].id);
+      } else {
+        setActiveFile(null);
+        activeFileRef.current = null;
+        setLastSavedAt(null);
+        navigate('/code');
+      }
+    }
+
+    try {
+      await axios.delete(`/api/code/${fileId}`);
+      toast.success('File deleted');
+    } catch {
+      setFiles(previousFiles);
+      fetchFiles();
+      toast.error('Failed to delete file');
+    } finally {
+      isDeletingRef.current = false;
+    }
+  }, [files, activeFile?.id, loadFile, navigate, fetchFiles]);
+
   // Saves active code file to backend and refreshes sidebar list.
   const saveActiveFile = useCallback(async () => {
     const snapshot = activeFileRef.current;
@@ -261,11 +292,11 @@ export default function CodeEditorPage() {
   const languageBadge = useMemo(() => LANGUAGE_LABELS[activeFile?.language] || 'Unknown', [activeFile?.language]);
 
   return (
-    <div style={{ backgroundColor: '#111111', height: '100%', display: 'flex' }}>
-      <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid #242424', padding: '12px', overflowY: 'auto' }}>
+    <div style={{ backgroundColor: 'var(--bg-base)', height: '100%', display: 'flex' }}>
+      <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid var(--border-subtle)', padding: '12px', overflowY: 'auto', backgroundColor: 'var(--bg-surface)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666' }}>Code Files</p>
-          <button onClick={createNewFile} style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="New file">
+          <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>Code Files</p>
+          <button onClick={createNewFile} style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="New file">
             <FilePlus2 size={14} />
           </button>
         </div>
@@ -276,52 +307,87 @@ export default function CodeEditorPage() {
             RowComponent={CodeFileRowSkeleton}
           />
         ) : files.length === 0 ? (
-          <div style={{ fontSize: '12px', color: '#666666' }}>No code files yet. Create your first file.</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>No code files yet. Create your first file.</div>
         ) : (
           <div style={{ display: 'grid', gap: '6px' }}>
             {files.map((f) => (
-              <button
+              <div
                 key={f.id}
-                onClick={() => loadFile(f.id)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  border: activeFile?.id === f.id ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-                  backgroundColor: activeFile?.id === f.id ? 'rgba(232,0,13,0.08)' : '#1A1A1A',
-                  cursor: 'pointer'
+                style={{ position: 'relative' }}
+                onMouseEnter={(e) => {
+                  const btn = e.currentTarget.querySelector('.file-del-btn');
+                  if (btn) btn.style.opacity = '1';
+                }}
+                onMouseLeave={(e) => {
+                  const btn = e.currentTarget.querySelector('.file-del-btn');
+                  if (btn) btn.style.opacity = '0';
                 }}
               >
-                <div style={{ fontSize: '13px', color: '#F0F0F0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{iconForLanguage(f.language)} {f.title}</div>
-                <div style={{ fontSize: '10px', color: '#666666', marginTop: '2px' }}>{new Date(f.updated_at || f.created_at).toLocaleString()}</div>
-              </button>
+                <button
+                  onClick={() => loadFile(f.id)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '8px 36px 8px 8px',
+                    borderRadius: '6px',
+                    border: activeFile?.id === f.id ? '1px solid var(--accent-border)' : '1px solid var(--border-default)',
+                    backgroundColor: activeFile?.id === f.id ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{iconForLanguage(f.language)} {f.title}</div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{formatRelativeTime(f.updated_at || f.created_at)}</div>
+                </button>
+                <button
+                  className="file-del-btn"
+                  onClick={(e) => handleDeleteFile(f.id, e)}
+                  style={{
+                    opacity: 0,
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--status-error)',
+                    padding: '3px',
+                    borderRadius: 3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'opacity 150ms ease'
+                  }}
+                  title="Delete file"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             ))}
           </div>
         )}
       </aside>
 
       <section style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ height: '48px', backgroundColor: '#1A1A1A', borderBottom: '1px solid #242424', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ height: '48px', backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <input
             value={activeFile?.title || ''}
             onChange={(e) => handleTitleChange(e.target.value)}
             placeholder="File name"
-            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 1 }}
+            style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', flex: 1 }}
           />
-          <span style={{ backgroundColor: '#222222', border: '1px solid #333333', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: '#999999' }}>{languageBadge}</span>
-          <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} style={{ height: '28px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', padding: '0 8px', fontSize: '11px', cursor: 'pointer', position: 'relative' }}>
+          <span style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: 'var(--text-secondary)' }}>{languageBadge}</span>
+          <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} style={{ height: '28px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', padding: '0 8px', fontSize: '11px', cursor: 'pointer', position: 'relative' }}>
             <LinkIcon size={12} style={{ display: 'inline', marginRight: '4px' }} /> Backlinks
-            {Number(backlinks.total || 0) > 0 ? <span style={{ marginLeft: '4px', display: 'inline-flex', minWidth: '14px', height: '14px', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '10px', padding: '0 4px' }}>{backlinks.total}</span> : null}
+            {Number(backlinks.total || 0) > 0 ? <span style={{ marginLeft: '4px', display: 'inline-flex', minWidth: '14px', height: '14px', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: 'var(--accent)', color: 'var(--text-inverse)', fontSize: '10px', padding: '0 4px' }}>{backlinks.total}</span> : null}
           </button>
-          <span style={{ fontSize: '11px', color: '#666666' }}>Last saved: {lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : 'Not saved yet'}</span>
-          <button onClick={saveActiveFile} disabled={!activeFile || saving} style={{ height: '30px', padding: '0 12px', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', border: 'none', borderRadius: '6px', cursor: !activeFile || saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: !activeFile || saving ? 0.6 : 1 }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Last saved: {lastSavedAt ? formatRelativeTime(lastSavedAt) : 'Not saved yet'}</span>
+          <button onClick={saveActiveFile} disabled={!activeFile || saving} style={{ height: '30px', padding: '0 12px', backgroundColor: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: '13px', fontWeight: '500', border: 'none', borderRadius: '6px', cursor: !activeFile || saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', opacity: !activeFile || saving ? 0.6 : 1 }}>
             <Save size={14} /> {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
 
         {!activeFile ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666666' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
             <div className="text-center">
               <Code2 size={32} className="mx-auto mb-2 text-amd-red/40" />
               Select a code file or create a new one.
@@ -337,7 +403,7 @@ export default function CodeEditorPage() {
               onLanguageChange={handleLanguageChange}
             />
             {isFileLoading && (
-              <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(17,17,17,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999999', fontSize: '13px', zIndex: 5 }}>
+              <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px', zIndex: 5 }}>
                 Loading file...
               </div>
             )}
@@ -358,7 +424,7 @@ export default function CodeEditorPage() {
           </div>
         )}
 
-        {error && <div style={{ fontSize: '12px', color: '#B85C00', padding: '8px 16px' }}>{error}</div>}
+        {error && <div style={{ fontSize: '12px', color: 'var(--status-warning)', padding: '8px 16px' }}>{error}</div>}
       </section>
     </div>
   );

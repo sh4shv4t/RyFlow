@@ -108,7 +108,7 @@ export default function KnowledgeGraph() {
         .attr('width', '100%')
         .attr('height', '100%')
         .attr('viewBox', `0 0 ${W} ${H}`)
-        .style('background', '#111111');
+        .style('background', 'var(--bg-base)');
 
       console.log('[Graph] SVG initialized:', { W, H, nodeCount: nodes.length, edgeCount: edges.length });
 
@@ -156,10 +156,10 @@ export default function KnowledgeGraph() {
 
       const links = g.append('g').selectAll('line').data(validEdges).enter().append('line')
         .attr('stroke', (d) => {
-          if (!selectedNode) return '#333333';
+          if (!selectedNode) return 'var(--border-default)';
           const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
           const targetId = typeof d.target === 'object' ? d.target.id : d.target;
-          return sourceId === selectedNode.id || targetId === selectedNode.id ? '#E8000D' : '#333333';
+          return sourceId === selectedNode.id || targetId === selectedNode.id ? 'var(--accent)' : 'var(--border-default)';
         })
         .attr('stroke-opacity', (d) => {
           if (!selectedNode) return 0.6;
@@ -197,11 +197,11 @@ export default function KnowledgeGraph() {
 
       nodeGroups.append('circle')
         .attr('r', (d) => (selectedNode?.id === d.id ? 11 : 7))
-        .attr('fill', (d) => NODE_COLORS[d.type] || '#666666')
+        .attr('fill', (d) => NODE_COLORS[d.type] || 'var(--text-tertiary)')
         .attr('stroke', (d) => {
-          const fill = NODE_COLORS[d.type] || '#666666';
+          const fill = NODE_COLORS[d.type] || 'var(--text-tertiary)';
           const darker = d3.color(fill)?.darker(0.8);
-          return darker ? darker.formatHex() : '#444444';
+          return darker ? darker.formatHex() : 'var(--border-strong)';
         })
         .attr('stroke-width', 1.5)
         .attr('opacity', (d) => (highlightedIds.size === 0 || highlightedIds.has(d.id) ? 1 : 0.35));
@@ -210,7 +210,7 @@ export default function KnowledgeGraph() {
         .attr('text-anchor', 'middle')
         .attr('font-size', '11px')
         .attr('font-family', 'Inter, sans-serif')
-        .attr('fill', '#999999')
+        .attr('fill', 'var(--text-secondary)')
         .attr('dy', -13)
         .text((d) => {
           const raw = d.title || 'Untitled';
@@ -359,7 +359,7 @@ export default function KnowledgeGraph() {
         overflow: 'hidden',
         minHeight: 0,
         flex: 1,
-        backgroundColor: '#111111'
+        backgroundColor: 'var(--bg-base)'
       }}
     >
       <svg
@@ -378,8 +378,8 @@ export default function KnowledgeGraph() {
           transform: 'translateX(-50%)',
           zIndex: 10,
           width: '400px',
-          backgroundColor: '#1A1A1A',
-          border: '1px solid #333333',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
           borderRadius: '6px',
           display: 'flex',
           alignItems: 'center',
@@ -388,7 +388,7 @@ export default function KnowledgeGraph() {
           boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }}
       >
-        <Search size={14} color="#666666" />
+        <Search size={14} color="var(--text-tertiary)" />
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -400,7 +400,7 @@ export default function KnowledgeGraph() {
             backgroundColor: 'transparent',
             border: 'none',
             fontSize: '13px',
-            color: '#F0F0F0'
+            color: 'var(--text-primary)'
           }}
         />
         <button
@@ -408,9 +408,9 @@ export default function KnowledgeGraph() {
           style={{
             height: '28px',
             borderRadius: '4px',
-            border: '1px solid #333333',
-            backgroundColor: '#222222',
-            color: '#999999',
+            border: '1px solid var(--border-default)',
+            backgroundColor: 'var(--bg-elevated)',
+            color: 'var(--text-secondary)',
             fontSize: '11px',
             padding: '0 8px',
             cursor: 'pointer'
@@ -426,8 +426,8 @@ export default function KnowledgeGraph() {
           bottom: '16px',
           left: '16px',
           zIndex: 10,
-          backgroundColor: '#1A1A1A',
-          border: '1px solid #333333',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
           borderRadius: '4px',
           padding: '8px 12px',
           display: 'flex',
@@ -439,13 +439,12 @@ export default function KnowledgeGraph() {
           document: '#E8000D',
           task: '#FF6B00',
           code: '#3B82F6',
-          canvas: '#00BCD4',
           ai_chat: '#8B5CF6',
           voice: '#3D9970'
         }).map(([type, color]) => (
           <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }} />
-            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#666666', letterSpacing: '0.06em', fontWeight: '500' }}>
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.06em', fontWeight: '500' }}>
               {type.replace('_', ' ')}
             </span>
           </div>
@@ -458,12 +457,12 @@ export default function KnowledgeGraph() {
           top: '16px',
           right: selectedNode ? '316px' : '16px',
           zIndex: 10,
-          backgroundColor: '#1A1A1A',
-          border: '1px solid #333333',
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
           borderRadius: '4px',
           padding: '4px 10px',
           fontSize: '11px',
-          color: '#666666'
+          color: 'var(--text-tertiary)'
         }}
       >
         {nodes.length} nodes
@@ -478,9 +477,9 @@ export default function KnowledgeGraph() {
           zIndex: 10,
           height: '26px',
           borderRadius: '4px',
-          border: showAllNodes ? '1px solid rgba(232,0,13,0.3)' : '1px solid #333333',
-          backgroundColor: showAllNodes ? 'rgba(232,0,13,0.1)' : '#1A1A1A',
-          color: showAllNodes ? '#E8000D' : '#666666',
+          border: showAllNodes ? '1px solid rgba(232,0,13,0.3)' : '1px solid var(--border-default)',
+          backgroundColor: showAllNodes ? 'rgba(232,0,13,0.1)' : 'var(--bg-surface)',
+          color: showAllNodes ? 'var(--accent)' : 'var(--text-tertiary)',
           fontSize: '11px',
           padding: '0 8px',
           cursor: 'pointer'
@@ -498,9 +497,9 @@ export default function KnowledgeGraph() {
           zIndex: 10,
           height: '26px',
           borderRadius: '4px',
-          border: '1px solid #333333',
-          backgroundColor: '#1A1A1A',
-          color: '#999999',
+          border: '1px solid var(--border-default)',
+          backgroundColor: 'var(--bg-surface)',
+          color: 'var(--text-secondary)',
           fontSize: '11px',
           padding: '0 8px',
           cursor: 'pointer'
@@ -519,9 +518,9 @@ export default function KnowledgeGraph() {
           zIndex: 10,
           height: '26px',
           borderRadius: '4px',
-          border: '1px solid #333333',
-          backgroundColor: '#1A1A1A',
-          color: '#999999',
+          border: '1px solid var(--border-default)',
+          backgroundColor: 'var(--bg-surface)',
+          color: 'var(--text-secondary)',
           fontSize: '11px',
           padding: '0 8px',
           cursor: backfilling ? 'not-allowed' : 'pointer',
@@ -541,9 +540,9 @@ export default function KnowledgeGraph() {
             zIndex: 10,
             height: '26px',
             borderRadius: '4px',
-            border: '1px solid #333333',
-            backgroundColor: '#1A1A1A',
-            color: '#999999',
+            border: '1px solid var(--border-default)',
+            backgroundColor: 'var(--bg-surface)',
+            color: 'var(--text-secondary)',
             fontSize: '11px',
             padding: '0 8px',
             cursor: 'pointer'
@@ -560,8 +559,8 @@ export default function KnowledgeGraph() {
           right: 0,
           width: '300px',
           height: '100%',
-          backgroundColor: '#1A1A1A',
-          borderLeft: '1px solid #333333',
+          backgroundColor: 'var(--bg-surface)',
+          borderLeft: '1px solid var(--border-default)',
           padding: '20px',
           overflowY: 'auto',
           zIndex: 20,
@@ -587,17 +586,17 @@ export default function KnowledgeGraph() {
             justifyContent: 'center'
           }}
         >
-          <X size={14} color="#666666" />
+          <X size={14} color="var(--text-tertiary)" />
         </button>
 
         <TypeBadge type={selectedType} />
 
-        <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#F0F0F0', lineHeight: '1.3', marginTop: '4px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', lineHeight: '1.3', marginTop: '4px' }}>
           {selectedNode?.title || 'Untitled'}
         </h3>
 
         {selectedNode?.content_summary && (
-          <p style={{ fontSize: '13px', color: '#999999', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
             {selectedNode.content_summary}
           </p>
         )}
@@ -605,15 +604,15 @@ export default function KnowledgeGraph() {
         {selectedNode?.metadata && Object.keys(selectedNode.metadata).length > 0 && (
           <div style={{ display: 'grid', gap: '6px' }}>
             {Object.entries(selectedNode.metadata).map(([key, value]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#666666' }}>
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
                 <span>{formatMetadataKey(key)}:</span>
-                <span style={{ color: '#999999' }}>{String(value)}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{String(value)}</span>
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#666666' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
           Created: {selectedNode?.created_at ? new Date(selectedNode.created_at).toLocaleString() : 'Unknown'}
         </div>
 
@@ -623,21 +622,21 @@ export default function KnowledgeGraph() {
             marginTop: 'auto',
             width: '100%',
             padding: '8px',
-            backgroundColor: '#222222',
-            border: '1px solid #333333',
+            backgroundColor: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
             borderRadius: '6px',
             fontSize: '13px',
-            color: '#F0F0F0',
+            color: 'var(--text-primary)',
             cursor: 'pointer',
             textAlign: 'center'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#2A2A2A';
-            e.currentTarget.style.borderColor = '#444444';
+            e.currentTarget.style.backgroundColor = 'var(--bg-overlay)';
+            e.currentTarget.style.borderColor = 'var(--border-strong)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#222222';
-            e.currentTarget.style.borderColor = '#333333';
+            e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+            e.currentTarget.style.borderColor = 'var(--border-default)';
           }}
         >
           Open
@@ -646,3 +645,4 @@ export default function KnowledgeGraph() {
     </div>
   );
 }
+

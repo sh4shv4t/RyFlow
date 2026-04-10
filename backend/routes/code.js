@@ -97,23 +97,24 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// DELETE /api/code/:id — delete a code file and linked graph node
+// DELETE /api/code/:id — delete a code file and linked graph data
 router.delete('/:id', (req, res) => {
   try {
     const db = getDb();
-    const existing = db.prepare('SELECT * FROM code_files WHERE id = ?').get(req.params.id);
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM code_files WHERE id = ?').get(id);
     if (!existing) return res.status(404).json({ error: 'Code file not found' });
 
-    db.prepare('DELETE FROM code_files WHERE id = ?').run(req.params.id);
+    db.prepare('DELETE FROM code_files WHERE id = ?').run(id);
+    db.prepare('DELETE FROM nodes WHERE source_id = ?').run(id);
 
-    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'code');
-    if (node) {
-      db.prepare('DELETE FROM edges WHERE source_id = ? OR target_id = ?').run(node.id, node.id);
-      db.prepare('DELETE FROM nodes WHERE id = ?').run(node.id);
-    }
+    try {
+      db.prepare('DELETE FROM document_versions WHERE document_id = ?').run(id);
+    } catch {}
 
     res.json({ success: true });
   } catch (err) {
+    console.error('[Code DELETE]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -345,8 +345,10 @@ ipcMain.handle('window-is-maximized', () => {
 
 app.whenReady().then(async () => {
   try {
-    await startBackend();
     await createWindow();
+    startBackend().catch((err) => {
+      console.error('[electron] Backend startup failed:', err.message);
+    });
   } catch (err) {
     console.error('[electron] Startup failed:', err.message);
     app.quit();

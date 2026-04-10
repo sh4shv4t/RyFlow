@@ -4,8 +4,8 @@ import toast from 'react-hot-toast';
 import { Trash2 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
+import { formatRelativeTime } from '../utils/time';
 import { DocumentRowSkeleton, ListSkeleton } from '../components/shared/Skeleton';
-import { waitForMinimumLoading } from '../utils/loadingDelay';
 
 function defaultDocContent() {
   return JSON.stringify({
@@ -31,7 +31,6 @@ export default function Documents() {
       return;
     }
 
-    const startedAt = Date.now();
     setIsLoading(true);
     try {
       const res = await apiFetch(`/api/docs?workspace_id=${workspaceId}`);
@@ -46,7 +45,6 @@ export default function Documents() {
       toast.error('Failed to load documents');
       setDocs([]);
     } finally {
-      await waitForMinimumLoading(startedAt);
       setIsLoading(false);
     }
   }, [workspaceId]);
@@ -155,7 +153,7 @@ export default function Documents() {
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {!workspaceId ? (
-          <div style={{ color: '#999999', fontSize: '13px', padding: '12px' }}>No active workspace selected.</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', padding: '12px' }}>No active workspace selected.</div>
         ) : isLoading ? (
           <ListSkeleton
             rows={8}
@@ -215,7 +213,7 @@ export default function Documents() {
                   {doc.title || 'Untitled'}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                  {new Date(doc.updated_at || doc.created_at).toLocaleString()}
+                  {formatRelativeTime(doc.updated_at || doc.created_at)}
                 </div>
               </button>
               <button
