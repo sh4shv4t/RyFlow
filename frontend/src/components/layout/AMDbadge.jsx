@@ -17,7 +17,7 @@ export default function AMDbadge() {
           ? 'bg-amd-green/10 text-amd-green border border-amd-green/20'
           : 'bg-amd-orange/10 text-amd-orange border border-amd-orange/20'
         }
-        ${aiActive ? 'amd-pulse' : ''}
+        ${aiActive ? 'amd-active' : ''}
       `}
       animate={aiActive ? { scale: [1, 1.02, 1] } : {}}
       transition={{ duration: 0.5, repeat: aiActive ? Infinity : 0 }}

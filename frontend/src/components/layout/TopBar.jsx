@@ -1,12 +1,14 @@
 // TopBar — shows workspace name, AMD status badge, and peer count
 import React, { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import { startPeerPolling, stopPeerPolling } from '../../utils/lanDiscovery';
 
 export default function TopBar() {
-  const { aiStatus, setAiStatus, peers, setPeers, workspace, setCommandPaletteOpen } = useStore();
+  const { aiStatus, aiActive, setAiStatus, peers, setPeers, workspace, setCommandPaletteOpen } = useStore();
+  const theme = useStore((s) => s.theme);
+  const setTheme = useStore((s) => s.setTheme);
   const [searchHover, setSearchHover] = useState(false);
 
   // Fetch AMD/system status once and rely on shared status cache.
@@ -28,8 +30,8 @@ export default function TopBar() {
     <header
       style={{
         height: '48px',
-        backgroundColor: '#111111',
-        borderBottom: '1px solid #242424',
+        backgroundColor: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         padding: '0 24px',
@@ -40,7 +42,7 @@ export default function TopBar() {
         flexShrink: 0
       }}
     >
-      <div style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0', flex: 'none' }}>
+      <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', flex: 'none' }}>
         <span>
           {workspace?.name || 'RyFlow'}
         </span>
@@ -57,21 +59,21 @@ export default function TopBar() {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          backgroundColor: '#1A1A1A',
-          border: `1px solid ${searchHover ? '#444444' : '#333333'}`,
+          backgroundColor: 'var(--bg-surface)',
+          border: `1px solid ${searchHover ? 'var(--border-strong)' : 'var(--border-default)'}`,
           borderRadius: '6px',
           padding: '6px 12px',
           cursor: 'pointer',
           transition: 'border-color 150ms'
         }}
       >
-        <Search size={13} color="#666666" />
-        <span style={{ fontSize: '12px', color: '#666666' }}>Search workspace...</span>
+        <Search size={13} color="var(--text-tertiary)" />
+        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Search workspace...</span>
         <span
           style={{
             fontSize: '10px',
-            color: '#666666',
-            backgroundColor: '#2A2A2A',
+            color: 'var(--text-tertiary)',
+            backgroundColor: 'var(--bg-overlay)',
             padding: '1px 5px',
             borderRadius: '3px',
             fontFamily: 'monospace',
@@ -83,30 +85,60 @@ export default function TopBar() {
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            width: 28,
+            height: 28,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer',
+            color: 'var(--text-tertiary)',
+            transition: 'all 150ms ease',
+            flexShrink: 0
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--bg-elevated)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+
         {aiStatus?.gpuDetected || aiStatus?.rocmAvailable ? (
           <div
+            className={aiActive ? 'amd-active' : ''}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              backgroundColor: 'rgba(232,0,13,0.08)',
-              border: '1px solid rgba(232,0,13,0.2)',
+              backgroundColor: 'var(--accent-subtle)',
+              border: '1px solid var(--accent-border)',
               borderRadius: '4px',
               padding: '2px 8px'
             }}
           >
-            <span style={{ fontSize: '11px', fontWeight: '500', color: '#E8000D' }}>⚡ AMD</span>
+            <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--accent)' }}>⚡ AMD</span>
           </div>
         ) : (
           <div
             style={{
-              backgroundColor: '#1A1A1A',
-              border: '1px solid #333333',
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
               borderRadius: '4px',
               padding: '2px 8px'
             }}
           >
-            <span style={{ fontSize: '11px', color: '#666666' }}>CPU Mode</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>CPU Mode</span>
           </div>
         )}
 
@@ -116,12 +148,12 @@ export default function TopBar() {
               style={{
                 width: '6px',
                 height: '6px',
-                backgroundColor: '#3D9970',
+                backgroundColor: 'var(--status-success)',
                 borderRadius: '50%',
                 flexShrink: 0
               }}
             />
-            <span style={{ fontSize: '12px', color: '#999999' }}>{peers.length} online</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{peers.length} online</span>
           </div>
         )}
 
@@ -129,7 +161,7 @@ export default function TopBar() {
           onClick={() => setCommandPaletteOpen(true)}
           style={{
             fontSize: '11px',
-            color: '#666666',
+            color: 'var(--text-tertiary)',
             background: 'transparent',
             border: 'none',
             cursor: 'pointer'

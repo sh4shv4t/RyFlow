@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
-import { Save, Download, Sparkles } from 'lucide-react';
+import { Save, Download } from 'lucide-react';
 import { apiFetch } from '../../utils/apiClient';
 
 function parseCanvasElements(value) {
@@ -54,12 +54,6 @@ export default function RyCanvas({
   const [saveStatus, setSaveStatus] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [initialData, setInitialData] = useState(null);
-  const [aiDescription, setAiDescription] =
-    useState('');
-  const [showAiPanel, setShowAiPanel] =
-    useState(false);
-  const [isDescribing, setIsDescribing] =
-    useState(false);
 
   const elementsRef = useRef([]);
   const appStateRef = useRef({});
@@ -229,77 +223,6 @@ export default function RyCanvas({
     }
   }
 
-  async function handleDescribe() {
-    if (isDescribing) return;
-    if (!excalidrawApiRef.current) return;
-
-    const elements = elementsRef.current;
-    if (!elements || elements.length === 0) {
-      setAiDescription(
-        'Canvas is empty. Draw something first.'
-      );
-      setShowAiPanel(true);
-      return;
-    }
-
-    setIsDescribing(true);
-    setShowAiPanel(true);
-    setAiDescription('Describing canvas...');
-
-    try {
-      const blob = await exportToBlob({
-        elements,
-        appState: {
-          ...appStateRef.current,
-          exportWithDarkMode: false,
-          exportBackground: true
-        },
-        files: excalidrawApiRef.current.getFiles(),
-        mimeType: 'image/png'
-      });
-
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = String(reader.result || '').split(',')[1];
-        try {
-          const res = await apiFetch(
-            '/api/ai/ocr-fallback',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                imageBase64: base64,
-                mimeType: 'image/png',
-                prompt:
-                  'Describe what is drawn in this' +
-                  ' diagram in detail. Identify shapes,' +
-                  ' connections, labels, and what concept' +
-                  ' this diagram represents.'
-              })
-            }
-          );
-          if (!res.ok) throw new Error('AI failed');
-          const data = await res.json();
-          setAiDescription(
-            data.text || data.content ||
-            'Could not describe this canvas.'
-          );
-        } catch (err) {
-          setAiDescription(
-            'Could not describe canvas: ' + err.message
-          );
-        } finally {
-          setIsDescribing(false);
-        }
-      };
-      reader.readAsDataURL(blob);
-    } catch (err) {
-      setAiDescription(
-        'Export failed: ' + err.message
-      );
-      setIsDescribing(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <div style={{
@@ -366,33 +289,6 @@ export default function RyCanvas({
             {saveStatus}
           </span>
         )}
-
-        <button
-          onClick={handleDescribe}
-          disabled={isDescribing}
-          title="Describe canvas with AI"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            padding: '5px 10px',
-            background: showAiPanel
-              ? 'rgba(139,92,246,0.12)'
-              : 'var(--bg-elevated)',
-            border: showAiPanel
-              ? '1px solid rgba(139,92,246,0.3)'
-              : '1px solid var(--border-subtle)',
-            borderRadius: '4px',
-            color: showAiPanel
-              ? '#8B5CF6' : 'var(--text-secondary)',
-            fontSize: '12px',
-            cursor: 'pointer',
-            flexShrink: 0
-          }}
-        >
-          <Sparkles size={13} />
-          {isDescribing ? 'Describing...' : 'Describe'}
-        </button>
 
         <button
           onClick={async () => {
@@ -478,66 +374,6 @@ export default function RyCanvas({
             }}
           />
         </div>
-
-        {showAiPanel && (
-          <div style={{
-            width: '280px',
-            flexShrink: 0,
-            borderLeft:
-              '1px solid var(--border-subtle)',
-            background: 'var(--bg-surface)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 14px',
-              borderBottom:
-                '1px solid var(--border-subtle)',
-              flexShrink: 0
-            }}>
-              <span style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: 'var(--text-primary)'
-              }}>
-                Canvas Description
-              </span>
-              <button
-                onClick={() => setShowAiPanel(false)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-tertiary)',
-                  fontSize: '16px',
-                  lineHeight: 1,
-                  padding: '2px 4px'
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '14px'
-            }}>
-              <p style={{
-                fontSize: '13px',
-                color: 'var(--text-primary)',
-                lineHeight: 1.7,
-                margin: 0,
-                whiteSpace: 'pre-wrap'
-              }}>
-                {aiDescription || '...'}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

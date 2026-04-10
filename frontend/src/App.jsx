@@ -1,7 +1,7 @@
 // Root App component — handles routing and layout
 import React from 'react';
-import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Sidebar from './components/layout/Sidebar';
 import TopBar from './components/layout/TopBar';
@@ -20,6 +20,34 @@ import CanvasPage from './pages/CanvasPage';
 import WorkspaceManager from './pages/WorkspaceManager';
 import TagsView from './pages/TagsView';
 import useStore from './store/useStore';
+
+function PageTransition({ children }) {
+  const location = useLocation();
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.classList.remove('page-enter');
+      void ref.current.offsetWidth;
+      ref.current.classList.add('page-enter');
+    }
+  }, [location.pathname]);
+
+  return (
+    <div
+      ref={ref}
+      className="page-enter"
+      style={{
+        height: '100%',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function App() {
   const { user, workspace, theme, setWorkspace, setRemoteMode, setUser } = useStore();
@@ -107,13 +135,13 @@ export default function App() {
           height: '100vh',
           width: '100vw',
           overflow: 'hidden',
-          backgroundColor: '#111111',
+          backgroundColor: 'var(--bg-base)',
           alignItems: 'center',
           justifyContent: 'center'
         }}
         className={theme === 'light' ? 'light-mode' : ''}
       >
-        <div style={{ color: '#999999', fontSize: '13px' }}>Loading workspace session...</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Loading workspace session...</div>
       </div>
     );
   }
@@ -127,7 +155,7 @@ export default function App() {
           height: '100vh',
           width: '100vw',
           overflow: 'hidden',
-          backgroundColor: '#111111'
+          backgroundColor: 'var(--bg-base)'
         }}
         className={theme === 'light' ? 'light-mode' : ''}
       >
@@ -150,7 +178,7 @@ export default function App() {
         height: '100vh',
         width: '100vw',
         overflow: 'hidden',
-        backgroundColor: '#111111'
+        backgroundColor: 'var(--bg-base)'
       }}
       className={theme === 'light' ? 'light-mode' : ''}
     >
@@ -173,27 +201,29 @@ export default function App() {
           style={{
             flex: 1,
             overflowY: 'auto',
-            backgroundColor: '#111111'
+            backgroundColor: 'var(--bg-base)'
           }}
         >
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/workspace" element={<Workspace />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/editor" element={<Navigate to="/documents" replace />} />
-            <Route path="/editor/:id" element={<Editor />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/graph" element={<Graph />} />
-            <Route path="/ai" element={<AIStudio />} />
-            <Route path="/code" element={<CodeEditorPage />} />
-            <Route path="/code/:id" element={<CodeEditorPage />} />
-            <Route path="/canvas" element={<CanvasPage />} />
-            <Route path="/canvas/:id" element={<CanvasPage />} />
-            <Route path="/tags" element={<TagsView />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/workspaces" element={<WorkspaceManager />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
+          <PageTransition>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/workspace" element={<Workspace />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/editor" element={<Navigate to="/documents" replace />} />
+              <Route path="/editor/:id" element={<Editor />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/graph" element={<Graph />} />
+              <Route path="/ai" element={<AIStudio />} />
+              <Route path="/code" element={<CodeEditorPage />} />
+              <Route path="/code/:id" element={<CodeEditorPage />} />
+              <Route path="/canvas" element={<CanvasPage />} />
+              <Route path="/canvas/:id" element={<CanvasPage />} />
+              <Route path="/tags" element={<TagsView />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/workspaces" element={<WorkspaceManager />} />
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </PageTransition>
         </main>
       </div>
     </div>

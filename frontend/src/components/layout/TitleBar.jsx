@@ -23,8 +23,8 @@ export default function TitleBar() {
     <div
       style={{
         height: '40px',
-        background: '#1A1A1A',
-        borderBottom: '1px solid #2A2A2A',
+        background: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -42,7 +42,7 @@ export default function TitleBar() {
         style={{
           fontSize: '13px',
           fontWeight: 600,
-          color: '#F0F0F0',
+          color: 'var(--text-primary)',
           letterSpacing: '0.3px'
         }}
       >
@@ -94,7 +94,7 @@ const buttonStyle = {
   border: 'none',
   borderRadius: '5px',
   background: 'transparent',
-  color: '#CFCFCF',
+  color: 'var(--text-secondary)',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',

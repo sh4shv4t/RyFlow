@@ -23,20 +23,37 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <App />
       <Toaster
         position="bottom-right"
+        gutter={8}
         toastOptions={{
-          className: 'toast-custom',
-          duration: 4000,
+          duration: 3000,
           style: {
-            background: '#2C2C2C',
-            color: '#F5F5F0',
-            border: '1px solid rgba(245, 245, 240, 0.1)',
+            background: 'var(--bg-overlay)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-default)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            padding: '10px 14px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+            fontFamily: 'Inter, sans-serif'
           },
           success: {
-            iconTheme: { primary: '#00C853', secondary: '#F5F5F0' },
+            iconTheme: {
+              primary: 'var(--status-success)',
+              secondary: 'var(--bg-overlay)'
+            },
+            style: {
+              borderLeft: '3px solid var(--status-success)'
+            }
           },
           error: {
-            iconTheme: { primary: '#E8000D', secondary: '#F5F5F0' },
-          },
+            iconTheme: {
+              primary: 'var(--status-error)',
+              secondary: 'var(--bg-overlay)'
+            },
+            style: {
+              borderLeft: '3px solid var(--status-error)'
+            }
+          }
         }}
       />
     </BrowserRouter>

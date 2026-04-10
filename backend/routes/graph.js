@@ -23,7 +23,7 @@ router.get('/nodes', (req, res) => {
   try {
     const { workspace_id } = req.query;
     const loadAll = String(req.query.all || '0') === '1';
-    const limit = parseInt(req.query.limit, 10) || 200;
+    const limit = parseInt(req.query.limit) || 200;
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
     const nodes = (loadAll

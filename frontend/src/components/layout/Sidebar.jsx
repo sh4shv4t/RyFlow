@@ -123,14 +123,14 @@ export default function Sidebar() {
         width: '220px',
         minWidth: '220px',
         height: isElectron ? 'calc(100vh - 40px)' : '100vh',
-        backgroundColor: '#1A1A1A',
+        backgroundColor: 'var(--bg-surface)',
         display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         left: 0,
         top: isElectron ? '40px' : 0,
         zIndex: 40,
-        borderRight: '1px solid #242424'
+        borderRight: '1px solid var(--border-subtle)'
       }}
     >
       <div style={{ padding: '16px 12px 8px' }}>
@@ -157,7 +157,7 @@ export default function Sidebar() {
             style={{
               fontSize: '15px',
               fontWeight: '600',
-              color: '#F0F0F0',
+              color: 'var(--text-primary)',
               letterSpacing: '-0.01em'
             }}
           >
@@ -178,7 +178,7 @@ export default function Sidebar() {
             borderRadius: '4px',
             cursor: 'pointer',
             transition: 'background 150ms ease',
-            backgroundColor: workspaceHover ? '#222222' : 'transparent',
+            backgroundColor: workspaceHover ? 'var(--bg-elevated)' : 'transparent',
             border: 'none'
           }}
         >
@@ -186,7 +186,7 @@ export default function Sidebar() {
             <span
               style={{
                 fontSize: '11px',
-                color: '#999999',
+                color: 'var(--text-secondary)',
                 maxWidth: '140px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -198,7 +198,7 @@ export default function Sidebar() {
           ) : (
             <SidebarWorkspaceSkeleton />
           )}
-          <ChevronDown size={10} color="#666666" />
+          <ChevronDown size={10} color="var(--text-tertiary)" />
         </button>
       </div>
 
@@ -213,14 +213,14 @@ export default function Sidebar() {
         }}
       >
         {navSections.map((section) => (
-          <div key={section.label}>
+          <div key={section.label} className="fade-in">
             <p
               style={{
                 fontSize: '10px',
                 fontWeight: '500',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: '#666666',
+                color: 'var(--text-tertiary)',
                 padding: '0 8px',
                 margin: '14px 0 3px'
               }}
@@ -251,23 +251,23 @@ export default function Sidebar() {
                       padding: active ? '0 8px 0 6px' : '0 8px',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      transition: 'all 150ms ease',
+                      transition: 'background-color 150ms ease, color 150ms ease, border-color 150ms ease',
                       width: '100%',
                       border: 'none',
-                      background: active ? 'rgba(232,0,13,0.1)' : (hoveredNav === item.label ? '#222222' : 'transparent'),
-                      borderLeft: active ? '2px solid #E8000D' : '2px solid transparent',
+                      background: active ? 'var(--accent-subtle)' : (hoveredNav === item.label ? 'var(--bg-elevated)' : 'transparent'),
+                      borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
                       textDecoration: 'none'
                     }}
                   >
                     <Icon
                       size={15}
-                      color={isHighlighted ? '#F0F0F0' : '#666666'}
+                      color={isHighlighted ? 'var(--text-primary)' : 'var(--text-tertiary)'}
                       style={{ flexShrink: 0 }}
                     />
                     <span
                       style={{
                         fontSize: '13px',
-                        color: isHighlighted ? '#F0F0F0' : '#999999',
+                        color: isHighlighted ? 'var(--text-primary)' : 'var(--text-secondary)',
                         fontWeight: active ? '500' : '400'
                       }}
                     >
@@ -291,23 +291,23 @@ export default function Sidebar() {
                     padding: active ? '0 8px 0 6px' : '0 8px',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    transition: 'all 150ms ease',
+                    transition: 'background-color 150ms ease, color 150ms ease, border-color 150ms ease',
                     width: '100%',
                     border: 'none',
-                    background: active ? 'rgba(232,0,13,0.1)' : (hover ? '#222222' : 'transparent'),
-                    borderLeft: active ? '2px solid #E8000D' : '2px solid transparent',
+                    background: active ? 'var(--accent-subtle)' : (hover ? 'var(--bg-elevated)' : 'transparent'),
+                    borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
                     textDecoration: 'none'
                   }}
                 >
                   <Icon
                     size={15}
-                    color={isHighlighted ? '#F0F0F0' : '#666666'}
+                    color={isHighlighted ? 'var(--text-primary)' : 'var(--text-tertiary)'}
                     style={{ flexShrink: 0 }}
                   />
                   <span
                     style={{
                       fontSize: '13px',
-                      color: isHighlighted ? '#F0F0F0' : '#999999',
+                      color: isHighlighted ? 'var(--text-primary)' : 'var(--text-secondary)',
                       fontWeight: active ? '500' : '400'
                     }}
                   >
@@ -323,7 +323,7 @@ export default function Sidebar() {
       <div
         style={{
           padding: '12px',
-          borderTop: '1px solid #242424',
+          borderTop: '1px solid var(--border-subtle)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px'
@@ -355,7 +355,7 @@ export default function Sidebar() {
         <span
           style={{
             fontSize: '13px',
-            color: '#999999',
+            color: 'var(--text-secondary)',
             flex: 1,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -373,7 +373,7 @@ export default function Sidebar() {
             padding: '4px',
             borderRadius: '4px',
             cursor: 'pointer',
-            background: settingsHover ? '#222222' : 'transparent',
+            background: settingsHover ? 'var(--bg-elevated)' : 'transparent',
             border: 'none',
             display: 'flex',
             alignItems: 'center'
@@ -381,7 +381,7 @@ export default function Sidebar() {
           title={remoteMode ? 'Connected remotely' : 'Settings'}
           onClick={remoteMode ? disconnectRemote : undefined}
         >
-          <Settings size={15} color={settingsHover ? '#F0F0F0' : '#666666'} />
+          <Settings size={15} color={settingsHover ? 'var(--text-primary)' : 'var(--text-tertiary)'} />
         </NavLink>
       </div>
     </aside>

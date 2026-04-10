@@ -2,7 +2,6 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const LZString = require('lz-string');
 const { getDb, getActiveWorkspaceId } = require('../db/database');
-const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 const router = express.Router();
 
@@ -231,20 +230,6 @@ router.post('/save', (req, res) => {
     const saved = db.prepare(
       'SELECT id, title, updated_at FROM canvases WHERE id = ?'
     ).get(canvasId);
-
-    const summary = `Canvas: ${title}`;
-    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(canvasId, 'canvas');
-    if (node) {
-      db.prepare('UPDATE nodes SET title = ?, content_summary = ? WHERE id = ?').run(title, summary, node.id);
-      enqueueEmbeddingJob(node.id, resolvedWorkspaceId);
-    } else {
-      const nodeId = uuidv4();
-      db.prepare(
-        `INSERT INTO nodes (id, workspace_id, type, title, content_summary, source_id)
-         VALUES (?, ?, 'canvas', ?, ?, ?)`
-      ).run(nodeId, resolvedWorkspaceId, title, summary, canvasId);
-      enqueueEmbeddingJob(nodeId, resolvedWorkspaceId);
-    }
 
     return res.json(saved || { id: canvasId, title, updated_at: new Date().toISOString() });
   } catch (err) {

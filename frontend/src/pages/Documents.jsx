@@ -110,12 +110,12 @@ export default function Documents() {
   }, [docs, loadDocs]);
 
   return (
-    <div style={{ height: '100%', background: '#111111', color: '#F0F0F0', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', background: 'var(--bg-base)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
           height: '52px',
-          borderBottom: '1px solid #242424',
-          background: '#1A1A1A',
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-surface)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -143,7 +143,7 @@ export default function Documents() {
             borderRadius: '6px',
             border: '1px solid rgba(232,0,13,0.35)',
             background: 'rgba(232,0,13,0.12)',
-            color: '#E8000D',
+            color: 'var(--accent)',
             fontSize: '12px',
             cursor: !workspaceId || creating ? 'not-allowed' : 'pointer',
             opacity: !workspaceId || creating ? 0.6 : 1
@@ -182,10 +182,14 @@ export default function Documents() {
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '8px', padding: '12px' }}>
-            {docs.map((doc) => (
+            {docs.map((doc, i) => (
               <div
                 key={doc.id}
-                style={{ position: 'relative' }}
+                className="item-enter"
+                style={{
+                  position: 'relative',
+                  animationDelay: `${Math.min(i * 30, 300)}ms`
+                }}
                 onMouseEnter={(e) => {
                   const btn = e.currentTarget.querySelector('.doc-delete-btn');
                   if (btn) btn.style.opacity = '1';
@@ -201,16 +205,16 @@ export default function Documents() {
                   width: '100%',
                   textAlign: 'left',
                   borderRadius: '8px',
-                  border: '1px solid #2E2E2E',
-                  background: '#1A1A1A',
+                  border: '1px solid var(--border-default)',
+                  background: 'var(--bg-surface)',
                   padding: '10px 36px 10px 12px',
                   cursor: 'pointer'
                 }}
               >
-                <div style={{ fontSize: '13px', color: '#F0F0F0', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>
                   {doc.title || 'Untitled'}
                 </div>
-                <div style={{ fontSize: '11px', color: '#777777' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                   {new Date(doc.updated_at || doc.created_at).toLocaleString()}
                 </div>
               </button>

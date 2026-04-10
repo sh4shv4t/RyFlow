@@ -27,6 +27,7 @@ export default function useGraph() {
         axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit } }),
         axios.get('/api/graph/edges', { params: { workspace_id: workspace.id } })
       ]);
+      console.log('[Graph] Nodes received:', nodesRes.data);
       const loadedNodes = nodesRes.data.nodes || [];
       const nodeIds = new Set(loadedNodes.map((n) => n.id));
       const filteredEdges = (edgesRes.data.edges || []).filter((e) => nodeIds.has(e.source_id) && nodeIds.has(e.target_id));

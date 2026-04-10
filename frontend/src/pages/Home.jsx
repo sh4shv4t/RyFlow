@@ -11,6 +11,7 @@ import { apiFetch } from '../utils/apiClient';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
 import AMDbadge from '../components/layout/AMDbadge';
+import TypeBadge from '../components/shared/TypeBadge';
 import {
   ActivityRowSkeleton,
   ListSkeleton,
@@ -196,15 +197,6 @@ export default function Home() {
     () => tasks.filter((t) => ['in_progress', 'in-progress'].includes(t.status)).slice(0, 3),
     [tasks]
   );
-
-  const TYPE_BADGE_COLORS = {
-    document: { bg: 'rgba(232,0,13,0.1)', text: '#E8000D' },
-    task: { bg: 'rgba(255,107,0,0.1)', text: '#FF6B00' },
-    code: { bg: 'rgba(59,130,246,0.1)', text: '#3B82F6' },
-    canvas: { bg: 'rgba(0,188,212,0.1)', text: '#00BCD4' },
-    ai_chat: { bg: 'rgba(139,92,246,0.1)', text: '#8B5CF6' },
-    voice: { bg: 'rgba(61,153,112,0.1)', text: '#3D9970' }
-  };
 
   const iconForType = (type) => {
     if (type === 'task') return CheckSquare;
@@ -394,7 +386,6 @@ export default function Home() {
               />
             ) : activity.slice(0, 7).map((item) => {
               const ItemIcon = iconForType(item.type);
-              const badge = TYPE_BADGE_COLORS[item.type] || TYPE_BADGE_COLORS.document;
               return (
                 <button
                   key={`${item.type}-${item.id}`}
@@ -436,21 +427,7 @@ export default function Home() {
                   >
                     {item.title}
                   </span>
-                  <span
-                    style={{
-                      fontSize: '10px',
-                      fontWeight: '500',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      padding: '1px 6px',
-                      borderRadius: '3px',
-                      flexShrink: 0,
-                      backgroundColor: badge.bg,
-                      color: badge.text
-                    }}
-                  >
-                    {String(item.type || 'item').replace('_', ' ')}
-                  </span>
+                  <TypeBadge type={item.type} />
                   <span style={{ fontSize: '11px', color: '#666666', flexShrink: 0 }}>{timeAgo(item.updated_at)}</span>
                 </button>
               );

@@ -10,9 +10,13 @@ export default function Graph() {
       animate={{ opacity: 1 }}
       style={{
         height: '100%',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         position: 'relative',
         backgroundColor: '#111111',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        minHeight: 0
       }}
     >
       <KnowledgeGraph />

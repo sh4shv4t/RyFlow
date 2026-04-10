@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import useGraph from '../../hooks/useGraph';
 import useStore from '../../store/useStore';
 import { GraphLoadingSkeleton } from '../shared/Skeleton';
+import TypeBadge from '../shared/TypeBadge';
 
 const NODE_COLORS = {
   document: '#E8000D',
@@ -19,16 +20,6 @@ const NODE_COLORS = {
   docs: '#E8000D',
   tasks: '#FF6B00',
   doc: '#E8000D'
-};
-
-const TYPE_BADGE_COLORS = {
-  document: { bg: 'rgba(232,0,13,0.1)', text: '#E8000D' },
-  task: { bg: 'rgba(255,107,0,0.1)', text: '#FF6B00' },
-  code: { bg: 'rgba(59,130,246,0.1)', text: '#3B82F6' },
-  canvas: { bg: 'rgba(0,188,212,0.1)', text: '#00BCD4' },
-  ai_chat: { bg: 'rgba(139,92,246,0.1)', text: '#8B5CF6' },
-  voice: { bg: 'rgba(61,153,112,0.1)', text: '#3D9970' },
-  default: { bg: 'rgba(85,85,85,0.15)', text: '#888888' }
 };
 
 // Formats snake_case metadata keys into readable labels.
@@ -78,11 +69,20 @@ export default function KnowledgeGraph() {
   // Tracks graph viewport size so force layout always uses real dimensions.
   useEffect(() => {
     if (!containerRef.current) return;
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
+
+    const applyDims = (width, height) => {
+      console.log('[Graph] Container dims:', width, height);
       if (width > 0 && height > 0) {
         setDims({ w: width, h: height });
       }
+    };
+
+    const initialRect = containerRef.current.getBoundingClientRect();
+    applyDims(initialRect.width, initialRect.height);
+
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      applyDims(width, height);
     });
     ro.observe(containerRef.current);
     return () => ro.disconnect();
@@ -90,171 +90,182 @@ export default function KnowledgeGraph() {
 
   // Renders the D3 force-directed graph.
   useEffect(() => {
-    if (!svgRef.current) return;
-
-    const svg = d3.select(svgRef.current);
-    svg.selectAll('*').remove();
-
-    const W = dims.w || 900;
-    const H = dims.h || 650;
-
-    svg
-      .attr('width', '100%')
-      .attr('height', '100%')
-      .attr('viewBox', `0 0 ${W} ${H}`)
-      .style('background', '#111111');
-
-    if (!nodes.length) return;
-
-    const graphNodes = nodes.map((n) => ({ ...n, type: normalizeType(n.type) }));
-    const validEdges = edges
-      .map((e) => ({ ...e, source: e.source_id, target: e.target_id }))
-      .filter((e) => graphNodes.some((n) => n.id === e.source) && graphNodes.some((n) => n.id === e.target));
-
-    const spread = Math.min(W, H) * 0.4;
-    const positionedNodes = graphNodes.map((n) => ({
-      ...n,
-      x: n.x != null ? n.x : W / 2 + (Math.random() - 0.5) * spread * 2,
-      y: n.y != null ? n.y : H / 2 + (Math.random() - 0.5) * spread * 2
-    }));
-
-    const g = svg.append('g');
-    gRef.current = g.node();
-
-    const zoomBehavior = d3.zoom().scaleExtent([0.2, 6]).on('zoom', (event) => {
-      g.attr('transform', event.transform);
+    if (loading) return;
+    console.log('[Graph] Render effect start:', {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      dims
     });
-    zoomRef.current = zoomBehavior;
-    svg.call(zoomBehavior);
+    if (!svgRef.current) return;
+    try {
+      const svg = d3.select(svgRef.current);
+      svg.selectAll('*').remove();
 
-    const simulation = d3.forceSimulation(positionedNodes)
-      .force('link', d3.forceLink(validEdges)
-        .id((d) => d.id)
-        .distance(110)
-        .strength(0.4))
-      .force('charge', d3.forceManyBody()
-        .strength(-380)
-        .distanceMin(30)
-        .distanceMax(500))
-      .force('center', d3.forceCenter(W / 2, H / 2))
-      .force('collide', d3.forceCollide(42).strength(0.85))
-      .force('x', d3.forceX(W / 2).strength(0.03))
-      .force('y', d3.forceY(H / 2).strength(0.03))
-      .alphaDecay(0.02)
-      .velocityDecay(0.4);
+      const W = dims.w || 900;
+      const H = dims.h || 650;
 
-    // Pre-settle simulation before first render to avoid center explosion.
-    simulation.tick(200);
+      svg
+        .attr('width', '100%')
+        .attr('height', '100%')
+        .attr('viewBox', `0 0 ${W} ${H}`)
+        .style('background', '#111111');
 
-    const links = g.append('g').selectAll('line').data(validEdges).enter().append('line')
-      .attr('stroke', (d) => {
-        if (!selectedNode) return '#333333';
-        const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
-        const targetId = typeof d.target === 'object' ? d.target.id : d.target;
-        return sourceId === selectedNode.id || targetId === selectedNode.id ? '#E8000D' : '#333333';
-      })
-      .attr('stroke-opacity', (d) => {
-        if (!selectedNode) return 0.6;
-        const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
-        const targetId = typeof d.target === 'object' ? d.target.id : d.target;
-        return sourceId === selectedNode.id || targetId === selectedNode.id ? 1.0 : 0.6;
-      })
-      .attr('stroke-width', (d) => {
-        if (!selectedNode) return 1;
-        const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
-        const targetId = typeof d.target === 'object' ? d.target.id : d.target;
-        return sourceId === selectedNode.id || targetId === selectedNode.id ? 1.5 : 1;
+      console.log('[Graph] SVG initialized:', { W, H, nodeCount: nodes.length, edgeCount: edges.length });
+
+      if (!nodes.length) return;
+
+      const graphNodes = nodes.map((n) => ({ ...n, type: normalizeType(n.type) }));
+      const validEdges = edges
+        .map((e) => ({ ...e, source: e.source_id, target: e.target_id }))
+        .filter((e) => graphNodes.some((n) => n.id === e.source) && graphNodes.some((n) => n.id === e.target));
+
+      const spread = Math.min(W, H) * 0.4;
+      const positionedNodes = graphNodes.map((n) => ({
+        ...n,
+        x: n.x != null ? n.x : W / 2 + (Math.random() - 0.5) * spread * 2,
+        y: n.y != null ? n.y : H / 2 + (Math.random() - 0.5) * spread * 2
+      }));
+
+      const g = svg.append('g');
+      gRef.current = g.node();
+
+      const zoomBehavior = d3.zoom().scaleExtent([0.2, 6]).on('zoom', (event) => {
+        g.attr('transform', event.transform);
+      });
+      zoomRef.current = zoomBehavior;
+      svg.call(zoomBehavior);
+
+      const simulation = d3.forceSimulation(positionedNodes)
+        .force('link', d3.forceLink(validEdges)
+          .id((d) => d.id)
+          .distance(110)
+          .strength(0.4))
+        .force('charge', d3.forceManyBody()
+          .strength(-380)
+          .distanceMin(30)
+          .distanceMax(500))
+        .force('center', d3.forceCenter(W / 2, H / 2))
+        .force('collide', d3.forceCollide(42).strength(0.85))
+        .force('x', d3.forceX(W / 2).strength(0.03))
+        .force('y', d3.forceY(H / 2).strength(0.03))
+        .alphaDecay(0.02)
+        .velocityDecay(0.4);
+
+      simulation.tick(200);
+      console.log('[Graph] Nodes after tick:', positionedNodes.map((n) => ({ id: n.id, x: n.x, y: n.y })));
+
+      const links = g.append('g').selectAll('line').data(validEdges).enter().append('line')
+        .attr('stroke', (d) => {
+          if (!selectedNode) return '#333333';
+          const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
+          const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+          return sourceId === selectedNode.id || targetId === selectedNode.id ? '#E8000D' : '#333333';
+        })
+        .attr('stroke-opacity', (d) => {
+          if (!selectedNode) return 0.6;
+          const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
+          const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+          return sourceId === selectedNode.id || targetId === selectedNode.id ? 1.0 : 0.6;
+        })
+        .attr('stroke-width', (d) => {
+          if (!selectedNode) return 1;
+          const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
+          const targetId = typeof d.target === 'object' ? d.target.id : d.target;
+          return sourceId === selectedNode.id || targetId === selectedNode.id ? 1.5 : 1;
+        });
+
+      const nodeGroups = g.selectAll('.node').data(positionedNodes).enter().append('g')
+        .attr('class', 'node')
+        .style('cursor', 'pointer')
+        .call(
+          d3.drag()
+            .on('start', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0.3).restart();
+              d.fx = d.x;
+              d.fy = d.y;
+            })
+            .on('drag', (event, d) => {
+              d.fx = event.x;
+              d.fy = event.y;
+            })
+            .on('end', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0);
+              d.fx = null;
+              d.fy = null;
+            })
+        );
+
+      nodeGroups.append('circle')
+        .attr('r', (d) => (selectedNode?.id === d.id ? 11 : 7))
+        .attr('fill', (d) => NODE_COLORS[d.type] || '#666666')
+        .attr('stroke', (d) => {
+          const fill = NODE_COLORS[d.type] || '#666666';
+          const darker = d3.color(fill)?.darker(0.8);
+          return darker ? darker.formatHex() : '#444444';
+        })
+        .attr('stroke-width', 1.5)
+        .attr('opacity', (d) => (highlightedIds.size === 0 || highlightedIds.has(d.id) ? 1 : 0.35));
+
+      nodeGroups.append('text')
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '11px')
+        .attr('font-family', 'Inter, sans-serif')
+        .attr('fill', '#999999')
+        .attr('dy', -13)
+        .text((d) => {
+          const raw = d.title || 'Untitled';
+          const label = raw.substring(0, 20);
+          return label + (raw.length > 20 ? '…' : '');
       });
 
-    const nodeGroups = g.selectAll('.node').data(positionedNodes).enter().append('g')
-      .attr('class', 'node')
-      .style('cursor', 'pointer')
-      .call(
-        d3.drag()
-          .on('start', (event, d) => {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-          })
-          .on('drag', (event, d) => {
-            d.fx = event.x;
-            d.fy = event.y;
-          })
-          .on('end', (event, d) => {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-          })
-      );
+      nodeGroups.on('click', (event, d) => {
+        setSelectedNode(d);
+        fetchNeighborhood(d.id, 2).catch(() => {});
+      });
 
-    nodeGroups.append('circle')
-      .attr('r', (d) => (selectedNode?.id === d.id ? 11 : 7))
-      .attr('fill', (d) => NODE_COLORS[d.type] || '#666666')
-      .attr('stroke', (d) => {
-        const fill = NODE_COLORS[d.type] || '#666666';
-        const darker = d3.color(fill)?.darker(0.8);
-        return darker ? darker.formatHex() : '#444444';
-      })
-      .attr('stroke-width', 1.5)
-      .attr('opacity', (d) => (highlightedIds.size === 0 || highlightedIds.has(d.id) ? 1 : 0.35));
+      const updatePositions = () => {
+        links
+          .attr('x1', (d) => (typeof d.source === 'object' ? d.source.x : 0))
+          .attr('y1', (d) => (typeof d.source === 'object' ? d.source.y : 0))
+          .attr('x2', (d) => (typeof d.target === 'object' ? d.target.x : 0))
+          .attr('y2', (d) => (typeof d.target === 'object' ? d.target.y : 0));
 
-    nodeGroups.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('font-size', '11px')
-      .attr('font-family', 'Inter, sans-serif')
-      .attr('fill', '#999999')
-      .attr('dy', -13)
-      .text((d) => {
-        const raw = d.title || 'Untitled';
-        const label = raw.substring(0, 20);
-        return label + (raw.length > 20 ? '…' : '');
-    });
+        nodeGroups.attr('transform', (d) => `translate(${d.x}, ${d.y})`);
+      };
 
-    nodeGroups.on('click', (event, d) => {
-      setSelectedNode(d);
-      fetchNeighborhood(d.id, 2).catch(() => {});
-    });
-
-    const updatePositions = () => {
-      links
-        .attr('x1', (d) => (typeof d.source === 'object' ? d.source.x : 0))
-        .attr('y1', (d) => (typeof d.source === 'object' ? d.source.y : 0))
-        .attr('x2', (d) => (typeof d.target === 'object' ? d.target.x : 0))
-        .attr('y2', (d) => (typeof d.target === 'object' ? d.target.y : 0));
-
-      nodeGroups.attr('transform', (d) => `translate(${d.x}, ${d.y})`);
-    };
-
-    updatePositions();
-    simulation.on('tick', updatePositions);
-    setTimeout(() => {
-      if (!svgRef.current || !gRef.current || !zoomRef.current) return;
-      const bbox = gRef.current.getBBox();
-      if (!bbox.width || !bbox.height) return;
-      const svgW = svgRef.current.clientWidth || W;
-      const svgH = svgRef.current.clientHeight || H;
-      const pad = 64;
-      const scale = Math.min(
-        1.5,
-        (svgW - pad * 2) / bbox.width,
-        (svgH - pad * 2) / bbox.height
-      );
-      const tx = (svgW - scale * bbox.width) / 2 - scale * bbox.x;
-      const ty = (svgH - scale * bbox.height) / 2 - scale * bbox.y;
-
-      d3.select(svgRef.current)
-        .transition().duration(500)
-        .call(
-          zoomRef.current.transform,
-          d3.zoomIdentity.translate(tx, ty).scale(scale)
+      updatePositions();
+      simulation.on('tick', updatePositions);
+      setTimeout(() => {
+        if (!svgRef.current || !gRef.current || !zoomRef.current) return;
+        const bbox = gRef.current.getBBox();
+        if (!bbox.width || !bbox.height) return;
+        const svgW = svgRef.current.clientWidth || W;
+        const svgH = svgRef.current.clientHeight || H;
+        const pad = 64;
+        const scale = Math.min(
+          1.5,
+          (svgW - pad * 2) / bbox.width,
+          (svgH - pad * 2) / bbox.height
         );
-    }, 0);
+        const tx = (svgW - scale * bbox.width) / 2 - scale * bbox.x;
+        const ty = (svgH - scale * bbox.height) / 2 - scale * bbox.y;
 
-    return () => {
-      simulation.stop();
-      gRef.current = null;
-    };
-  }, [nodes, edges, selectedNode, highlightedIds, fetchNeighborhood, dims.w, dims.h]);
+        d3.select(svgRef.current)
+          .transition().duration(500)
+          .call(
+            zoomRef.current.transform,
+            d3.zoomIdentity.translate(tx, ty).scale(scale)
+          );
+      }, 0);
+
+      return () => {
+        simulation.stop();
+        gRef.current = null;
+      };
+    } catch (err) {
+      console.error('[Graph] Render effect failed:', err);
+    }
+  }, [loading, nodes, edges, selectedNode, highlightedIds, fetchNeighborhood, dims.w, dims.h]);
 
   // Zooms and pans graph so currently loaded nodes fit into viewport.
   const handleFitToScreen = useCallback(() => {
@@ -331,7 +342,6 @@ export default function KnowledgeGraph() {
   }, [navigate]);
 
   const selectedType = normalizeType(selectedNode?.type);
-  const selectedBadge = TYPE_BADGE_COLORS[selectedType] || TYPE_BADGE_COLORS.default;
 
   // Show skeleton while nodes are loading before first render.
   if (loading) {
@@ -339,8 +349,26 @@ export default function KnowledgeGraph() {
   }
 
   return (
-    <div ref={containerRef} style={{ height: '100%', position: 'relative', backgroundColor: '#111111', overflow: 'hidden' }}>
-      <svg ref={svgRef} style={{ width: '100%', height: '100%' }} />
+    <div
+      ref={containerRef}
+      data-testid="knowledge-graph-container"
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 0,
+        flex: 1,
+        backgroundColor: '#111111'
+      }}
+    >
+      <svg
+        ref={svgRef}
+        data-testid="knowledge-graph-svg"
+        width="100%"
+        height="100%"
+        style={{ display: 'block', width: '100%', height: '100%' }}
+      />
 
       <div
         style={{
@@ -562,21 +590,7 @@ export default function KnowledgeGraph() {
           <X size={14} color="#666666" />
         </button>
 
-        <span
-          style={{
-            fontSize: '10px',
-            fontWeight: '500',
-            textTransform: 'uppercase',
-            letterSpacing: '0.04em',
-            padding: '1px 6px',
-            borderRadius: '3px',
-            width: 'fit-content',
-            backgroundColor: selectedBadge.bg,
-            color: selectedBadge.text
-          }}
-        >
-          {selectedType}
-        </span>
+        <TypeBadge type={selectedType} />
 
         <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#F0F0F0', lineHeight: '1.3', marginTop: '4px' }}>
           {selectedNode?.title || 'Untitled'}

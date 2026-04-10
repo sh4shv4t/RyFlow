@@ -163,6 +163,7 @@ function featureButtonStyle(active, kind = 'default') {
 function PanelShell({ panelTitle, onClose, headerBg, accentColor, children }) {
   return (
     <div
+      className="slide-in-right"
       style={{
         width: '300px',
         flexShrink: 0,
@@ -522,7 +523,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
           height: '40px',
           minHeight: '40px',
           flexShrink: 0,
-          background: '#1C1C1C',
+          background: 'var(--bg-surface)',
           borderBottom: '1px solid var(--border-subtle)',
           overflow: 'hidden'
         }}

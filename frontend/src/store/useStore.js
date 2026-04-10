@@ -1,6 +1,10 @@
 // Zustand global state store — manages user, workspace, AI status, and app state
 import { create } from 'zustand';
 
+// Apply theme immediately on module load.
+const savedTheme = localStorage.getItem('ryflow_theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
 // Parse persisted JSON defensively to avoid app boot crashes from malformed localStorage values.
 function safeParseJSON(key, fallback = null) {
   try {
@@ -85,16 +89,18 @@ const useStore = create((set, get) => ({
   },
 
   // Theme: 'dark' | 'light'
-  theme: localStorage.getItem('ryflow_theme') || 'dark',
+  theme: savedTheme,
   toggleTheme: () =>
     set((state) => {
       const next = state.theme === 'dark' ? 'light' : 'dark';
       localStorage.setItem('ryflow_theme', next);
+      document.documentElement.setAttribute('data-theme', next);
       return { theme: next };
     }),
   setTheme: (theme) => {
-    localStorage.setItem('ryflow_theme', theme);
     set({ theme });
+    localStorage.setItem('ryflow_theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
   },
 
   // Logout / reset
