@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { chat } = require('../services/ollamaService');
-const { createNode } = require('../services/graphService');
+const { createNode, extractPlainText } = require('../services/graphService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 
@@ -129,7 +129,7 @@ router.post('/', async (req, res) => {
     ).run(id, workspace_id, title, description || '', safeAssignee, status || 'todo', priority || 'medium', due_date || null, now, now);
 
     // Add to knowledge graph
-    const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
+    const summary = extractPlainText(description || title, 200);
     const metadata = buildTaskMetadata({ priority, assignee, due_date, status: status || 'todo' });
     const node = await createNode(workspace_id, 'task', title, summary, id, metadata);
     enqueueEmbeddingJob(node.id, workspace_id);
@@ -171,7 +171,7 @@ router.patch('/:id', async (req, res) => {
     // Keep task node summary and embedding in sync after updates.
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(req.params.id, 'task');
     if (node) {
-      const summary = `${task.description || ''} Priority: ${task.priority || 'medium'}. Due: ${task.due_date || 'none'}`;
+      const summary = extractPlainText(task.description || task.title, 200);
       const metadata = buildTaskMetadata(task);
       db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
         .run(task.title, summary, JSON.stringify(metadata), node.id);
@@ -265,7 +265,7 @@ router.post('/nl-create', async (req, res) => {
       ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', safeAssignee, 'todo', t.priority || 'medium', t.due_date || null, now, now);
 
       // Add to knowledge graph
-      const summary = `${t.description || ''} Priority: ${t.priority || 'medium'}. Due: ${t.due_date || 'none'}`;
+      const summary = extractPlainText(t.description || t.title || 'Untitled Task', 200);
       const metadata = buildTaskMetadata({
         priority: t.priority || 'medium',
         assignee: safeAssignee,

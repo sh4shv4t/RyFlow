@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { formatRelativeTime } from '../../utils/time';
-import { formatPreviewText } from '../../utils/content';
+import { extractTextPreview } from '../../utils/content';
 
 // Renders one comment card including nested replies.
 function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
@@ -18,7 +18,7 @@ function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
           <span className="text-[10px] text-amd-white/45">{formatRelativeTime(item.created_at)}</span>
         </div>
         {item.selected_text ? <div className="text-[11px] italic text-amd-white/55 mt-1">"{item.selected_text}"</div> : null}
-        <div className="text-xs text-amd-white/80 mt-1">{formatPreviewText(item.content, { maxLength: 500, fallback: '' })}</div>
+        <div className="text-xs text-amd-white/80 mt-1">{extractTextPreview(item.content, 500)}</div>
       </button>
 
       <div className="flex items-center gap-2 mt-2">

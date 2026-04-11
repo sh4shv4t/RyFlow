@@ -6,7 +6,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 import { formatDueDate } from '../../utils/time';
-import { formatPreviewText } from '../../utils/content';
+import { getContentSummary, getItemTitle } from '../../utils/content';
 
 const COLUMNS = [
   { id: 'todo', label: 'Todo' },
@@ -320,7 +320,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 overflow: 'hidden'
               }}
             >
-              {formatPreviewText(task.title, { maxLength: 80, fallback: 'Untitled task' })}
+              {getItemTitle(task)}
             </span>
           )}
         </div>
@@ -348,7 +348,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
             overflow: 'hidden'
           }}
         >
-          {formatPreviewText(description, { maxLength: 140, fallback: '' })}
+          {getContentSummary({ description }, 140)}
         </p>
       ) : null}
 

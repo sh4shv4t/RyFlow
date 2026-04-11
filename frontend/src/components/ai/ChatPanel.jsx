@@ -7,6 +7,7 @@ import useOllama from '../../hooks/useOllama';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
 import axios from 'axios';
+import { extractTextPreview } from '../../utils/content';
 
 const PROMPT_TEMPLATES = [
   { label: '📋 Draft a fest poster description', prompt: 'Draft a creative and engaging poster description for a college tech fest.' },
@@ -320,7 +321,19 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
                 color: 'var(--text-primary)'
               }}
             >
-              <div className="whitespace-pre-wrap">{msg.content}</div>
+              <p style={{
+                fontSize: 13,
+                lineHeight: 1.7,
+                color: 'var(--text-primary)',
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}>
+                {typeof msg.content === 'string'
+                  ? msg.content
+                  : extractTextPreview(msg.content, 2000)
+                }
+              </p>
               {msg.role === 'assistant' && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>

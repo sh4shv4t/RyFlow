@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
-const { createNode } = require('../services/graphService');
+const { createNode, extractLastUserMessage } = require('../services/graphService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Parses serialized messages defensively.
@@ -24,12 +24,6 @@ function deriveChatTitle(title, messages) {
   return base.length > 50 ? `${base.slice(0, 50)}...` : base;
 }
 
-// Builds a compact content summary from the last three messages.
-function buildChatSummary(messages) {
-  const lastThree = (messages || []).slice(-3);
-  return lastThree.map((m) => `${m.role || 'user'}: ${String(m.content || '').slice(0, 240)}`).join('\n');
-}
-
 // Creates AI chat node metadata for graph search and detail views.
 function buildChatMetadata(chat) {
   return {
@@ -44,7 +38,7 @@ async function upsertChatNode(chat) {
   const db = getDb();
   const messages = parseMessages(chat.messages);
   const title = deriveChatTitle(chat.title, messages);
-  const summary = buildChatSummary(messages);
+  const summary = extractLastUserMessage(messages);
   const metadata = buildChatMetadata(chat);
   const existing = db.prepare("SELECT id FROM nodes WHERE source_id = ? AND type = 'ai_chat'").get(chat.id);
 

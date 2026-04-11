@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { formatRelativeTime } from '../../utils/time';
-import { formatPreviewText } from '../../utils/content';
+import { extractTextPreview } from '../../utils/content';
 
 export default function HistoryPanel({ docId, onRestored }) {
   const [versions, setVersions] = useState([]);
@@ -26,7 +26,7 @@ export default function HistoryPanel({ docId, onRestored }) {
   const openVersion = async (versionId) => {
     setSelected(versionId);
     const res = await axios.get(`/api/docs/${docId}/versions/${versionId}`);
-    setPreview(formatPreviewText(res.data.content, { maxLength: 3000, fallback: '' }));
+    setPreview(extractTextPreview(res.data.content, 3000));
   };
 
   const restoreVersion = async () => {

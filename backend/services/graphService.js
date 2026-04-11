@@ -48,6 +48,102 @@ function extractKeywords(text) {
     .filter((word) => word.length > 3 && !STOP_WORDS.has(word));
 }
 
+function extractPlainText(content, maxLen = 200) {
+  if (!content) return '';
+  let value = content;
+
+  if (typeof value !== 'string') {
+    try {
+      value = JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed?.type === 'doc') {
+      const texts = [];
+      function walk(node) {
+        if (!node) return;
+        if (node.type === 'text' && node.text) {
+          texts.push(node.text);
+        }
+        if (Array.isArray(node.content)) {
+          node.content.forEach(walk);
+        }
+      }
+      walk(parsed);
+      const result = texts.join(' ').replace(/\s+/g, ' ').trim();
+      return result.slice(0, maxLen);
+    }
+  } catch {}
+
+  const stripped = String(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.slice(0, maxLen);
+}
+
+function extractLastUserMessage(messages) {
+  if (!messages) return '';
+  let parsed = messages;
+
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return '';
+    }
+  }
+
+  if (!Array.isArray(parsed)) return '';
+  const lastUser = [...parsed]
+    .reverse()
+    .find((m) => m?.role === 'user');
+  if (!lastUser) return '';
+  return extractPlainText(String(lastUser.content || ''), 200);
+}
+
+function getCanvasElementCount(contentSummary, metadata) {
+  if (Number.isFinite(Number(metadata?.element_count))) {
+    return Number(metadata.element_count);
+  }
+
+  if (!contentSummary) return 0;
+  try {
+    const parsed = typeof contentSummary === 'string'
+      ? JSON.parse(contentSummary)
+      : contentSummary;
+    if (Array.isArray(parsed)) return parsed.length;
+    if (Array.isArray(parsed?.elements)) return parsed.elements.length;
+  } catch {}
+
+  return 0;
+}
+
+function normalizeNodeSummary(type, contentSummary, metadata) {
+  if (type === 'task') {
+    return extractPlainText(contentSummary, 200);
+  }
+
+  if (type === 'code') {
+    return String(contentSummary || '').slice(0, 200);
+  }
+
+  if (type === 'canvas') {
+    const count = getCanvasElementCount(contentSummary, metadata);
+    return `Canvas with ${count} elements`;
+  }
+
+  if (type === 'ai_chat') {
+    return extractLastUserMessage(contentSummary);
+  }
+
+  return extractPlainText(contentSummary, 200);
+}
+
 function edgeExists(db, sourceId, targetId) {
   return db.prepare(
     `SELECT id FROM edges WHERE
@@ -111,21 +207,22 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
   const db = getDb();
   const id = uuidv4();
   const metadataText = stringifyMetadata(metadata);
+  const normalizedSummary = normalizeNodeSummary(type, contentSummary, metadata);
 
   db.prepare(
     'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, workspaceId, type, title, contentSummary || '', metadataText, sourceId);
+  ).run(id, workspaceId, type, title, normalizedSummary || '', metadataText, sourceId);
 
   // Queue embedding generation asynchronously (don't block writes).
   enqueueEmbeddingJob(id, workspaceId);
 
-  const newNode = { id, type, title, content_summary: contentSummary || '', metadata: metadataText };
+  const newNode = { id, type, title, content_summary: normalizedSummary || '', metadata: metadataText };
   await Promise.allSettled([
     autoCreateRelationships(newNode, workspaceId).catch(() => {}),
     Promise.resolve().then(() => createKeywordEdges(newNode, workspaceId)).catch(() => {})
   ]);
 
-  return { id, workspaceId, type, title, contentSummary, metadata, sourceId };
+  return { id, workspaceId, type, title, contentSummary: normalizedSummary, metadata, sourceId };
 }
 
 // Uses LLM to find relationships between a new node and existing nodes
@@ -224,4 +321,16 @@ function backfillKeywordEdges(workspaceId) {
   return { processed: nodes.length, created };
 }
 
-module.exports = { createNode, autoCreateRelationships, getGraph, addEdge, deleteNode, backfillKeywordEdges, createKeywordEdges, extractKeywords };
+module.exports = {
+  createNode,
+  autoCreateRelationships,
+  getGraph,
+  addEdge,
+  deleteNode,
+  backfillKeywordEdges,
+  createKeywordEdges,
+  extractKeywords,
+  extractPlainText,
+  extractLastUserMessage,
+  normalizeNodeSummary
+};

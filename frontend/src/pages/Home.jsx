@@ -18,7 +18,7 @@ import {
   TaskCardSkeleton
 } from '../components/shared/Skeleton';
 import { formatDueDate, formatRelativeTime } from '../utils/time';
-import { formatPreviewText } from '../utils/content';
+import { getContentSummary, getItemTitle } from '../utils/content';
 
 const TYPE_COLORS = {
   document: '#E8000D',
@@ -384,10 +384,10 @@ export default function Home() {
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
+                    alignItems: 'flex-start',
                     gap: '10px',
-                    height: '36px',
-                    padding: '0 8px',
+                    minHeight: '44px',
+                    padding: '6px 8px',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     transition: 'background 150ms ease',
@@ -397,19 +397,36 @@ export default function Home() {
                     textAlign: 'left'
                   }}
                 >
-                  <ItemIcon size={14} color={TYPE_COLORS[item.type] || 'var(--text-tertiary)'} />
-                  <span
-                    style={{
-                      fontSize: '13px',
-                      color: 'var(--text-primary)',
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {formatPreviewText(item.title, { maxLength: 60, fallback: 'Untitled' })}
-                  </span>
+                  <ItemIcon size={14} color={TYPE_COLORS[item.type] || 'var(--text-tertiary)'} style={{ marginTop: 2 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        color: 'var(--text-primary)',
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {getItemTitle(item)}
+                    </span>
+                    {getContentSummary(item, 60) && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          color: 'var(--text-tertiary)',
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          marginTop: '2px'
+                        }}
+                      >
+                        {getContentSummary(item, 60)}
+                      </span>
+                    )}
+                  </div>
                   <TypeBadge type={item.type} />
                   <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>{formatRelativeTime(item.updated_at)}</span>
                 </button>
@@ -515,7 +532,7 @@ export default function Home() {
             >
               <MessageSquare size={13} color="var(--text-tertiary)" />
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {formatPreviewText(chat.title, { maxLength: 44, fallback: 'Untitled chat' })}
+                {getItemTitle(chat)}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatRelativeTime(chat.updated_at)}</span>
             </button>

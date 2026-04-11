@@ -5,7 +5,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { formatRelativeTime } from '../utils/time';
-import { formatPreviewText } from '../utils/content';
+import { getItemTitle, getContentSummary } from '../utils/content';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All Types' },
@@ -244,10 +244,22 @@ export default function Tags() {
                     <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>{item.type}</span>
                     <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatRelativeTime(item.created_at)}</span>
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>{formatPreviewText(item.title, { maxLength: 70, fallback: 'Untitled' })}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {formatPreviewText(item.content_summary, { maxLength: 120, fallback: 'No summary available' })}
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    {getItemTitle(item)}
                   </div>
+                  {getContentSummary(item, 60) && (
+                    <span style={{
+                      fontSize: 11,
+                      color: 'var(--text-tertiary)',
+                      display: 'block',
+                      marginTop: 2,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {getContentSummary(item, 60)}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

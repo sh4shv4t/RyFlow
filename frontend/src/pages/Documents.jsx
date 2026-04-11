@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { apiFetch } from '../utils/apiClient';
 import { formatRelativeTime } from '../utils/time';
+import { extractTextPreview, getItemTitle } from '../utils/content';
 import { DocumentRowSkeleton, ListSkeleton } from '../components/shared/Skeleton';
 
 function defaultDocContent() {
@@ -210,8 +211,22 @@ export default function Documents() {
                 }}
               >
                 <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                  {doc.title || 'Untitled'}
+                  {getItemTitle(doc)}
                 </div>
+                {doc.content && (
+                  <span style={{
+                    fontSize: 11,
+                    color: 'var(--text-tertiary)',
+                    display: 'block',
+                    marginTop: 2,
+                    marginBottom: 4,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {extractTextPreview(doc.content, 80)}
+                  </span>
+                )}
                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                   {formatRelativeTime(doc.updated_at || doc.created_at)}
                 </div>

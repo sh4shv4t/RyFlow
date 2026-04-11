@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db/database');
-const { createNode } = require('../services/graphService');
+const { createNode, extractPlainText } = require('../services/graphService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // Builds code metadata for graph node storage.
@@ -66,7 +66,7 @@ router.post('/save', async (req, res) => {
 
     const saved = db.prepare('SELECT * FROM code_files WHERE id = ?').get(fileId);
 
-    const summary = (saved.content || '').slice(0, 300);
+    const summary = extractPlainText(saved.content || '', 200);
     const metadata = buildCodeMetadata(saved);
     const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(fileId, 'code');
     if (node) {

@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { createNode } = require('../services/graphService');
+const { createNode, extractPlainText } = require('../services/graphService');
 const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
@@ -65,8 +65,9 @@ function updateDocNode(db, documentId, workspaceId, title, content, metadata) {
 
   const tags = listNodeTags(db, node.id);
   const mergedMetadata = { ...metadata, tags: tags.map((t) => t.name) };
+  const summary = extractPlainText(content || '', 200);
   db.prepare('UPDATE nodes SET title = ?, content_summary = ?, metadata = ? WHERE id = ?')
-    .run(title, (content || '').substring(0, 500), JSON.stringify(mergedMetadata), node.id);
+    .run(title, summary, JSON.stringify(mergedMetadata), node.id);
 
   enqueueEmbeddingJob(node.id, workspaceId);
   return node.id;
@@ -167,7 +168,7 @@ router.get('/daily', async (req, res) => {
         is_daily_note: true,
         daily_note_date: `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-${day}`
       };
-      await createNode(workspace_id, 'doc', title, emptyContent.substring(0, 500), id, metadata);
+      await createNode(workspace_id, 'doc', title, extractPlainText(emptyContent, 200), id, metadata);
       doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     }
 
@@ -232,7 +233,7 @@ router.post('/', async (req, res) => {
           workspace_id,
           'doc',
           title,
-          (content || '').substring(0, 500),
+          extractPlainText(content || '', 200),
           id,
           metadata
         );

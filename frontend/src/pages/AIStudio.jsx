@@ -11,7 +11,7 @@ import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
 import { ChatListSkeleton, ListSkeleton } from '../components/shared/Skeleton';
 import { formatRelativeTime } from '../utils/time';
-import { formatPreviewText } from '../utils/content';
+import { getItemTitle } from '../utils/content';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
@@ -239,11 +239,16 @@ export default function AIStudio() {
                     marginBottom: '3px'
                   }}
                 >
-                  {formatPreviewText(chat.title, { maxLength: 52, fallback: 'Untitled chat' })}
+                  {chat.title || getItemTitle(chat) || 'New Chat'}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'var(--bg-overlay)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>
                   {chat.rag_used ? <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '1px 5px', borderRadius: '2px' }}>RAG</span> : null}
+                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
+                    {Number(chat.message_count || 0) > 0
+                      ? `${Number(chat.message_count)} message${Number(chat.message_count) !== 1 ? 's' : ''}`
+                      : 'No messages yet'}
+                  </span>
                   <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{formatRelativeTime(chat.updated_at)}</span>
                 </div>
               </button>

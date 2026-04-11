@@ -10,7 +10,7 @@ import useStore from '../../store/useStore';
 import { GraphLoadingSkeleton } from '../shared/Skeleton';
 import TypeBadge from '../shared/TypeBadge';
 import { formatRelativeTime } from '../../utils/time';
-import { formatPreviewText } from '../../utils/content';
+import { extractTextPreview, getContentSummary, getItemTitle } from '../../utils/content';
 
 const NODE_COLORS = {
   document: '#E8000D',
@@ -23,14 +23,6 @@ const NODE_COLORS = {
   tasks: '#FF6B00',
   doc: '#E8000D'
 };
-
-// Formats snake_case metadata keys into readable labels.
-function formatMetadataKey(key) {
-  return String(key || '')
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
 
 function normalizeType(type) {
   if (type === 'docs') return 'document';
@@ -239,9 +231,9 @@ export default function KnowledgeGraph() {
         .attr('fill', textSecondary)
         .attr('dy', -13)
         .text((d) => {
-          const raw = d.title || 'Untitled';
-          const label = raw.substring(0, 20);
-          return label + (raw.length > 20 ? '…' : '');
+          const title = getItemTitle(d);
+          const clean = extractTextPreview(title, 22) || 'Untitled';
+          return clean.length > 22 ? clean.slice(0, 22) + '…' : clean;
       });
 
       nodeGroups.on('click', (event, d) => {
@@ -618,24 +610,13 @@ export default function KnowledgeGraph() {
         <TypeBadge type={selectedType} />
 
         <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)', lineHeight: '1.3', marginTop: '4px' }}>
-          {selectedNode?.title || 'Untitled'}
+          {getItemTitle(selectedNode)}
         </h3>
 
-        {selectedNode?.content_summary && (
+        {getContentSummary(selectedNode, 280) && (
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-            {formatPreviewText(selectedNode.content_summary, { maxLength: 280, fallback: 'No summary available' })}
+            {getContentSummary(selectedNode, 280)}
           </p>
-        )}
-
-        {selectedNode?.metadata && Object.keys(selectedNode.metadata).length > 0 && (
-          <div style={{ display: 'grid', gap: '6px' }}>
-            {Object.entries(selectedNode.metadata).map(([key, value]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                <span>{formatMetadataKey(key)}:</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{String(value)}</span>
-              </div>
-            ))}
-          </div>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>

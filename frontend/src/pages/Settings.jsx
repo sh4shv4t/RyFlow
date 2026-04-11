@@ -9,6 +9,8 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
 import { APP_VERSION } from '../constants/appVersion';
+import { formatDate, formatRelativeTime } from '../utils/time';
+import { safeDisplay } from '../utils/content';
 
 const LANGUAGE_OPTIONS = [
   { code: 'en', label: 'English' },
@@ -177,6 +179,28 @@ export default function Settings() {
     >
       <div style={{ width: '100%', maxWidth: '1160px', margin: '0 auto' }}>
         <h1 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '32px' }}>Settings</h1>
+
+        <section style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
+            Workspace
+          </h2>
+          <div style={{ display: 'grid', gap: '10px', paddingTop: '8px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+              Name: {safeDisplay(workspace?.name) || 'Untitled'}
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Description: {workspace?.description
+                ? safeDisplay(workspace.description)
+                : <span style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No description</span>}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+              Last accessed: {workspace?.last_accessed ? formatRelativeTime(workspace.last_accessed) : 'Unknown'}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+              Created at: {workspace?.created_at ? formatDate(workspace.created_at) : 'Unknown'}
+            </div>
+          </div>
+        </section>
 
         <section style={{ marginBottom: '40px' }}>
           <h2 style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
