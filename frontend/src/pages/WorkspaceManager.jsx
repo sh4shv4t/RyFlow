@@ -186,97 +186,103 @@ export default function WorkspaceManager() {
   );
 
   return (
-    <div style={{ backgroundColor: '#111111', height: '100%', overflowY: 'auto', padding: '40px' }}>
+    <div style={{ backgroundColor: 'var(--bg-base)', height: '100%', overflowY: 'auto', padding: '40px' }}>
       <div style={{ maxWidth: '720px', margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0' }}>Workspaces</h1>
-          <button onClick={loadData} style={{ marginLeft: 'auto', height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><RefreshCw size={12} /> Refresh</button>
+          <h1 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)' }}>Workspaces</h1>
+          <button onClick={loadData} style={{ marginLeft: 'auto', height: '30px', borderRadius: '6px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><RefreshCw size={12} /> Refresh</button>
         </div>
 
         <button
           onClick={() => setCreateOpen((v) => !v)}
-          style={{ border: '1px dashed #333333', borderRadius: '6px', padding: '10px 16px', fontSize: '13px', color: '#666666', cursor: 'pointer', width: '100%', textAlign: 'center', backgroundColor: 'transparent', marginBottom: '12px' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#444444'; e.currentTarget.style.color = '#999999'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#333333'; e.currentTarget.style.color = '#666666'; }}
+          style={{ border: '1px dashed var(--border-default)', borderRadius: '6px', padding: '10px 16px', fontSize: '13px', color: 'var(--text-tertiary)', cursor: 'pointer', width: '100%', textAlign: 'center', backgroundColor: 'transparent', marginBottom: '12px' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-tertiary)'; }}
         >
           {createOpen ? 'Close new workspace form' : 'Create new workspace'}
         </button>
 
         {createOpen && (
           <div style={{ marginBottom: '16px', display: 'grid', gap: '8px' }}>
-            <input value={createForm.name} onChange={(e) => setCreateForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-            <input value={createForm.description} onChange={(e) => setCreateForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-            <input value={createForm.owner_name} onChange={(e) => setCreateForm((s) => ({ ...s, owner_name: e.target.value }))} placeholder="Owner name" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
+            <input value={createForm.name} onChange={(e) => setCreateForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+            <input value={createForm.description} onChange={(e) => setCreateForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+            <input value={createForm.owner_name} onChange={(e) => setCreateForm((s) => ({ ...s, owner_name: e.target.value }))} placeholder="Owner name" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
             <button onClick={createWorkspace} disabled={creating} style={{ height: '34px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1 }}>
               {creating ? 'Creating...' : 'Create and Open'}
             </button>
-            {createdCode && <div style={{ fontSize: '12px', color: '#999999' }}>Join code: {createdCode}</div>}
+            {createdCode && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Join code: {createdCode}</div>}
           </div>
         )}
 
-        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '8px' }}>Workspace List</p>
-        {loading ? <div style={{ fontSize: '13px', color: '#666666', padding: '8px 0' }}>Loading workspaces...</div> : (
+        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Workspace List</p>
+        {loading ? <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', padding: '8px 0' }}>Loading workspaces...</div> : (
           <div>
             {workspaces.map((ws) => (
               <div
                 key={ws.id}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#1A1A1A'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '14px 16px', borderBottom: '1px solid #242424', transition: 'background 150ms ease' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+                  e.currentTarget.style.borderColor = 'var(--border-default)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+                  e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '14px 16px', border: '1px solid var(--border-subtle)', borderRadius: '8px', backgroundColor: 'var(--bg-surface)', transition: 'background 150ms ease, border-color 150ms ease', marginBottom: '8px' }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#F0F0F0' }}>{ws.name}</div>
-                  <div style={{ fontSize: '12px', color: '#999999' }}>Owner: {ws.owner_name || 'Unknown'} · Last active {timeAgo(ws.last_accessed)}</div>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>{ws.name}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Owner: {ws.owner_name || 'Unknown'} · Last active {timeAgo(ws.last_accessed)}</div>
                 </div>
-                <span style={{ marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: '#666666', backgroundColor: '#222222', padding: '2px 6px', borderRadius: '3px' }}>{ws.join_code}</span>
-                <button onClick={() => exportWorkspace(ws.id)} style={{ width: '26px', height: '26px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: 'transparent', color: '#666666', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Export"><Download size={13} /></button>
-                <button onClick={() => deleteWorkspace(ws.id)} style={{ width: '26px', height: '26px', borderRadius: '4px', border: '1px solid #333333', backgroundColor: 'transparent', color: '#666666', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Delete"><PlusCircle size={13} style={{ transform: 'rotate(45deg)' }} /></button>
+                <span style={{ marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '3px' }}>{ws.join_code}</span>
+                <button onClick={() => exportWorkspace(ws.id)} style={{ width: '26px', height: '26px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Export"><Download size={13} /></button>
+                <button onClick={() => deleteWorkspace(ws.id)} style={{ width: '26px', height: '26px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Delete"><PlusCircle size={13} style={{ transform: 'rotate(45deg)' }} /></button>
                 <button onClick={() => openWorkspace(ws.id)} style={{ height: '28px', borderRadius: '6px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>Open</button>
               </div>
             ))}
           </div>
         )}
 
-        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginTop: '24px', marginBottom: '8px' }}>Join Workspace</p>
+        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginTop: '24px', marginBottom: '8px' }}>Join Workspace</p>
         <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-          <input value={manualJoin.host_ip} onChange={(e) => setManualJoin((s) => ({ ...s, host_ip: e.target.value }))} placeholder="Host IP" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-          <input value={manualJoin.host_port} onChange={(e) => setManualJoin((s) => ({ ...s, host_port: e.target.value }))} placeholder="Port" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-          <input value={manualJoin.join_code} onChange={(e) => setManualJoin((s) => ({ ...s, join_code: e.target.value.toUpperCase().slice(0, 6) }))} placeholder="Join code" style={{ height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
+          <input value={manualJoin.host_ip} onChange={(e) => setManualJoin((s) => ({ ...s, host_ip: e.target.value }))} placeholder="Host IP" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+          <input value={manualJoin.host_port} onChange={(e) => setManualJoin((s) => ({ ...s, host_port: e.target.value }))} placeholder="Port" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+          <input value={manualJoin.join_code} onChange={(e) => setManualJoin((s) => ({ ...s, join_code: e.target.value.toUpperCase().slice(0, 6) }))} placeholder="Join code" style={{ height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
           <button onClick={() => joinRemote(manualJoin)} disabled={joining} style={{ height: '34px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: joining ? 'not-allowed' : 'pointer', opacity: joining ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}><Link2 size={13} /> {joining ? 'Connecting...' : 'Connect'}</button>
         </div>
 
         {peerWorkspaceCards.length > 0 && (
           <div style={{ marginBottom: '20px' }}>
             {peerWorkspaceCards.map((peer) => (
-              <div key={`${peer.host}:${peer.port}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderBottom: '1px solid #242424' }}>
+              <div key={`${peer.host}:${peer.port}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: '8px', backgroundColor: 'var(--bg-surface)', marginBottom: '8px' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '13px', color: '#F0F0F0' }}>{peer.workspace.name}</div>
-                  <div style={{ fontSize: '11px', color: '#666666' }}>{peer.host}:{peer.port}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{peer.workspace.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{peer.host}:{peer.port}</div>
                 </div>
-                <button onClick={() => joinRemote({ host_ip: peer.host, host_port: peer.port, join_code: manualJoin.join_code })} style={{ height: '28px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 8px', cursor: 'pointer' }}>Join</button>
+                <button onClick={() => joinRemote({ host_ip: peer.host, host_port: peer.port, join_code: manualJoin.join_code })} style={{ height: '28px', borderRadius: '6px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 8px', cursor: 'pointer' }}>Join</button>
               </div>
             ))}
           </div>
         )}
 
-        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666666', marginBottom: '8px' }}>Import</p>
+        <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Import</p>
         <label
-          style={{ border: '2px dashed #333333', borderRadius: '8px', padding: '32px', textAlign: 'center', marginTop: '24px', display: 'block', cursor: 'pointer' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#666666'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#333333'; }}
+          style={{ border: '2px dashed var(--border-default)', borderRadius: '8px', padding: '32px', textAlign: 'center', marginTop: '24px', display: 'block', cursor: 'pointer' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; }}
         >
-          <Upload size={24} color="#444444" style={{ margin: '0 auto' }} />
-          <div style={{ fontSize: '13px', color: '#666666', marginTop: '8px' }}>Drop or browse .ryflow/.json file</div>
+          <Upload size={24} color="var(--text-tertiary)" style={{ margin: '0 auto' }} />
+          <div style={{ fontSize: '13px', color: 'var(--text-tertiary)', marginTop: '8px' }}>Drop or browse .ryflow/.json file</div>
           <input type="file" accept=".ryflow,.json" style={{ display: 'none' }} onChange={(e) => importWorkspace(e.target.files?.[0])} />
         </label>
 
-        {importing ? <div style={{ marginTop: '8px', fontSize: '12px', color: '#666666' }}>Importing workspace...</div> : null}
+        {importing ? <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>Importing workspace...</div> : null}
         {importSummary && (
-          <div style={{ marginTop: '12px', border: '1px solid #333333', borderRadius: '6px', backgroundColor: '#1A1A1A', padding: '10px 12px' }}>
-            <div style={{ fontSize: '12px', color: '#999999' }}>Imported: {importSummary.name}</div>
-            <div style={{ fontSize: '12px', color: '#999999' }}>Original owner: {importSummary.original_owner}</div>
-            <div style={{ fontSize: '12px', color: '#999999' }}>Items: {importSummary.node_count} nodes</div>
-            <div style={{ fontSize: '12px', color: '#999999' }}>Join code: {importSummary.join_code}</div>
+          <div style={{ marginTop: '12px', border: '1px solid var(--border-default)', borderRadius: '6px', backgroundColor: 'var(--bg-surface)', padding: '10px 12px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Imported: {importSummary.name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Original owner: {importSummary.original_owner}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Items: {importSummary.node_count} nodes</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Join code: {importSummary.join_code}</div>
             <button onClick={reloadToAppRoot} style={{ marginTop: '8px', height: '30px', borderRadius: '6px', border: '1px solid rgba(232,0,13,0.3)', backgroundColor: 'rgba(232,0,13,0.1)', color: '#E8000D', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>Open Workspace</button>
           </div>
         )}

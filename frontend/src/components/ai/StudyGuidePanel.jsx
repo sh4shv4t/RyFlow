@@ -183,21 +183,21 @@ export default function StudyGuidePanel() {
   };
 
   return (
-    <div className="h-full rounded-xl border border-border-d bg-surface p-4 overflow-auto space-y-4">
-      <h2 className="font-heading text-amd-white">Study Guide</h2>
+    <div style={{ height: '100%', borderRadius: '12px', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', padding: '16px', overflow: 'auto' }}>
+      <h2 style={{ color: 'var(--text-primary)', marginBottom: '12px' }}>Study Guide</h2>
 
-      <div className="rounded-lg bg-surface border border-border-d p-3">
+      <div style={{ borderRadius: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '12px', marginBottom: '12px' }}>
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm text-amd-white">Select Documents</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>Select Documents</div>
           <div className="flex gap-1">
-            <button onClick={() => setSelectedIds(docs.map((d) => d.id))} className="px-2 py-1 text-xs rounded bg-elevated text-t-secondary">Select All</button>
-            <button onClick={() => setSelectedIds([])} className="px-2 py-1 text-xs rounded bg-elevated text-t-secondary">Deselect All</button>
+            <button onClick={() => setSelectedIds(docs.map((d) => d.id))} style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>Select All</button>
+            <button onClick={() => setSelectedIds([])} style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>Deselect All</button>
           </div>
         </div>
-        {loadingDocs ? <div className="text-xs text-amd-white/50">Loading documents...</div> : (
+        {loadingDocs ? <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Loading documents...</div> : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-40 overflow-auto">
             {docs.map((doc) => (
-              <label key={doc.id} className="text-xs text-t-secondary flex items-center gap-2 p-1 rounded hover:bg-elevated">
+              <label key={doc.id} style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px', padding: '4px', borderRadius: '4px' }}>
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(doc.id)}
@@ -219,79 +219,80 @@ export default function StudyGuidePanel() {
           {'Generate Study Guide'}
         </button>
 
-        {guideError ? <div className="text-xs text-amd-orange mt-2">{guideError}</div> : null}
+        {guideError ? <div style={{ fontSize: '12px', color: guideError === 'Generating...' ? 'var(--text-tertiary)' : 'var(--status-error)', marginTop: '8px' }}>{guideError}</div> : null}
       </div>
 
       {guide ? (
         <>
-          <section className="rounded-lg bg-surface border border-border-d p-3">
-            <h3 className="text-sm text-amd-white mb-2">Summary</h3>
-            <p className="text-sm text-amd-white/75">{guide.summary}</p>
+          <section style={{ borderRadius: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '12px', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>Summary</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{guide.summary}</p>
           </section>
 
-          <section className="rounded-lg bg-surface border border-border-d p-3">
-            <h3 className="text-sm text-amd-white mb-2">Key Terms</h3>
+          <section style={{ borderRadius: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '12px', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>Key Terms</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {(guide.key_terms || []).map((item, idx) => (
-                <div key={`${item.term}-${idx}`} className="rounded border border-border-d p-2">
-                  <div className="text-amd-red text-sm font-medium">{item.term}</div>
-                  <div className="text-xs text-amd-white/70 mt-1">{item.definition}</div>
+                <div key={`${item.term}-${idx}`} style={{ borderRadius: '6px', border: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-elevated)', padding: '8px' }}>
+                  <div style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>{item.term}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{item.definition}</div>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="rounded-lg bg-surface border border-border-d p-3">
-            <h3 className="text-sm text-amd-white mb-2">Key Points</h3>
+          <section style={{ borderRadius: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '12px', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>Key Points</h3>
             <div className="space-y-1">
               {(guide.key_points || []).map((point, idx) => (
-                <label key={`${point}-${idx}`} className="text-sm text-amd-white/80 flex items-center gap-2">
+                <label key={`${point}-${idx}`} style={{ fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <input type="checkbox" checked={Boolean(checkedPoints[point])} onChange={() => togglePoint(point)} />
-                  {idx + 1}. {point}
+                  <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{idx + 1}.</span> {point}
                 </label>
               ))}
             </div>
           </section>
 
-          <section className="rounded-lg bg-surface border border-border-d p-3">
-            <h3 className="text-sm text-amd-white mb-2">Quiz</h3>
+          <section style={{ borderRadius: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '12px', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>Quiz</h3>
             {currentQuiz ? (
               <div>
-                <div className="text-xs text-amd-white/60 mb-2">Question {quizIndex + 1} of {(guide.quiz || []).length}</div>
-                <div className="text-sm text-amd-white mb-2">{currentQuiz.question}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>Question {quizIndex + 1} of {(guide.quiz || []).length}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px' }}>{currentQuiz.question}</div>
                 <div className="space-y-1">
                   {(currentQuiz.options || []).map((opt, idx) => {
                     const answered = answers[quizIndex] !== undefined;
                     const correctIdx = Number(currentQuiz.correct || 0);
                     const isChosen = answers[quizIndex]?.choice === idx;
                     const isCorrect = idx === correctIdx;
-                    let cls = 'bg-elevated text-t-secondary';
-                    if (answered && isCorrect) cls = 'bg-[rgba(61,153,112,0.15)] text-[var(--success)]';
-                    if (answered && isChosen && !isCorrect) cls = 'bg-[rgba(192,57,43,0.15)] text-[var(--error)]';
+                    let answerStyle = { backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)' };
+                    if (answered && isCorrect) answerStyle = { backgroundColor: 'rgba(61,153,112,0.15)', color: 'var(--success)' };
+                    if (answered && isChosen && !isCorrect) answerStyle = { backgroundColor: 'rgba(192,57,43,0.15)', color: 'var(--error)' };
                     return (
                       <button
                         key={`${opt}-${idx}`}
                         disabled={answered}
                         onClick={() => setAnswers((prev) => ({ ...prev, [quizIndex]: { choice: idx, correct: isCorrect } }))}
-                        className={`w-full text-left px-2 py-1 rounded text-sm ${cls}`}
+                        className="w-full text-left px-2 py-1 rounded text-sm"
+                        style={answerStyle}
                       >
                         {String.fromCharCode(65 + idx)}. {opt}
                       </button>
                     );
                   })}
                 </div>
-                {answers[quizIndex] ? <div className="text-xs text-amd-white/70 mt-2">{currentQuiz.explanation}</div> : null}
+                {answers[quizIndex] ? <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>{currentQuiz.explanation}</div> : null}
                 <button
                   onClick={() => setQuizIndex((i) => Math.min((guide.quiz || []).length, i + 1))}
                   className="mt-3 px-2 py-1 rounded bg-amd-red/20 text-amd-red text-xs"
                 >Next Question</button>
               </div>
             ) : (
-              <div className="text-sm text-amd-white/75">{score}/{(guide.quiz || []).length} - Great effort, keep going.</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{score}/{(guide.quiz || []).length} - Great effort, keep going.</div>
             )}
           </section>
 
-          <button onClick={exportMarkdown} className="px-3 py-2 rounded bg-elevated text-t-secondary text-sm">Download Study Guide</button>
+          <button onClick={exportMarkdown} style={{ padding: '8px 12px', borderRadius: '6px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', fontSize: '13px' }}>Download Study Guide</button>
         </>
       ) : null}
     </div>

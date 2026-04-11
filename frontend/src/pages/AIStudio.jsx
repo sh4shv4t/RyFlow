@@ -164,8 +164,8 @@ export default function AIStudio() {
                 style={{
                   height: '24px',
                   borderRadius: '4px',
-                  border: activeTab === key ? '1px solid rgba(232,0,13,0.3)' : '1px solid var(--border-default)',
-                  backgroundColor: activeTab === key ? 'rgba(232,0,13,0.08)' : 'var(--bg-surface)',
+                  border: activeTab === key ? '1px solid var(--accent-border)' : '1px solid var(--border-default)',
+                  backgroundColor: activeTab === key ? 'var(--accent-subtle)' : 'var(--bg-surface)',
                   color: activeTab === key ? 'var(--accent)' : 'var(--text-tertiary)',
                   fontSize: '11px',
                   padding: '0 8px',
@@ -220,7 +220,7 @@ export default function AIStudio() {
                   marginBottom: '1px',
                   transition: 'background 150ms',
                   borderLeft: activeChat?.id === chat.id ? '2px solid var(--accent)' : '2px solid transparent',
-                  backgroundColor: activeChat?.id === chat.id ? 'rgba(232,0,13,0.08)' : 'transparent',
+                  backgroundColor: activeChat?.id === chat.id ? 'var(--accent-subtle)' : 'transparent',
                   borderTop: 'none',
                   borderRight: 'none',
                   borderBottom: 'none',
@@ -278,7 +278,7 @@ export default function AIStudio() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: 'var(--bg-base)' }}>
-        <div style={{ padding: '14px 20px 10px' }}>
+        <div style={{ padding: '14px 20px 10px', backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
           <h1
             style={{
               fontSize: '20px',
@@ -315,7 +315,7 @@ export default function AIStudio() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 10 }}
-              style={{ flex: 1, overflow: 'hidden' }}
+              style={{ flex: 1, overflow: 'hidden', backgroundColor: 'var(--bg-base)' }}
             >
               <StudyGuidePanel />
             </motion.div>

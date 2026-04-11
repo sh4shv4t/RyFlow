@@ -171,7 +171,7 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
                 gap: '8px',
                 marginBottom: '10px',
                 paddingBottom: '8px',
-                borderBottom: '1px solid #242424'
+                borderBottom: '1px solid var(--border-subtle)'
               }}
             >
               <p
@@ -180,7 +180,7 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
                   fontWeight: '500',
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',
-                  color: '#666666',
+                  color: 'var(--text-secondary)',
                   flex: 1
                 }}
               >
@@ -188,11 +188,11 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
               </p>
               <span
                 style={{
-                  backgroundColor: '#222222',
+                  backgroundColor: 'var(--bg-elevated)',
                   borderRadius: '10px',
                   padding: '1px 7px',
                   fontSize: '11px',
-                  color: '#999999'
+                  color: 'var(--text-tertiary)'
                 }}
               >
                 {columnTasks.length}
@@ -204,9 +204,9 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
                     width: '22px',
                     height: '22px',
                     borderRadius: '4px',
-                    border: '1px solid #333333',
-                    backgroundColor: '#1A1A1A',
-                    color: '#999999',
+                    border: '1px solid var(--border-default)',
+                    backgroundColor: 'var(--bg-surface)',
+                    color: 'var(--text-secondary)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -235,7 +235,7 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
                 ))}
               </AnimatePresence>
               {columnTasks.length === 0 && (
-                <div style={{ fontSize: '12px', color: '#666666', padding: '8px 0' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', padding: '8px 0' }}>
                   {col.id === 'todo' ? 'Add a task to get started' : 'Drag tasks here'}
                 </div>
               )}
@@ -267,11 +267,17 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
       draggable
       onDragStart={() => onDragStart(task)}
       onDragEnd={onDragEnd}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#444444'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = isNew ? '#444444' : '#333333'; }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-default)';
+        e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = isNew ? 'var(--border-default)' : 'var(--border-subtle)';
+        e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+      }}
       style={{
-        backgroundColor: '#1A1A1A',
-        border: `1px solid ${isNew ? '#444444' : '#333333'}`,
+        backgroundColor: 'var(--bg-surface)',
+        border: `1px solid ${isNew ? 'var(--border-default)' : 'var(--border-subtle)'}`,
         borderRadius: '6px',
         padding: '12px 14px',
         cursor: 'grab',
@@ -280,7 +286,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
-          <GripVertical size={12} color="#666666" style={{ flexShrink: 0 }} />
+          <GripVertical size={12} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
           {editing ? (
             <input
               value={title}
@@ -291,8 +297,8 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 flex: 1,
                 background: 'transparent',
                 border: 'none',
-                borderBottom: '1px solid #444444',
-                color: '#F0F0F0',
+                borderBottom: '1px solid var(--border-default)',
+                color: 'var(--text-primary)',
                 fontSize: '13px',
                 outline: 'none'
               }}
@@ -303,7 +309,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
               style={{
                 fontSize: '13px',
                 fontWeight: '500',
-                color: '#F0F0F0',
+                color: 'var(--text-primary)',
                 lineHeight: '1.4',
                 marginBottom: '10px',
                 display: '-webkit-box',
@@ -317,14 +323,32 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          <button onClick={onEdit} style={{ padding: '2px', border: 'none', background: 'transparent', color: '#666666', cursor: 'pointer' }}>
+          <button onClick={onEdit} style={{ padding: '2px', border: 'none', background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
             <Edit3 size={12} />
           </button>
-          <button onClick={() => onDelete(task.id)} style={{ padding: '2px', border: 'none', background: 'transparent', color: '#666666', cursor: 'pointer' }}>
+          <button onClick={() => onDelete(task.id)} style={{ padding: '2px', border: 'none', background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer' }}>
             <Trash2 size={12} />
           </button>
         </div>
       </div>
+
+      {!editing && description ? (
+        <p
+          style={{
+            marginTop: '-2px',
+            marginBottom: '10px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            lineHeight: '1.45',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}
+        >
+          {description}
+        </p>
+      ) : null}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <div
@@ -332,13 +356,13 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
             width: '20px',
             height: '20px',
             borderRadius: '50%',
-            backgroundColor: '#2A2A2A',
-            border: '1px solid #333333',
+            backgroundColor: 'var(--bg-overlay)',
+            border: '1px solid var(--border-default)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '9px',
-            color: '#999999',
+            color: 'var(--text-secondary)',
             fontWeight: '600',
             flexShrink: 0
           }}
@@ -357,18 +381,18 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
               ? 'rgba(192,57,43,0.15)'
               : task.priority === 'medium'
               ? 'rgba(184,92,0,0.15)'
-              : 'rgba(85,85,85,0.15)',
+              : 'var(--bg-overlay)',
             color: task.priority === 'high'
               ? '#C0392B'
               : task.priority === 'medium'
               ? '#B85C00'
-              : '#888888'
+              : 'var(--text-tertiary)'
           }}
         >
           {task.priority || 'low'}
         </span>
 
-        <span style={{ fontSize: '10px', color: '#666666', marginLeft: 'auto' }}>{task.due_date || 'No due'}</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{task.due_date || 'No due'}</span>
       </div>
 
       <AnimatePresence>
@@ -388,12 +412,12 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 width: '100%',
                 height: '60px',
                 resize: 'none',
-                backgroundColor: '#222222',
-                border: '1px solid #333333',
+                backgroundColor: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '4px',
                 padding: '8px',
                 fontSize: '12px',
-                color: '#F0F0F0',
+                color: 'var(--text-primary)',
                 marginBottom: '8px'
               }}
             />
@@ -403,10 +427,10 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 onChange={(e) => onUpdate(task.id, { priority: e.target.value })}
                 style={{
                   fontSize: '11px',
-                  backgroundColor: '#222222',
-                  border: '1px solid #333333',
+                  backgroundColor: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '4px',
-                  color: '#999999',
+                  color: 'var(--text-secondary)',
                   padding: '4px 6px'
                 }}
               >
@@ -422,10 +446,10 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 style={{
                   flex: 1,
                   fontSize: '11px',
-                  backgroundColor: '#222222',
-                  border: '1px solid #333333',
+                  backgroundColor: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '4px',
-                  color: '#999999',
+                  color: 'var(--text-secondary)',
                   padding: '4px 6px'
                 }}
               />
@@ -435,10 +459,10 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 onChange={(e) => onUpdate(task.id, { due_date: e.target.value })}
                 style={{
                   fontSize: '11px',
-                  backgroundColor: '#222222',
-                  border: '1px solid #333333',
+                  backgroundColor: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '4px',
-                  color: '#999999',
+                  color: 'var(--text-secondary)',
                   padding: '4px 6px'
                 }}
               />

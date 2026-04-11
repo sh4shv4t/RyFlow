@@ -231,14 +231,14 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
   return (
     <div className="flex flex-col h-full">
       {/* Header with model and language selectors */}
-      <div className="flex items-center justify-between p-3 border-b border-border-d">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
         <div className="flex items-center gap-3">
-          <h3 className="font-heading font-semibold text-amd-white">AI Chat</h3>
+          <h3 style={{ fontWeight: 600, color: 'var(--text-primary)' }}>AI Chat</h3>
           {/* Model selector */}
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
+            style={{ fontSize: '12px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '4px 8px', color: 'var(--text-primary)', outline: 'none' }}
           >
             {(aiStatus.models?.length > 0 ? aiStatus.models : [{ name: 'phi3:mini' }, { name: 'gemma:2b' }, { name: 'tinyllama' }])
               .map(m => (
@@ -250,7 +250,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
-            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
+            style={{ fontSize: '12px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '4px 8px', color: 'var(--text-primary)', outline: 'none' }}
           >
             {LANGUAGES.map(l => (
               <option key={l.code} value={l.code}>{l.label}</option>
@@ -265,7 +265,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
             setTitleGenerated(false);
             onRequestNewChat && onRequestNewChat();
           }}
-          className="text-amd-white/40 hover:text-amd-red transition-colors"
+          style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
           title="Clear chat"
         >
           <Trash2 size={16} />
@@ -277,10 +277,10 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Zap size={48} className="text-amd-red/30 mb-4" />
-            <h3 className="font-heading font-semibold text-amd-white/80 text-lg mb-2">
+            <h3 style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '18px', marginBottom: '8px' }}>
               Local AI, Zero Cloud
             </h3>
-            <p className="text-sm text-amd-white/40 max-w-md mb-6">
+            <p style={{ fontSize: '13px', color: 'var(--text-tertiary)', maxWidth: '28rem', marginBottom: '24px' }}>
               Everything runs on your device via Ollama. No data leaves your machine. Ever.
             </p>
             {/* Prompt templates */}
@@ -289,7 +289,9 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
                 <button
                   key={i}
                   onClick={() => useTemplate(t)}
-                  className="text-left text-xs p-3 glass-card glass-card-hover text-amd-white/70 hover:text-amd-white transition-colors"
+                  style={{ textAlign: 'left', fontSize: '12px', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', transition: 'background-color 150ms ease' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
                 >
                   {t.label}
                 </button>
@@ -306,20 +308,26 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
             className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-amd-red/20 text-amd-white ml-8'
-                  : 'glass-card text-amd-white/90 mr-8'
-              }`}
+              style={{
+                maxWidth: '80%',
+                borderRadius: '16px',
+                padding: '12px 16px',
+                fontSize: '13px',
+                marginLeft: msg.role === 'user' ? '32px' : 0,
+                marginRight: msg.role === 'assistant' ? '32px' : 0,
+                backgroundColor: msg.role === 'user' ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+                border: msg.role === 'user' ? '1px solid var(--accent-border)' : '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)'
+              }}
             >
               <div className="whitespace-pre-wrap">{msg.content}</div>
               {msg.role === 'assistant' && (
                 <>
-                  <div className="flex items-center gap-1 mt-2 text-[10px] text-amd-red/50">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
                     <Zap size={8} /> Powered by AMD ROCm
                   </div>
                   {msg.ragUsed && (
-                    <div className="mt-1 text-[11px] italic text-amd-orange/90">
+                    <div style={{ marginTop: '6px', fontSize: '11px', fontStyle: 'italic', backgroundColor: 'var(--bg-overlay)', color: 'var(--text-tertiary)', border: '1px solid var(--border-subtle)', borderRadius: '999px', display: 'inline-flex', padding: '2px 8px' }}>
                       📚 Answered using your workspace knowledge
                     </div>
                   )}
@@ -335,7 +343,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
                             else if (c.type === 'task') navigate('/tasks');
                             else navigate('/graph');
                           }}
-                          className="text-[10px] px-2 py-1 rounded-full bg-amd-orange/20 text-amd-orange hover:bg-amd-orange/30"
+                          style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '999px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
                         >
                           {c.title}
                         </button>
@@ -355,7 +363,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
             animate={{ opacity: 1 }}
             className="flex justify-start"
           >
-            <div className="max-w-[80%] glass-card rounded-2xl px-4 py-3 text-sm text-amd-white/90 mr-8">
+            <div style={{ maxWidth: '80%', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '12px 16px', fontSize: '13px', color: 'var(--text-primary)', marginRight: '32px' }}>
               <div className="whitespace-pre-wrap">
                 {streamingText}<span className="animate-pulse text-amd-red">▊</span>
               </div>
@@ -376,21 +384,23 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
       </div>
 
       {/* Input area */}
-      <div className="p-3 border-t border-border-d">
+      <div style={{ padding: '12px', borderTop: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)' }}>
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <input
+              className="placeholder:text-[var(--text-tertiary)]"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
               placeholder="Ask anything locally..."
-              className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 transition-colors"
+              style={{ width: '100%', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: 'var(--text-primary)', outline: 'none' }}
               disabled={loading}
             />
             <button
               onClick={() => setShowTemplates(!showTemplates)}
-              className="absolute right-12 top-1/2 -translate-y-1/2 text-amd-white/30 hover:text-amd-white/60"
+              className="absolute right-12 top-1/2 -translate-y-1/2"
+              style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
             >
               <ChevronDown size={16} />
             </button>
@@ -411,13 +421,15 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="mt-2 glass-card p-2 space-y-1"
+              style={{ marginTop: '8px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px' }}
             >
               {runtimeTemplates.map((t, i) => (
                 <button
                   key={i}
                   onClick={() => useTemplate(t)}
-                  className="w-full text-left text-xs p-2 rounded hover:bg-elevated text-amd-white/70 transition-colors"
+                  style={{ width: '100%', textAlign: 'left', fontSize: '12px', padding: '8px', borderRadius: '6px', color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   {t.label}
                 </button>

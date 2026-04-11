@@ -63,33 +63,34 @@ export default function NLTaskInput({ onTasksCreated }) {
       <div style={{ display: 'flex', gap: '8px' }}>
         <div style={{ flex: 1, position: 'relative' }}>
           <input
+            className="placeholder:text-[var(--text-tertiary)]"
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             placeholder='e.g. "Remind design team to submit posters 2 days before Techfest and book the auditorium sound system"'
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#444444';
+              e.currentTarget.style.borderColor = 'var(--border-default)';
               e.currentTarget.style.boxShadow = '0 0 0 2px rgba(232,0,13,0.1)';
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = flashSuccess ? '#3D9970' : '#333333';
+              e.currentTarget.style.borderColor = flashSuccess ? '#3D9970' : 'var(--border-default)';
               e.currentTarget.style.boxShadow = 'none';
             }}
             style={{
               width: '100%',
               height: '36px',
               padding: '0 36px 0 12px',
-              backgroundColor: '#1A1A1A',
-              border: `1px solid ${flashSuccess ? '#3D9970' : '#333333'}`,
+              backgroundColor: 'var(--bg-surface)',
+              border: `1px solid ${flashSuccess ? '#3D9970' : 'var(--border-default)'}`,
               borderRadius: '6px',
               fontSize: '13px',
-              color: '#F0F0F0',
+              color: 'var(--text-primary)',
               outline: 'none'
             }}
             disabled={loading}
           />
-          <Sparkles size={14} color="#666666" style={{ position: 'absolute', right: '10px', top: '11px' }} />
+          <Sparkles size={14} color="var(--text-tertiary)" style={{ position: 'absolute', right: '10px', top: '11px' }} />
         </div>
         <button
           onClick={() => handleCreate()}
@@ -149,19 +150,19 @@ export default function NLTaskInput({ onTasksCreated }) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.1 }}
                 style={{
-                  backgroundColor: '#1A1A1A',
-                  border: '1px solid #333333',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '6px',
                   padding: '8px 10px',
                   fontSize: '12px',
-                  color: '#999999',
+                  color: 'var(--text-secondary)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}
               >
                 <Check size={12} color="#3D9970" style={{ flexShrink: 0 }} />
-                <span style={{ fontWeight: '500', color: '#F0F0F0' }}>{task.title}</span>
+                <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{task.title}</span>
                 {task.priority && (
                   <span
                     style={{
@@ -172,12 +173,12 @@ export default function NLTaskInput({ onTasksCreated }) {
                         ? 'rgba(192,57,43,0.15)'
                         : task.priority === 'medium'
                         ? 'rgba(184,92,0,0.15)'
-                        : 'rgba(85,85,85,0.15)',
+                        : 'var(--bg-overlay)',
                       color: task.priority === 'high'
                         ? '#C0392B'
                         : task.priority === 'medium'
                         ? '#B85C00'
-                        : '#888888'
+                        : 'var(--text-tertiary)'
                     }}
                   >
                     {task.priority}

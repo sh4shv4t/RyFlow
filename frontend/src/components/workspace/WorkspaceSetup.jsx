@@ -88,7 +88,7 @@ export default function WorkspaceSetup() {
   };
 
   return (
-    <div className="h-screen w-screen bg-amd-charcoal flex items-center justify-center">
+    <div className="h-screen w-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-base)' }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -101,23 +101,24 @@ export default function WorkspaceSetup() {
             alt="RyFlow logo"
             className="w-16 h-16 rounded-2xl mx-auto mb-4"
           />
-          <h1 className="font-heading text-3xl font-bold text-amd-white">RyFlow</h1>
-          <p className="text-amd-white/50 mt-1">Your Campus. Your GPU. Your AI.</p>
+          <h1 className="font-heading text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>RyFlow</h1>
+          <p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Your Campus. Your GPU. Your AI.</p>
         </div>
 
-        <div className="glass-card p-8">
+        <div className="p-8" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px' }}>
           {/* Step 1: Name */}
           {step === 1 && (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-              <h2 className="font-heading font-semibold text-xl text-amd-white mb-2">What's your name?</h2>
-              <p className="text-sm text-amd-white/40 mb-6">This will be shown to your teammates</p>
+              <h2 className="font-heading font-semibold text-xl mb-2" style={{ color: 'var(--text-primary)' }}>What's your name?</h2>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>This will be shown to your teammates</p>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep(2)}
                 placeholder="Enter your name"
-                className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
+                className="w-full rounded-xl px-4 py-3 mb-4 placeholder:text-[var(--text-tertiary)]"
+                style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', outline: 'none' }}
                 autoFocus
               />
               <button
@@ -133,19 +134,20 @@ export default function WorkspaceSetup() {
           {/* Step 2: Workspace */}
           {step === 2 && (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-              <h2 className="font-heading font-semibold text-xl text-amd-white mb-2">Name your workspace</h2>
-              <p className="text-sm text-amd-white/40 mb-6">e.g. "Techfest 2025 Core Team"</p>
+              <h2 className="font-heading font-semibold text-xl mb-2" style={{ color: 'var(--text-primary)' }}>Name your workspace</h2>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-tertiary)' }}>e.g. "Techfest 2025 Core Team"</p>
               <input
                 type="text"
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && workspaceName.trim() && setStep(3)}
                 placeholder="Workspace name"
-                className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50 mb-4"
+                className="w-full rounded-xl px-4 py-3 mb-4 placeholder:text-[var(--text-tertiary)]"
+                style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', outline: 'none' }}
                 autoFocus
               />
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl bg-surface text-amd-white/60">Back</button>
+                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Back</button>
                 <button
                   onClick={() => setStep(3)}
                   disabled={!workspaceName.trim()}
@@ -160,18 +162,18 @@ export default function WorkspaceSetup() {
           {/* Step 3: Preferences */}
           {step === 3 && (
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-              <h2 className="font-heading font-semibold text-xl text-amd-white mb-6">Personalize</h2>
+              <h2 className="font-heading font-semibold text-xl mb-6" style={{ color: 'var(--text-primary)' }}>Personalize</h2>
 
               {/* Avatar color */}
               <div className="mb-6">
-                <label className="text-sm text-amd-white/60 block mb-2">Avatar color</label>
+                <label className="text-sm block mb-2" style={{ color: 'var(--text-secondary)' }}>Avatar color</label>
                 <div className="flex gap-3">
                   {AVATAR_COLORS.map((c) => (
                     <button
                       key={c}
                       onClick={() => setAvatarColor(c)}
                       className={`w-10 h-10 rounded-full flex items-center justify-center text-[var(--text-on-accent)] font-bold transition-all ${
-                        avatarColor === c ? 'ring-2 ring-border-s ring-offset-2 ring-offset-amd-charcoal scale-110' : 'opacity-60 hover:opacity-100'
+                        avatarColor === c ? 'ring-2 ring-border-s scale-110' : 'opacity-60 hover:opacity-100'
                       }`}
                       style={{ backgroundColor: c }}
                     >
@@ -183,11 +185,12 @@ export default function WorkspaceSetup() {
 
               {/* Language */}
               <div className="mb-6">
-                <label className="text-sm text-amd-white/60 block mb-2">Language preference</label>
+                <label className="text-sm block mb-2" style={{ color: 'var(--text-secondary)' }}>Language preference</label>
                 <select
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full bg-surface border border-border-d rounded-xl px-4 py-3 text-amd-white outline-none"
+                  className="w-full rounded-xl px-4 py-3 outline-none"
+                  style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                 >
                   {LANGUAGES.map(l => (
                     <option key={l.code} value={l.code}>{l.label}</option>
@@ -196,7 +199,7 @@ export default function WorkspaceSetup() {
               </div>
 
               {/* AMD Detection Status */}
-              <div className="glass-card p-4 mb-6">
+              <div className="p-4 mb-6" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px' }}>
                 {checking ? (
                   <div className="flex items-center gap-2 text-amd-white/60">
                     <Loader2 size={16} className="animate-spin" />
@@ -215,12 +218,12 @@ export default function WorkspaceSetup() {
                 )}
 
                 {amdStatus?.gpuName && (
-                  <p className="text-xs text-amd-white/40 mt-1 ml-6">GPU: {amdStatus.gpuName}</p>
+                  <p className="text-xs mt-1 ml-6" style={{ color: 'var(--text-tertiary)' }}>GPU: {amdStatus.gpuName}</p>
                 )}
 
                 {amdStatus && !amdStatus.ollamaRunning && (
                   <p className="text-xs text-amd-orange/60 mt-2 ml-6">
-                    ⚠ Ollama not detected. Start it with: <code className="bg-overlay px-1 rounded">ollama serve</code>
+                    ⚠ Ollama not detected. Start it with: <code style={{ backgroundColor: 'var(--bg-overlay)', padding: '0 4px', borderRadius: '4px' }}>ollama serve</code>
                   </p>
                 )}
 
@@ -233,7 +236,7 @@ export default function WorkspaceSetup() {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl bg-surface text-amd-white/60">Back</button>
+                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl" style={{ backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>Back</button>
                 <button
                   onClick={handleComplete}
                   className="flex-1 py-3 rounded-xl bg-accent text-[var(--text-on-accent)] font-medium hover:bg-amd-red/80 transition-colors flex items-center justify-center gap-2"
@@ -249,9 +252,8 @@ export default function WorkspaceSetup() {
             {[1, 2, 3].map(s => (
               <div
                 key={s}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  s === step ? 'bg-amd-red' : s < step ? 'bg-amd-green' : 'bg-elevated'
-                }`}
+                className="w-2 h-2 rounded-full transition-colors"
+                style={{ backgroundColor: s === step ? 'var(--accent)' : s < step ? 'var(--status-success)' : 'var(--bg-elevated)' }}
               />
             ))}
           </div>

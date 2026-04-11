@@ -186,8 +186,8 @@ export default function SetupWizard() {
   };
 
   return (
-    <div style={{ backgroundColor: '#111111', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-      <div style={{ backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '8px', padding: '40px', width: '100%', maxWidth: '440px' }}>
+    <div style={{ backgroundColor: 'var(--bg-base)', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '8px', padding: '40px', width: '100%', maxWidth: '440px' }}>
         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '32px' }}>
           {[1, 2].map((i) => (
             <span key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: step === i ? 'var(--accent)' : 'var(--border-default)' }} />
@@ -201,10 +201,10 @@ export default function SetupWizard() {
                 <div style={{ width: '26px', height: '26px', backgroundColor: '#E8000D', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <span style={{ color: '#FFFFFF', fontSize: '13px', fontWeight: '700', lineHeight: 1 }}>R</span>
                 </div>
-                <span style={{ fontSize: '15px', fontWeight: '600', color: '#F0F0F0' }}>RyFlow</span>
+                <span style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>RyFlow</span>
               </div>
-              <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', textAlign: 'center' }}>Welcome to RyFlow</h1>
-              <p style={{ fontSize: '13px', color: '#999999', textAlign: 'center', marginTop: '6px' }}>Your offline AI workspace for campus teams.</p>
+              <h1 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)', textAlign: 'center' }}>Welcome to RyFlow</h1>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '6px' }}>Your offline AI workspace for campus teams.</p>
               <div
                 style={{
                   display: 'flex',
@@ -230,21 +230,21 @@ export default function SetupWizard() {
 
           {step === 2 && (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0', textAlign: 'center' }}>Create Your First Workspace</h2>
-              <p style={{ fontSize: '13px', color: '#999999', textAlign: 'center', marginTop: '6px', marginBottom: '14px' }}>Set up your owner profile and workspace</p>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)', textAlign: 'center' }}>Create Your First Workspace</h2>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '6px', marginBottom: '14px' }}>Set up your owner profile and workspace</p>
               <div style={{ display: 'grid', gap: '8px' }}>
-                <input value={form.owner} onChange={(e) => setForm((s) => ({ ...s, owner: e.target.value }))} placeholder="Your name" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-                <input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
-                <input value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" style={{ width: '100%', height: '34px', backgroundColor: '#1A1A1A', border: '1px solid #333333', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: '#F0F0F0' }} />
+                <input value={form.owner} onChange={(e) => setForm((s) => ({ ...s, owner: e.target.value }))} placeholder="Your name" style={{ width: '100%', height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+                <input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Workspace name" style={{ width: '100%', height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
+                <input value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} placeholder="Description (optional)" style={{ width: '100%', height: '34px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '6px', padding: '0 10px', fontSize: '13px', color: 'var(--text-primary)' }} />
               </div>
 
               {!joinCode ? (
                 <button onClick={createWorkspace} disabled={creating} style={{ marginTop: '24px', width: '100%', height: '36px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: creating ? 'not-allowed' : 'pointer', opacity: creating ? 0.6 : 1 }}>{creating ? 'Creating...' : 'Create Workspace'}</button>
               ) : (
-                <div style={{ marginTop: '16px', border: '1px solid #333333', borderRadius: '6px', backgroundColor: '#1A1A1A', padding: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '13px', color: '#999999' }}>Your workspace is ready. Share this code:</div>
+                <div style={{ marginTop: '16px', border: '1px solid var(--border-default)', borderRadius: '6px', backgroundColor: 'var(--bg-surface)', padding: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Your workspace is ready. Share this code:</div>
                   <div style={{ fontSize: '20px', letterSpacing: '0.08em', color: '#E8000D', fontWeight: '600', marginTop: '8px' }}>{joinCode}</div>
-                  <button onClick={() => navigator.clipboard.writeText(joinCode)} style={{ marginTop: '10px', height: '30px', borderRadius: '6px', border: '1px solid #333333', backgroundColor: '#1A1A1A', color: '#999999', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>Copy</button>
+                  <button onClick={() => navigator.clipboard.writeText(joinCode)} style={{ marginTop: '10px', height: '30px', borderRadius: '6px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontSize: '12px', padding: '0 10px', cursor: 'pointer' }}>Copy</button>
                   <button onClick={() => { window.location.href = '/'; }} style={{ marginTop: '10px', width: '100%', height: '36px', borderRadius: '6px', border: 'none', backgroundColor: '#E8000D', color: '#FFFFFF', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>Open RyFlow</button>
                 </div>
               )}

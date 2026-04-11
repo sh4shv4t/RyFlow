@@ -69,7 +69,7 @@ export default function Tasks() {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        backgroundColor: '#111111',
+        backgroundColor: 'var(--bg-base)',
         padding: '32px 40px'
       }}
     >
@@ -82,15 +82,15 @@ export default function Tasks() {
           marginBottom: '20px'
         }}
       >
-        <h1 style={{ fontSize: '20px', fontWeight: '600', color: '#F0F0F0' }}>Tasks</h1>
+        <h1 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--text-primary)' }}>Tasks</h1>
         <span
           style={{
-            backgroundColor: '#1A1A1A',
-            border: '1px solid #333333',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
             borderRadius: '10px',
             padding: '1px 8px',
             fontSize: '11px',
-            color: '#999999'
+            color: 'var(--text-secondary)'
           }}
         >
           {tasks.length}
@@ -102,9 +102,9 @@ export default function Tasks() {
               width: '32px',
               height: '32px',
               borderRadius: '6px',
-              border: '1px solid #333333',
-              backgroundColor: '#1A1A1A',
-              color: '#999999',
+              border: '1px solid var(--border-default)',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',

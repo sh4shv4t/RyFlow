@@ -325,13 +325,26 @@ export default function CodeEditorPage() {
               >
                 <button
                   onClick={() => loadFile(f.id)}
+                  onMouseEnter={(e) => {
+                    if (activeFile?.id !== f.id) {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-elevated)';
+                      e.currentTarget.style.borderColor = 'var(--border-default)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (activeFile?.id !== f.id) {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                    }
+                  }}
                   style={{
                     width: '100%',
                     textAlign: 'left',
                     padding: '8px 36px 8px 8px',
                     borderRadius: '6px',
-                    border: activeFile?.id === f.id ? '1px solid var(--accent-border)' : '1px solid var(--border-default)',
-                    backgroundColor: activeFile?.id === f.id ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+                    border: activeFile?.id === f.id ? '1px solid var(--accent-border)' : '1px solid var(--border-subtle)',
+                    borderLeft: activeFile?.id === f.id ? '2px solid var(--accent)' : '2px solid transparent',
+                    backgroundColor: activeFile?.id === f.id ? 'var(--accent-subtle)' : 'var(--bg-surface)',
                     cursor: 'pointer'
                   }}
                 >
@@ -375,7 +388,7 @@ export default function CodeEditorPage() {
             placeholder="File name"
             style={{ backgroundColor: 'transparent', border: 'none', fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)', flex: 1 }}
           />
-          <span style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: 'var(--text-secondary)' }}>{languageBadge}</span>
+          <span style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>{languageBadge}</span>
           <button onClick={() => { setBacklinksOpen((v) => !v); loadBacklinks(); }} style={{ height: '28px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface)', color: 'var(--text-secondary)', padding: '0 8px', fontSize: '11px', cursor: 'pointer', position: 'relative' }}>
             <LinkIcon size={12} style={{ display: 'inline', marginRight: '4px' }} /> Backlinks
             {Number(backlinks.total || 0) > 0 ? <span style={{ marginLeft: '4px', display: 'inline-flex', minWidth: '14px', height: '14px', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: 'var(--accent)', color: 'var(--text-inverse)', fontSize: '10px', padding: '0 4px' }}>{backlinks.total}</span> : null}
@@ -403,7 +416,7 @@ export default function CodeEditorPage() {
               onLanguageChange={handleLanguageChange}
             />
             {isFileLoading && (
-              <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px', zIndex: 5 }}>
+              <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px', zIndex: 5 }}>
                 Loading file...
               </div>
             )}

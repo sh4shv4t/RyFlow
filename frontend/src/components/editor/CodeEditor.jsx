@@ -89,9 +89,9 @@ export default function CodeEditor({
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiPanelTitle, setAiPanelTitle] = useState('AI Assistant');
   const [aiText, setAiText] = useState('');
-  const { selectedModel, workspace, setAiActive } = useStore();
+  const { selectedModel, workspace, setAiActive, theme: appTheme } = useStore();
 
-  const monacoThemeName = 'ryflow-dark';
+  const monacoThemeName = appTheme === 'light' ? 'light' : 'vs-dark';
   const editorHeight = '100%';
 
   // Configures custom Monaco theme to match RyFlow colors.
@@ -102,20 +102,6 @@ export default function CodeEditor({
         getWorker: () => null
       };
     }
-
-    monaco.editor.defineTheme(monacoThemeName, {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: '', foreground: 'F5F5F0', background: '1A1A1A' }
-      ],
-      colors: {
-        'editor.background': '#1A1A1A',
-        'editor.lineHighlightBackground': '#2C2C2C',
-        'editor.selectionBackground': '#E8000D4D',
-        'editorCursor.foreground': '#E8000D'
-      }
-    });
   }, []);
 
   // Stores Monaco instance after mount for selection-aware actions.
@@ -230,11 +216,11 @@ export default function CodeEditor({
   return (
     <div className="h-full flex">
       <div className="flex-1 flex flex-col glass-card overflow-hidden">
-        <div className="p-2 border-b border-border-d bg-overlay flex flex-wrap items-center gap-2">
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--border-subtle)', backgroundColor: 'var(--bg-surface)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
           <select
             value={language}
             onChange={(e) => onLanguageChange?.(e.target.value)}
-            className="text-xs bg-surface border border-border-d rounded px-2 py-1 text-amd-white outline-none"
+            style={{ fontSize: '12px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '4px 8px', color: 'var(--text-primary)', outline: 'none' }}
           >
             {LANGUAGE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -243,49 +229,77 @@ export default function CodeEditor({
 
           <button
             onClick={() => runAiAction('Explain Code', (code) => `Explain this code in detail and walk through logic, intent, and key sections:\n\n${code}`)}
-            className="px-2 py-1 text-xs rounded bg-amd-red/15 text-amd-red hover:bg-amd-red/25"
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
           >
             ✨ Explain Code
           </button>
 
           <button
             onClick={() => runAiAction('Find Bugs', (code) => `Review this code for bugs, logic errors, and improvements. Be specific about line numbers. Code: ${code}`)}
-            className="px-2 py-1 text-xs rounded bg-amd-orange/15 text-amd-orange hover:bg-amd-orange/25"
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
           >
             🐛 Find Bugs
           </button>
 
           <button
             onClick={() => runAiAction('Add Comments', (code) => `Rewrite this code and add clear inline comments while preserving behavior:\n\n${code}`)}
-            className="px-2 py-1 text-xs rounded bg-elevated text-t-primary hover:bg-overlay"
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
           >
             📝 Add Comments
           </button>
 
           <button
             onClick={() => runAiAction('Optimize Code', (code) => `Suggest an optimized version of this code and explain performance tradeoffs:\n\n${code}`)}
-            className="px-2 py-1 text-xs rounded bg-elevated text-t-primary hover:bg-overlay"
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
           >
             ⚡ Optimize
           </button>
 
-          <button onClick={handleCopy} className="p-1.5 rounded bg-elevated text-t-primary hover:bg-overlay" title="Copy">
+          <button
+            onClick={handleCopy}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '6px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+            title="Copy"
+          >
             <Copy size={14} />
           </button>
 
-          <button onClick={handleDownload} className="p-1.5 rounded bg-elevated text-t-primary hover:bg-overlay" title="Download">
+          <button
+            onClick={handleDownload}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }}
+            style={{ padding: '6px', borderRadius: '4px', backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+            title="Download"
+          >
             <Download size={14} />
           </button>
 
           <button
             onClick={() => setWordWrap((w) => !w)}
-            className={`p-1.5 rounded ${wordWrap ? 'bg-amd-red/15 text-amd-red' : 'bg-elevated text-t-primary'} hover:bg-overlay`}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = wordWrap ? 'var(--accent-subtle)' : 'var(--bg-elevated)'; }}
+            style={{
+              padding: '6px',
+              borderRadius: '4px',
+              backgroundColor: wordWrap ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
+              color: wordWrap ? 'var(--accent)' : 'var(--text-secondary)',
+              border: `1px solid ${wordWrap ? 'var(--accent-border)' : 'var(--border-subtle)'}`
+            }}
             title="Toggle wrap"
           >
             <WrapText size={14} />
           </button>
 
-          <div className={`ml-auto text-xs flex items-center gap-1 px-2 py-1 rounded-full border ${aiLoading ? 'amd-pulse border-amd-red/40 text-amd-red' : 'border-amd-red/20 text-amd-red/70'}`}>
+          <div style={{ marginLeft: 'auto', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '999px', border: aiLoading ? '1px solid var(--accent-border)' : '1px solid var(--border-subtle)', color: aiLoading ? 'var(--accent)' : 'var(--text-tertiary)' }} className={aiLoading ? 'amd-pulse' : ''}>
             <Zap size={12} /> ⚡ AMD Accelerated
           </div>
         </div>
@@ -293,13 +307,13 @@ export default function CodeEditor({
         <div className="flex-1" style={{ minHeight: '420px', height: editorHeight }}>
           <MonacoErrorBoundary
             fallback={(
-              <div className="h-full p-4 bg-surface text-amd-white/80 text-sm overflow-auto">
+              <div style={{ height: '100%', padding: '16px', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '13px', overflow: 'auto' }}>
                 Monaco editor failed to load. You can still edit this file below.
                 <textarea
                   value={content || ''}
                   onChange={(e) => onContentChange?.(e.target.value)}
-                  className="mt-3 w-full rounded bg-overlay border border-border-d p-3 text-amd-white outline-none"
-                  style={{ height: 'calc(100% - 48px)' }}
+                  className="mt-3 w-full rounded p-3 outline-none"
+                  style={{ backgroundColor: 'var(--bg-overlay)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', height: 'calc(100% - 48px)' }}
                 />
               </div>
             )}
@@ -326,20 +340,25 @@ export default function CodeEditor({
             initial={{ opacity: 0, x: 24 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 24 }}
-            className="w-[360px] ml-4 glass-card p-4 overflow-auto"
+            style={{ width: '360px', marginLeft: '16px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '16px', overflow: 'auto' }}
           >
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-heading text-amd-white text-sm flex items-center gap-2">
-                <MessageSquareText size={14} className="text-amd-red" /> {aiPanelTitle}
+              <h3 style={{ fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <MessageSquareText size={14} color="var(--accent)" /> {aiPanelTitle}
               </h3>
-              <button onClick={() => setAiPanelOpen(false)} className="text-amd-white/50 hover:text-amd-white">
+              <button
+                onClick={() => setAiPanelOpen(false)}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+                style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
                 <X size={14} />
               </button>
             </div>
-            <div className="text-xs text-amd-red/70 mb-3 flex items-center gap-1">
+            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Zap size={10} className={aiLoading ? 'animate-pulse' : ''} /> Local inference
             </div>
-            <pre className="text-xs whitespace-pre-wrap text-amd-white/80 font-mono">
+            <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', color: 'var(--text-primary)', fontFamily: "'JetBrains Mono', monospace" }}>
               {aiText || (aiLoading ? 'Generating response...' : 'No response yet.')}
             </pre>
           </motion.div>
