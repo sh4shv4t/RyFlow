@@ -44,6 +44,24 @@ export default function VoiceInput({ onTranscript, placeholder }) {
     }
   };
 
+  const micStyle = recording
+    ? {
+        backgroundColor: 'var(--accent)',
+        color: 'var(--text-on-accent)',
+        border: '1px solid var(--accent-border)'
+      }
+    : transcribing
+    ? {
+        backgroundColor: 'var(--bg-elevated)',
+        color: 'var(--accent)',
+        border: '1px solid var(--accent-border)'
+      }
+    : {
+        backgroundColor: 'var(--bg-surface)',
+        color: 'var(--text-secondary)',
+        border: '1px solid var(--border-default)'
+      };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -52,13 +70,8 @@ export default function VoiceInput({ onTranscript, placeholder }) {
           onClick={handleMicClick}
           disabled={transcribing || manualMode}
           whileTap={{ scale: 0.95 }}
-          className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-            recording
-              ? 'bg-accent text-[var(--text-on-accent)] amd-pulse'
-              : transcribing
-              ? 'bg-amd-orange/20 text-amd-orange'
-              : 'bg-surface border border-border-d text-amd-white/60 hover:text-amd-white hover:border-amd-red/50'
-          }`}
+          className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all ${recording ? 'amd-pulse' : ''}`}
+          style={micStyle}
         >
           {transcribing ? (
             <Loader2 size={20} className="animate-spin" />
@@ -91,18 +104,18 @@ export default function VoiceInput({ onTranscript, placeholder }) {
 
         <div className="flex-1">
           {transcribing && (
-            <div className="flex items-center gap-2 text-sm text-amd-orange">
-              <Zap size={14} className="text-amd-red" />
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--accent)' }}>
+              <Zap size={14} style={{ color: 'var(--accent)' }} />
               🎙 Transcribing via AMD Ryzen AI...
             </div>
           )}
           {recording && (
-            <div className="text-sm text-amd-red animate-pulse">
+            <div className="text-sm animate-pulse" style={{ color: 'var(--accent)' }}>
               Recording... (tap to stop, max 60s)
             </div>
           )}
           {!recording && !transcribing && (
-            <p className="text-xs text-amd-white/40">
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               {whisperAvailable === false
                 ? 'Whisper not available — use manual input'
                 : 'Tap mic to record, or type below'}
@@ -113,9 +126,12 @@ export default function VoiceInput({ onTranscript, placeholder }) {
         {/* Toggle manual mode */}
         <button
           onClick={() => setManualMode(!manualMode)}
-          className={`p-2 rounded-lg transition-colors ${
-            manualMode ? 'bg-amd-red/10 text-amd-red' : 'text-amd-white/40 hover:text-amd-white'
-          }`}
+          className="p-2 rounded-lg transition-colors"
+          style={{
+            backgroundColor: manualMode ? 'var(--accent-subtle)' : 'transparent',
+            color: manualMode ? 'var(--accent)' : 'var(--text-tertiary)',
+            border: manualMode ? '1px solid var(--accent-border)' : '1px solid transparent'
+          }}
           title="Switch to manual text input"
         >
           <Keyboard size={18} />
@@ -137,11 +153,21 @@ export default function VoiceInput({ onTranscript, placeholder }) {
               onChange={(e) => setManualText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleManualSubmit()}
               placeholder={placeholder || 'Type your text here...'}
-              className="flex-1 bg-surface border border-border-d rounded-lg px-3 py-2 text-sm text-amd-white placeholder:text-amd-white/30 outline-none focus:border-amd-red/50"
+              className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--text-primary)'
+              }}
             />
             <button
               onClick={handleManualSubmit}
-              className="px-4 py-2 rounded-lg bg-accent text-[var(--text-on-accent)] text-sm"
+              className="px-4 py-2 rounded-lg text-sm"
+              style={{
+                backgroundColor: 'var(--accent)',
+                color: 'var(--text-on-accent)',
+                border: '1px solid var(--accent-border)'
+              }}
             >
               Submit
             </button>
@@ -154,9 +180,10 @@ export default function VoiceInput({ onTranscript, placeholder }) {
         <motion.div
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-3 text-sm text-amd-white/80"
+          className="glass-card p-3 text-sm"
+          style={{ color: 'var(--text-secondary)' }}
         >
-          <span className="text-xs text-amd-white/40 block mb-1">Transcription:</span>
+          <span className="text-xs block mb-1" style={{ color: 'var(--text-tertiary)' }}>Transcription:</span>
           {transcript}
         </motion.div>
       )}

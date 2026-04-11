@@ -1,6 +1,8 @@
 // Document history panel for version listing, preview, and restore.
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { formatRelativeTime } from '../../utils/time';
+import { formatPreviewText } from '../../utils/content';
 
 export default function HistoryPanel({ docId, onRestored }) {
   const [versions, setVersions] = useState([]);
@@ -24,7 +26,7 @@ export default function HistoryPanel({ docId, onRestored }) {
   const openVersion = async (versionId) => {
     setSelected(versionId);
     const res = await axios.get(`/api/docs/${docId}/versions/${versionId}`);
-    setPreview(String(res.data.content || ''));
+    setPreview(formatPreviewText(res.data.content, { maxLength: 3000, fallback: '' }));
   };
 
   const restoreVersion = async () => {
@@ -45,7 +47,7 @@ export default function HistoryPanel({ docId, onRestored }) {
             className={`w-full text-left rounded p-2 text-xs border ${selected === v.id ? 'border-amd-red/40 bg-amd-red/10' : 'border-border-d hover:bg-elevated'}`}
           >
             <div className="text-amd-white">Version {v.version_number}</div>
-            <div className="text-amd-white/45">{new Date(v.created_at).toLocaleString()}</div>
+            <div className="text-amd-white/45">{formatRelativeTime(v.created_at)}</div>
           </button>
         ))}
       </div>

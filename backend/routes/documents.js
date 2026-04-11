@@ -293,9 +293,10 @@ router.post('/:id/versions/:versionId/restore', (req, res) => {
     if (!version) return res.status(404).json({ error: 'Version not found' });
 
     saveVersionSnapshot(db, existing, last_editor || null);
+    const now = new Date().toISOString();
     db.prepare(
-      'UPDATE documents SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(version.title || existing.title, version.content || '', req.params.id);
+      'UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?'
+    ).run(version.title || existing.title, version.content || '', now, req.params.id);
 
     const restored = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
     const metadata = {
@@ -352,9 +353,10 @@ router.put('/:id', async (req, res) => {
       saveVersionSnapshot(db, existing, last_editor || null);
     }
 
+    const now = new Date().toISOString();
     db.prepare(
-      'UPDATE documents SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(nextTitle, nextContent, req.params.id);
+      'UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?'
+    ).run(nextTitle, nextContent, now, req.params.id);
 
     const metadata = {
       ...buildDocMetadata(nextContent, last_editor || null),

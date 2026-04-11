@@ -5,6 +5,8 @@ import { Plus, Trash2, Edit3, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import { formatDueDate } from '../../utils/time';
+import { formatPreviewText } from '../../utils/content';
 
 const COLUMNS = [
   { id: 'todo', label: 'Todo' },
@@ -318,7 +320,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
                 overflow: 'hidden'
               }}
             >
-              {task.title}
+              {formatPreviewText(task.title, { maxLength: 80, fallback: 'Untitled task' })}
             </span>
           )}
         </div>
@@ -346,7 +348,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
             overflow: 'hidden'
           }}
         >
-          {description}
+          {formatPreviewText(description, { maxLength: 140, fallback: '' })}
         </p>
       ) : null}
 
@@ -392,7 +394,7 @@ function TaskCard({ task, isNew, editing, onEdit, onUpdate, onDelete, onDragStar
           {task.priority || 'low'}
         </span>
 
-        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{task.due_date || 'No due'}</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>{formatDueDate(task.due_date)}</span>
       </div>
 
       <AnimatePresence>

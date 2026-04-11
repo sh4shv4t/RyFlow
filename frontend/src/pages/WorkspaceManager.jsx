@@ -3,18 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { PlusCircle, RefreshCw, Upload, Download, Link2 } from 'lucide-react';
-
-// Formats datetime as relative text for workspace cards.
-function timeAgo(value) {
-  if (!value) return 'unknown';
-  const ms = Date.now() - new Date(value).getTime();
-  const mins = Math.max(1, Math.floor(ms / 60000));
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+import { formatRelativeTime } from '../utils/time';
 
 // Triggers a full app reload after backend has finalized workspace switch.
 function reloadToAppRoot() {
@@ -232,7 +221,7 @@ export default function WorkspaceManager() {
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-primary)' }}>{ws.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Owner: {ws.owner_name || 'Unknown'} · Last active {timeAgo(ws.last_accessed)}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>Owner: {ws.owner_name || 'Unknown'} · Last active {formatRelativeTime(ws.last_accessed)}</div>
                 </div>
                 <span style={{ marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '3px' }}>{ws.join_code}</span>
                 <button onClick={() => exportWorkspace(ws.id)} style={{ width: '26px', height: '26px', borderRadius: '4px', border: '1px solid var(--border-default)', backgroundColor: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Export"><Download size={13} /></button>

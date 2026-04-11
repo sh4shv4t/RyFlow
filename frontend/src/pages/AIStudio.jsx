@@ -11,6 +11,7 @@ import StudyGuidePanel from '../components/ai/StudyGuidePanel';
 import useStore from '../store/useStore';
 import { ChatListSkeleton, ListSkeleton } from '../components/shared/Skeleton';
 import { formatRelativeTime } from '../utils/time';
+import { formatPreviewText } from '../utils/content';
 
 const tabs = [
   { key: 'chat', label: 'Chat', icon: MessageSquare },
@@ -238,7 +239,7 @@ export default function AIStudio() {
                     marginBottom: '3px'
                   }}
                 >
-                  {chat.title}
+                  {formatPreviewText(chat.title, { maxLength: 52, fallback: 'Untitled chat' })}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'var(--bg-overlay)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>

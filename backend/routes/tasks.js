@@ -123,9 +123,10 @@ router.post('/', async (req, res) => {
     const db = getDb();
     const safeAssignee = resolveValidAssignee(db, assignee, workspace_id);
     const id = uuidv4();
+    const now = new Date().toISOString();
     db.prepare(
-      'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, workspace_id, title, description || '', safeAssignee, status || 'todo', priority || 'medium', due_date || null);
+      'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, workspace_id, title, description || '', safeAssignee, status || 'todo', priority || 'medium', due_date || null, now, now);
 
     // Add to knowledge graph
     const summary = `${description || ''} Priority: ${priority || 'medium'}. Due: ${due_date || 'none'}`;
@@ -151,8 +152,9 @@ router.patch('/:id', async (req, res) => {
     const safeAssignee = assignee !== undefined
       ? resolveValidAssignee(db, assignee, existing.workspace_id)
       : existing.assignee;
+    const now = new Date().toISOString();
     db.prepare(
-      'UPDATE tasks SET title = ?, description = ?, assignee = ?, status = ?, priority = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      'UPDATE tasks SET title = ?, description = ?, assignee = ?, status = ?, priority = ?, due_date = ?, updated_at = ? WHERE id = ?'
     ).run(
       title || existing.title,
       description !== undefined ? description : existing.description,
@@ -160,6 +162,7 @@ router.patch('/:id', async (req, res) => {
       status || existing.status,
       priority || existing.priority,
       due_date !== undefined ? due_date : existing.due_date,
+      now,
       req.params.id
     );
 
@@ -256,9 +259,10 @@ router.post('/nl-create', async (req, res) => {
     for (const t of parsedTasks) {
       const id = uuidv4();
       const safeAssignee = resolveValidAssignee(db, t.assignee, workspace_id);
+      const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', safeAssignee, 'todo', t.priority || 'medium', t.due_date || null);
+        'INSERT INTO tasks (id, workspace_id, title, description, assignee, status, priority, due_date, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, workspace_id, t.title || 'Untitled Task', t.description || '', safeAssignee, 'todo', t.priority || 'medium', t.due_date || null, now, now);
 
       // Add to knowledge graph
       const summary = `${t.description || ''} Priority: ${t.priority || 'medium'}. Due: ${t.due_date || 'none'}`;

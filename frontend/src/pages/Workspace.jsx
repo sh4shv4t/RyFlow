@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Settings, Users, Database, Zap } from 'lucide-react';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
+import { formatRelativeTime } from '../utils/time';
 
 export default function Workspace() {
   const { workspace, user, aiStatus, peers } = useStore();
@@ -34,7 +35,7 @@ export default function Workspace() {
             </div>
             <div>
               <label className="text-xs text-amd-white/40">Created</label>
-              <p className="text-sm text-amd-white">{workspace?.created_at ? new Date(workspace.created_at).toLocaleDateString() : '-'}</p>
+              <p className="text-sm text-amd-white">{formatRelativeTime(workspace?.created_at)}</p>
             </div>
           </div>
         </div>

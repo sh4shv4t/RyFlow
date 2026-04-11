@@ -14,7 +14,7 @@ export default function Graph() {
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        backgroundColor: '#111111',
+        backgroundColor: 'var(--bg-base)',
         overflow: 'hidden',
         minHeight: 0
       }}

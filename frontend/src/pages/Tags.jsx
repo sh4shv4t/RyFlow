@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
+import { formatRelativeTime } from '../utils/time';
+import { formatPreviewText } from '../utils/content';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All Types' },
@@ -240,11 +242,11 @@ export default function Tags() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>{item.type}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{new Date(item.created_at).toLocaleString()}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatRelativeTime(item.created_at)}</span>
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>{item.title || 'Untitled'}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>{formatPreviewText(item.title, { maxLength: 70, fallback: 'Untitled' })}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.content_summary || 'No summary available'}
+                    {formatPreviewText(item.content_summary, { maxLength: 120, fallback: 'No summary available' })}
                   </div>
                 </button>
               ))}

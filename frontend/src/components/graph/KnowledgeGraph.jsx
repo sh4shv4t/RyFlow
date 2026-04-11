@@ -9,6 +9,8 @@ import useGraph from '../../hooks/useGraph';
 import useStore from '../../store/useStore';
 import { GraphLoadingSkeleton } from '../shared/Skeleton';
 import TypeBadge from '../shared/TypeBadge';
+import { formatRelativeTime } from '../../utils/time';
+import { formatPreviewText } from '../../utils/content';
 
 const NODE_COLORS = {
   document: '#E8000D',
@@ -37,19 +39,25 @@ function normalizeType(type) {
   return type || 'document';
 }
 
+function getCSSVar(name, fallback) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 export default function KnowledgeGraph() {
   const navigate = useNavigate();
   const containerRef = useRef(null);
   const svgRef = useRef(null);
   const zoomRef = useRef(null);
   const gRef = useRef(null);
-  const [dims, setDims] = useState({ w: 900, h: 650 });
+  const [dims, setDims] = useState({ w: 0, h: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const [showAllNodes, setShowAllNodes] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
-  const { workspace } = useStore();
+  const { workspace, theme } = useStore();
   const {
     nodes,
     edges,
@@ -91,6 +99,7 @@ export default function KnowledgeGraph() {
   // Renders the D3 force-directed graph.
   useEffect(() => {
     if (loading) return;
+    if (dims.w < 10 || dims.h < 10) return;
     console.log('[Graph] Render effect start:', {
       nodeCount: nodes.length,
       edgeCount: edges.length,
@@ -101,8 +110,13 @@ export default function KnowledgeGraph() {
       const svg = d3.select(svgRef.current);
       svg.selectAll('*').remove();
 
-      const W = dims.w || 900;
-      const H = dims.h || 650;
+      const W = dims.w;
+      const H = dims.h;
+      const linkColor = getCSSVar('--border-default', '#475569');
+      const accentColor = getCSSVar('--accent', '#E8000D');
+      const textSecondary = getCSSVar('--text-secondary', '#94A3B8');
+      const textTertiary = getCSSVar('--text-tertiary', '#64748B');
+      const borderStrong = getCSSVar('--border-strong', '#64748B');
 
       svg
         .attr('width', '100%')
@@ -156,10 +170,10 @@ export default function KnowledgeGraph() {
 
       const links = g.append('g').selectAll('line').data(validEdges).enter().append('line')
         .attr('stroke', (d) => {
-          if (!selectedNode) return 'var(--border-default)';
+          if (!selectedNode) return linkColor;
           const sourceId = typeof d.source === 'object' ? d.source.id : d.source;
           const targetId = typeof d.target === 'object' ? d.target.id : d.target;
-          return sourceId === selectedNode.id || targetId === selectedNode.id ? 'var(--accent)' : 'var(--border-default)';
+          return sourceId === selectedNode.id || targetId === selectedNode.id ? accentColor : linkColor;
         })
         .attr('stroke-opacity', (d) => {
           if (!selectedNode) return 0.6;
@@ -197,11 +211,11 @@ export default function KnowledgeGraph() {
 
       nodeGroups.append('circle')
         .attr('r', (d) => (selectedNode?.id === d.id ? 11 : 7))
-        .attr('fill', (d) => NODE_COLORS[d.type] || 'var(--text-tertiary)')
+        .attr('fill', (d) => NODE_COLORS[d.type] || textTertiary)
         .attr('stroke', (d) => {
-          const fill = NODE_COLORS[d.type] || 'var(--text-tertiary)';
+          const fill = NODE_COLORS[d.type] || textTertiary;
           const darker = d3.color(fill)?.darker(0.8);
-          return darker ? darker.formatHex() : 'var(--border-strong)';
+          return darker ? darker.formatHex() : borderStrong;
         })
         .attr('stroke-width', 1.5)
         .attr('opacity', (d) => (highlightedIds.size === 0 || highlightedIds.has(d.id) ? 1 : 0.35));
@@ -210,7 +224,7 @@ export default function KnowledgeGraph() {
         .attr('text-anchor', 'middle')
         .attr('font-size', '11px')
         .attr('font-family', 'Inter, sans-serif')
-        .attr('fill', 'var(--text-secondary)')
+        .attr('fill', textSecondary)
         .attr('dy', -13)
         .text((d) => {
           const raw = d.title || 'Untitled';
@@ -265,7 +279,7 @@ export default function KnowledgeGraph() {
     } catch (err) {
       console.error('[Graph] Render effect failed:', err);
     }
-  }, [loading, nodes, edges, selectedNode, highlightedIds, fetchNeighborhood, dims.w, dims.h]);
+  }, [loading, nodes, edges, selectedNode, highlightedIds, fetchNeighborhood, dims.w, dims.h, theme]);
 
   // Zooms and pans graph so currently loaded nodes fit into viewport.
   const handleFitToScreen = useCallback(() => {
@@ -343,8 +357,8 @@ export default function KnowledgeGraph() {
 
   const selectedType = normalizeType(selectedNode?.type);
 
-  // Show skeleton while nodes are loading before first render.
-  if (loading) {
+  // Show skeleton while nodes are loading or before first measured layout.
+  if (loading || dims.w < 10 || dims.h < 10) {
     return <GraphLoadingSkeleton />;
   }
 
@@ -597,7 +611,7 @@ export default function KnowledgeGraph() {
 
         {selectedNode?.content_summary && (
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-            {selectedNode.content_summary}
+            {formatPreviewText(selectedNode.content_summary, { maxLength: 280, fallback: 'No summary available' })}
           </p>
         )}
 
@@ -613,7 +627,7 @@ export default function KnowledgeGraph() {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-          Created: {selectedNode?.created_at ? new Date(selectedNode.created_at).toLocaleString() : 'Unknown'}
+          Created: {formatRelativeTime(selectedNode?.created_at)}
         </div>
 
         <button

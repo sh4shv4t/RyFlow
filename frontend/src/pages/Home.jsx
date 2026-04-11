@@ -17,7 +17,8 @@ import {
   ListSkeleton,
   TaskCardSkeleton
 } from '../components/shared/Skeleton';
-import { formatRelativeTime } from '../utils/time';
+import { formatDueDate, formatRelativeTime } from '../utils/time';
+import { formatPreviewText } from '../utils/content';
 
 const TYPE_COLORS = {
   document: '#E8000D',
@@ -346,7 +347,7 @@ export default function Home() {
                   {task.title}
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>
-                  {task.due_date || 'No due'}
+                  {formatDueDate(task.due_date)}
                 </span>
               </button>
             ))}
@@ -407,7 +408,7 @@ export default function Home() {
                       whiteSpace: 'nowrap'
                     }}
                   >
-                    {item.title}
+                    {formatPreviewText(item.title, { maxLength: 60, fallback: 'Untitled' })}
                   </span>
                   <TypeBadge type={item.type} />
                   <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0 }}>{formatRelativeTime(item.updated_at)}</span>
@@ -514,7 +515,7 @@ export default function Home() {
             >
               <MessageSquare size={13} color="var(--text-tertiary)" />
               <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {chat.title}
+                {formatPreviewText(chat.title, { maxLength: 44, fallback: 'Untitled chat' })}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>{formatRelativeTime(chat.updated_at)}</span>
             </button>

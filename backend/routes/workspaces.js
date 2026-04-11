@@ -108,6 +108,11 @@ function setActiveSession(workspaceId, isRemote, remoteHost = null, remotePort =
   ).run(workspaceId || null, isRemote ? 1 : 0, remoteHost, remotePort);
 }
 
+function touchWorkspaceLastAccessed(workspaceId) {
+  if (!workspaceId) return;
+  registry.prepare('UPDATE workspaces SET last_accessed = ? WHERE id = ?').run(new Date().toISOString(), workspaceId);
+}
+
 // Picks the most recently accessed local workspace with existing db file.
 function getFallbackLocalWorkspace() {
   const rows = registry.prepare(
@@ -142,6 +147,7 @@ router.get('/active', (req, res) => {
   try {
     const active = getActiveSessionRecord();
     if (!active?.workspace_id) return res.json({ active: null });
+    touchWorkspaceLastAccessed(active.workspace_id);
     const activeUser = getActiveWorkspaceUser(active.workspace_id);
     return res.json({
       active: {
@@ -208,7 +214,7 @@ router.post('/create', (req, res) => {
     ).run(crypto.randomUUID(), String(owner_name).trim(), workspaceId, '#E8000D', 'en');
 
     setActiveSession(workspaceId, false, null, null);
-    registry.prepare('UPDATE workspaces SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?').run(workspaceId);
+    touchWorkspaceLastAccessed(workspaceId);
 
     const workspace = registry.prepare('SELECT * FROM workspaces WHERE id = ?').get(workspaceId);
     return res.status(201).json({ workspace, join_code: joinCode });
@@ -233,7 +239,7 @@ router.post('/switch', (req, res) => {
       setActiveSession(workspace_id, true, workspace.host_ip, workspace.host_port);
     }
 
-    registry.prepare('UPDATE workspaces SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?').run(workspace_id);
+    touchWorkspaceLastAccessed(workspace_id);
     return res.json({ success: true, workspace });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -287,7 +293,7 @@ router.post('/join-remote', async (req, res) => {
     );
 
     setActiveSession(workspaceInfo.workspace_id, true, host_ip, Number(host_port));
-    registry.prepare('UPDATE workspaces SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?').run(workspaceInfo.workspace_id);
+  touchWorkspaceLastAccessed(workspaceInfo.workspace_id);
 
     return res.json({ success: true, workspace: workspaceInfo });
   } catch (err) {
@@ -302,7 +308,7 @@ router.post('/disconnect-remote', (req, res) => {
     if (fallback) {
       switchWorkspace(fallback.id);
       setActiveSession(fallback.id, false, null, null);
-      registry.prepare('UPDATE workspaces SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?').run(fallback.id);
+      touchWorkspaceLastAccessed(fallback.id);
       return res.json({ success: true, workspace: fallback });
     }
 
@@ -526,7 +532,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     );
 
     setActiveSession(newWorkspaceId, false, null, null);
-    registry.prepare('UPDATE workspaces SET last_accessed = CURRENT_TIMESTAMP WHERE id = ?').run(newWorkspaceId);
+  touchWorkspaceLastAccessed(newWorkspaceId);
 
     const nodes = db.prepare('SELECT id, title, type, content_summary, metadata FROM nodes WHERE workspace_id = ?').all(newWorkspaceId);
     nodes.forEach((node) => {

@@ -2,18 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
-// Builds relative timestamps for comment cards.
-function timeAgo(iso) {
-  if (!iso) return 'just now';
-  const delta = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(1, Math.floor(delta / 60000));
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
+import { formatRelativeTime } from '../../utils/time';
+import { formatPreviewText } from '../../utils/content';
 
 // Renders one comment card including nested replies.
 function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
@@ -25,10 +15,10 @@ function CommentCard({ item, depth, onReply, onResolve, onJump, onDelete }) {
       <button onClick={() => onJump(item)} className="w-full text-left">
         <div className="flex items-center justify-between">
           <span className="text-xs text-amd-white font-medium">{item.author_name}</span>
-          <span className="text-[10px] text-amd-white/45">{timeAgo(item.created_at)}</span>
+          <span className="text-[10px] text-amd-white/45">{formatRelativeTime(item.created_at)}</span>
         </div>
         {item.selected_text ? <div className="text-[11px] italic text-amd-white/55 mt-1">"{item.selected_text}"</div> : null}
-        <div className="text-xs text-amd-white/80 mt-1">{item.content}</div>
+        <div className="text-xs text-amd-white/80 mt-1">{formatPreviewText(item.content, { maxLength: 500, fallback: '' })}</div>
       </button>
 
       <div className="flex items-center gap-2 mt-2">

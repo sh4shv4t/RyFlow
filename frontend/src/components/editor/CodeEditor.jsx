@@ -1,5 +1,5 @@
 // Monaco-powered code editor with AI actions and AMD-themed toolbar
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bug, Copy, Download, Languages, MessageSquareText, MessageSquareWarning, Sparkles, WrapText, X, Zap } from 'lucide-react';
@@ -92,7 +92,7 @@ export default function CodeEditor({
   const { selectedModel, workspace, setAiActive, theme: appTheme } = useStore();
 
   const monacoThemeName = appTheme === 'light' ? 'light' : 'vs-dark';
-  const editorHeight = '100%';
+  const editorHeight = 'calc(100vh - 96px)';
 
   // Configures custom Monaco theme to match RyFlow colors.
   const handleBeforeMount = useCallback((monaco) => {
@@ -107,7 +107,19 @@ export default function CodeEditor({
   // Stores Monaco instance after mount for selection-aware actions.
   const handleEditorMount = useCallback((editor) => {
     editorRef.current = editor;
+    editor.layout();
+    setTimeout(() => editor.layout(), 150);
   }, []);
+
+  // Re-layout editor after theme/layout transitions to keep cursor and text alignment in sync.
+  useEffect(() => {
+    if (!editorRef.current) return;
+    editorRef.current.layout();
+    const timer = setTimeout(() => {
+      editorRef.current?.layout();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [monacoThemeName]);
 
   // Returns selected code or full editor content when no selection exists.
   const getActiveCode = useCallback(() => {
@@ -304,7 +316,7 @@ export default function CodeEditor({
           </div>
         </div>
 
-        <div className="flex-1" style={{ minHeight: '420px', height: editorHeight }}>
+        <div className="flex-1 no-transition" style={{ minHeight: '420px', height: editorHeight, overflow: 'hidden', position: 'relative' }}>
           <MonacoErrorBoundary
             fallback={(
               <div style={{ height: '100%', padding: '16px', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '13px', overflow: 'auto' }}>
