@@ -13,6 +13,8 @@ export default function useGraph() {
   const [isNeighborhoodMode, setIsNeighborhoodMode] = useState(false);
   const [centerNodeId, setCenterNodeId] = useState(null);
   const { workspace, setAiActive } = useStore();
+  const GRAPH_MIN_LOADING_MS = 0;
+  const GRAPH_SEARCH_MIN_LOADING_MS = 40;
 
   // Fetches the full knowledge graph for the current workspace
   const fetchGraph = useCallback(async (options = {}) => {
@@ -22,15 +24,21 @@ export default function useGraph() {
     try {
       const loadAll = Boolean(options.all);
       const limit = Number(options.limit || 500);
-      // Fetch nodes and edges explicitly to match graph API contract.
-      const [nodesRes, edgesRes] = await Promise.all([
-        axios.get('/api/graph/nodes', { params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit } }),
-        axios.get('/api/graph/edges', { params: { workspace_id: workspace.id } })
-      ]);
+      const nodesRes = await axios.get('/api/graph/nodes', {
+        params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit }
+      });
       console.log('[Graph] Nodes received:', nodesRes.data);
       const loadedNodes = nodesRes.data.nodes || [];
       const nodeIds = new Set(loadedNodes.map((n) => n.id));
-      const filteredEdges = (edgesRes.data.edges || []).filter((e) => nodeIds.has(e.source_id) && nodeIds.has(e.target_id));
+
+      let filteredEdges = [];
+      if (loadedNodes.length > 0) {
+        const nodeIdsParam = loadedNodes.map((n) => n.id).join(',');
+        const edgesRes = await axios.get('/api/graph/edges', {
+          params: { workspace_id: workspace.id, node_ids: nodeIdsParam }
+        });
+        filteredEdges = (edgesRes.data.edges || []).filter((e) => nodeIds.has(e.source_id) && nodeIds.has(e.target_id));
+      }
 
       setNodes(loadedNodes);
       setEdges(filteredEdges);
@@ -39,7 +47,7 @@ export default function useGraph() {
     } catch (err) {
       toast.error('Failed to load knowledge graph');
     } finally {
-      await waitForMinimumLoading(startedAt);
+      await waitForMinimumLoading(startedAt, GRAPH_MIN_LOADING_MS);
       setLoading(false);
     }
   }, [workspace]);
@@ -61,7 +69,7 @@ export default function useGraph() {
       toast.error('Failed to load neighborhood graph');
       return null;
     } finally {
-      await waitForMinimumLoading(startedAt);
+      await waitForMinimumLoading(startedAt, GRAPH_MIN_LOADING_MS);
       setLoading(false);
     }
   }, [workspace]);
@@ -84,7 +92,7 @@ export default function useGraph() {
       toast.error('Semantic search failed. Is Ollama running?');
       return [];
     } finally {
-      await waitForMinimumLoading(startedAt);
+      await waitForMinimumLoading(startedAt, GRAPH_SEARCH_MIN_LOADING_MS);
       setLoading(false);
       setAiActive(false);
     }

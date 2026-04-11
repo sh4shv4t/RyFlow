@@ -27,44 +27,42 @@ document.documentElement.style.background =
   savedTheme === 'light' ? '#F7F6F2' : '#111111';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-      <Toaster
-        position="bottom-right"
-        gutter={8}
-        toastOptions={{
-          duration: 3000,
+  <BrowserRouter>
+    <App />
+    <Toaster
+      position="bottom-right"
+      gutter={8}
+      toastOptions={{
+        duration: 3000,
+        style: {
+          background: 'var(--bg-overlay)',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '6px',
+          fontSize: '13px',
+          padding: '10px 14px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          fontFamily: 'Inter, sans-serif'
+        },
+        success: {
+          iconTheme: {
+            primary: 'var(--status-success)',
+            secondary: 'var(--bg-overlay)'
+          },
           style: {
-            background: 'var(--bg-overlay)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-default)',
-            borderRadius: '6px',
-            fontSize: '13px',
-            padding: '10px 14px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-            fontFamily: 'Inter, sans-serif'
-          },
-          success: {
-            iconTheme: {
-              primary: 'var(--status-success)',
-              secondary: 'var(--bg-overlay)'
-            },
-            style: {
-              borderLeft: '3px solid var(--status-success)'
-            }
-          },
-          error: {
-            iconTheme: {
-              primary: 'var(--status-error)',
-              secondary: 'var(--bg-overlay)'
-            },
-            style: {
-              borderLeft: '3px solid var(--status-error)'
-            }
+            borderLeft: '3px solid var(--status-success)'
           }
-        }}
-      />
-    </BrowserRouter>
-  </React.StrictMode>
+        },
+        error: {
+          iconTheme: {
+            primary: 'var(--status-error)',
+            secondary: 'var(--bg-overlay)'
+          },
+          style: {
+            borderLeft: '3px solid var(--status-error)'
+          }
+        }
+      }}
+    />
+  </BrowserRouter>
 );

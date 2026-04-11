@@ -51,7 +51,7 @@ export default function KnowledgeGraph() {
   const svgRef = useRef(null);
   const zoomRef = useRef(null);
   const gRef = useRef(null);
-  const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [dims, setDims] = useState({ w: 900, h: 650 });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNode, setSelectedNode] = useState(null);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
@@ -71,7 +71,7 @@ export default function KnowledgeGraph() {
 
   // Fetch graph data on mount.
   useEffect(() => {
-    fetchGraph({ all: showAllNodes, limit: 500 });
+    fetchGraph({ all: showAllNodes, limit: showAllNodes ? 900 : 160 });
   }, [fetchGraph, showAllNodes]);
 
   // Tracks graph viewport size so force layout always uses real dimensions.
@@ -93,7 +93,19 @@ export default function KnowledgeGraph() {
       applyDims(width, height);
     });
     ro.observe(containerRef.current);
-    return () => ro.disconnect();
+
+    const fallbackTimer = setTimeout(() => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      if (rect.width < 10 || rect.height < 10) {
+        setDims({ w: 900, h: 650 });
+      }
+    }, 220);
+
+    return () => {
+      clearTimeout(fallbackTimer);
+      ro.disconnect();
+    };
   }, []);
 
   // Renders the D3 force-directed graph.
@@ -358,7 +370,7 @@ export default function KnowledgeGraph() {
   const selectedType = normalizeType(selectedNode?.type);
 
   // Show skeleton while nodes are loading or before first measured layout.
-  if (loading || dims.w < 10 || dims.h < 10) {
+  if (loading) {
     return <GraphLoadingSkeleton />;
   }
 

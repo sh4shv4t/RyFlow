@@ -97,9 +97,32 @@ router.get('/edges', (req, res) => {
     const { workspace_id } = req.query;
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
-    const edges = db.prepare(
-      'SELECT e.* FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
-    ).all(workspace_id, workspace_id);
+
+    const nodeIds = String(req.query.node_ids || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .slice(0, 1200);
+
+    let edges;
+    if (nodeIds.length > 0) {
+      const placeholders = nodeIds.map(() => '?').join(',');
+      edges = db.prepare(
+        `SELECT e.*
+         FROM edges e
+         JOIN nodes s ON e.source_id = s.id
+         JOIN nodes t ON e.target_id = t.id
+         WHERE s.workspace_id = ?
+           AND t.workspace_id = ?
+           AND e.source_id IN (${placeholders})
+           AND e.target_id IN (${placeholders})`
+      ).all(workspace_id, workspace_id, ...nodeIds, ...nodeIds);
+    } else {
+      edges = db.prepare(
+        'SELECT e.* FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+      ).all(workspace_id, workspace_id);
+    }
+
     res.json({ edges });
   } catch (err) {
     res.status(500).json({ error: err.message });
