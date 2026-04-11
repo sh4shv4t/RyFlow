@@ -223,6 +223,7 @@ function PanelShell({ panelTitle, onClose, headerBg, accentColor, children }) {
 export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
   const navigate = useNavigate();
   const user = useStore((s) => s.user);
+  const remoteMode = useStore((s) => Boolean(s.remoteMode));
   const userName = user?.name || 'Teammate';
 
   const [title, setTitle] = useState(doc?.title || 'Untitled');
@@ -247,11 +248,11 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
   const seededCollabDocRef = useRef(null);
 
   const { ydoc, provider } = useCollaboration({
-    workspaceId,
-    docId: doc?.id
+    workspaceId: remoteMode ? workspaceId : null,
+    docId: remoteMode ? doc?.id : null
   });
 
-  const collaborationEnabled = Boolean(ydoc && provider && workspaceId && doc?.id);
+  const collaborationEnabled = Boolean(remoteMode && ydoc && provider && workspaceId && doc?.id);
 
   const editor = useEditor({
     extensions: [
@@ -305,8 +306,17 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
     if (seededCollabDocRef.current === doc.id) return;
 
     const fragment = ydoc.getXmlFragment('default');
-    if (fragment.length === 0) {
-      editor.commands.setContent(parseContent(doc.content), false);
+    const incoming = parseContent(doc.content);
+    const incomingText = JSON.stringify(incoming);
+    const isEditorEmpty = !String(editor.getText() || '').trim();
+
+    if (fragment.length === 0 || isEditorEmpty) {
+      editor.commands.setContent(incoming, false);
+    } else {
+      const current = JSON.stringify(editor.getJSON());
+      if (current !== incomingText && !String(editor.getText() || '').trim()) {
+        editor.commands.setContent(incoming, false);
+      }
     }
     seededCollabDocRef.current = doc.id;
   }, [collaborationEnabled, doc?.id, doc?.content, editor, ydoc]);

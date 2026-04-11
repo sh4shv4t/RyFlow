@@ -26,8 +26,15 @@ export function extractTextPreview(
     try {
       parsed = JSON.parse(content);
     } catch {
-      // Not valid JSON — treat as plain text
+      // Not valid JSON. If it looks JSON-like, try recovering text nodes.
       const trimmed = content.trim();
+      const jsonLike = trimmed.startsWith('{') || trimmed.startsWith('[');
+      if (jsonLike) {
+        const recovered = extractFromJsonLikeString(trimmed, maxLen);
+        if (recovered) return recovered;
+        return '';
+      }
+
       return trimmed.length > maxLen
         ? trimmed.slice(0, maxLen) + '…'
         : trimmed;
@@ -68,6 +75,50 @@ export function extractTextPreview(
 
   // Fallback — do not show raw JSON
   return '';
+}
+
+function extractFromJsonLikeString(raw, maxLen) {
+  if (!raw) return '';
+
+  const textParts = [];
+  const textRegex = /"text"\s*:\s*"((?:\\.|[^"\\])*)/g;
+  let match;
+
+  while ((match = textRegex.exec(raw)) !== null) {
+    const token = decodeJsonStringToken(match[1]);
+    if (token) textParts.push(token);
+    if (textParts.join(' ').length >= maxLen) break;
+  }
+
+  // Fallback for message-like payloads that only contain content fields.
+  if (textParts.length === 0) {
+    const contentRegex = /"content"\s*:\s*"((?:\\.|[^"\\])*)/g;
+    while ((match = contentRegex.exec(raw)) !== null) {
+      const token = decodeJsonStringToken(match[1]);
+      if (token) textParts.push(token);
+      if (textParts.join(' ').length >= maxLen) break;
+    }
+  }
+
+  const combined = textParts.join(' ').replace(/\s+/g, ' ').trim();
+  if (!combined) return '';
+
+  return combined.length > maxLen
+    ? combined.slice(0, maxLen) + '…'
+    : combined;
+}
+
+function decodeJsonStringToken(value) {
+  if (!value) return '';
+  try {
+    return JSON.parse(`"${value}"`).trim();
+  } catch {
+    return value
+      .replace(/\\n/g, ' ')
+      .replace(/\\t/g, ' ')
+      .replace(/\\"/g, '"')
+      .trim();
+  }
 }
 
 /**
@@ -163,10 +214,17 @@ export function getContentSummary(item, maxLen = 80) {
   // Prefer explicit content_summary field
   if (
     item.content_summary &&
-    typeof item.content_summary === 'string' &&
-    !item.content_summary.trim().startsWith('{')
+    typeof item.content_summary === 'string'
   ) {
     const s = item.content_summary.trim();
+    if (!s) return '';
+
+    const looksLikeJson = s.startsWith('{') || s.startsWith('[');
+
+    if (looksLikeJson) {
+      return extractTextPreview(s, maxLen);
+    }
+
     return s.length > maxLen
       ? s.slice(0, maxLen) + '…'
       : s;
