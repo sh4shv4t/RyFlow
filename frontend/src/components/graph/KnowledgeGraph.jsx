@@ -526,28 +526,6 @@ export default function KnowledgeGraph() {
         Fit to Screen
       </button>
 
-      <button
-        onClick={handleBackfillKeywordEdges}
-        disabled={backfilling}
-        style={{
-          position: 'absolute',
-          top: '148px',
-          right: selectedNode ? '316px' : '16px',
-          zIndex: 10,
-          height: '26px',
-          borderRadius: '4px',
-          border: '1px solid var(--border-default)',
-          backgroundColor: 'var(--bg-surface)',
-          color: 'var(--text-secondary)',
-          fontSize: '11px',
-          padding: '0 8px',
-          cursor: backfilling ? 'not-allowed' : 'pointer',
-          opacity: backfilling ? 0.65 : 1
-        }}
-      >
-        {backfilling ? 'Backfilling...' : 'Backfill Keyword Edges'}
-      </button>
-
       {isNeighborhoodMode && centerNodeId && (
         <button
           onClick={() => fetchGraph({ all: showAllNodes, limit: 500 })}

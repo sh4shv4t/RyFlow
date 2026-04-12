@@ -2,7 +2,7 @@
 const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 
 let mainWindow = null;
 let tray = null;
@@ -14,6 +14,29 @@ let isQuitting = false;
 
 const BACKEND_PORT = 3001;
 const FRONTEND_PORT = 5173;
+
+function ensureOllamaFromElectron() {
+  try {
+    execSync('ollama list', { stdio: 'ignore', timeout: 3000 });
+    console.log('[ollama] already running');
+    return;
+  } catch {
+    console.log('[ollama] not running, attempting auto-start...');
+  }
+
+  try {
+    const child = spawn('ollama', ['serve'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    });
+    child.unref();
+    console.log('[ollama] auto-start launched');
+  } catch (err) {
+    console.warn('[ollama] auto-start failed:', err.message);
+    console.warn('[ollama] Start manually: ollama serve');
+  }
+}
 
 Menu.setApplicationMenu(null);
 
@@ -345,6 +368,7 @@ ipcMain.handle('window-is-maximized', () => {
 
 app.whenReady().then(async () => {
   try {
+    ensureOllamaFromElectron();
     await createWindow();
     startBackend().catch((err) => {
       console.error('[electron] Backend startup failed:', err.message);

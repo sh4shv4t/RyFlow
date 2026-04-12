@@ -111,7 +111,7 @@ This is a one-time setup. Subsequent starts are instant.
 
 Prerequisites:
 - Node.js 18+
-- Ollama installed and running
+- Ollama installed (if missing, install from https://ollama.ai)
 
 ```bash
 # 1. Clone the repo
@@ -123,15 +123,18 @@ npm install
 cd backend && npm install && cd ..
 cd frontend && npm install && cd ..
 
-# 3. Pull AI models (one-time)
+# 3. Run in development mode
+# This now auto-checks Ollama, auto-starts it if possible,
+# and ensures required models are present.
+npm run dev
+```
+
+If Ollama cannot be auto-started, run manually:
+
+```bash
+ollama serve
 ollama pull phi3:mini
 ollama pull nomic-embed-text
-
-# 4. Start Ollama
-ollama serve
-
-# 5. Run in development mode
-npm run dev
 ```
 
 ### Option 3 - Electron Desktop App

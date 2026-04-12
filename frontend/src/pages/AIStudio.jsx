@@ -20,12 +20,41 @@ const tabs = [
   { key: 'voice', label: 'Voice', icon: Mic },
 ];
 
+function isOllamaUnavailableError(message) {
+  const text = String(message || '').toLowerCase();
+  return (
+    (text.includes('ollama') && (text.includes('offline') || text.includes('not running') || text.includes('unavailable'))) ||
+    (text.includes('11434') && (text.includes('connection refused') || text.includes('econnrefused') || text.includes('failed to fetch'))) ||
+    (text.includes('connect') && text.includes('ollama'))
+  );
+}
+
+function OllamaOfflineNotice() {
+  return (
+    <div
+      style={{
+        margin: '12px 20px 0',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        border: '1px solid rgba(245,158,11,0.35)',
+        backgroundColor: 'rgba(245,158,11,0.10)',
+        color: '#F59E0B',
+        fontSize: '12px',
+        lineHeight: 1.5
+      }}
+    >
+      <strong>Ollama is offline.</strong> Start it with <code>ollama serve</code>, then pull models once: <code>ollama pull phi3:mini</code> and <code>ollama pull nomic-embed-text</code>.
+    </div>
+  );
+}
+
 export default function AIStudio() {
   const [activeTab, setActiveTab] = useState('chat');
   const [chats, setChats] = useState([]);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [activeChatId, setActiveChatId] = useState(null);
   const [searchText, setSearchText] = useState('');
+  const [chatError, setChatError] = useState('');
   const workspaceId = useStore((s) => s.workspace?.id || null);
   const fetchTokenRef = useRef(0);
 
@@ -33,6 +62,7 @@ export default function AIStudio() {
   const fetchChats = useCallback(async () => {
     if (!workspaceId) {
       setChats([]);
+      setChatError('');
       setIsLoadingChats(false);
       return;
     }
@@ -43,7 +73,9 @@ export default function AIStudio() {
       const res = await axios.get('/api/chats', { params: { workspace_id: workspaceId } });
       if (token !== fetchTokenRef.current) return;
       setChats(res.data.chats || []);
-    } catch {
+      setChatError('');
+    } catch (err) {
+      setChatError(err?.response?.data?.error || err?.message || 'Failed to load chat history');
       toast.error('Failed to load chat history');
     } finally {
       if (token === fetchTokenRef.current) {
@@ -298,6 +330,13 @@ export default function AIStudio() {
             AI Studio
           </h1>
         </div>
+        {chatError ? (
+          isOllamaUnavailableError(chatError) ? (
+            <OllamaOfflineNotice />
+          ) : (
+            <p style={{ margin: '12px 20px 0', color: 'var(--status-error)', fontSize: '12px' }}>{chatError}</p>
+          )
+        ) : null}
         <AnimatePresence mode="wait">
           {activeTab === 'chat' && (
             <motion.div

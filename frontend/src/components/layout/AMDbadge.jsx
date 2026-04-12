@@ -1,8 +1,72 @@
 // AMD Accelerated badge — pulses when AI inference is running
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Monitor } from 'lucide-react';
 import useStore from '../../store/useStore';
+import { apiFetch } from '../../utils/apiClient';
+
+export function OllamaStatusBadge() {
+  const [status, setStatus] = useState('checking');
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkStatus = async () => {
+      try {
+        const res = await apiFetch('/api/ai/system-status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json().catch(() => ({}));
+        const isAvailable = Boolean(
+          data?.ollama_available ??
+          data?.ollamaRunning ??
+          data?.ollama_running ??
+          data?.system?.ollama_running
+        );
+        if (mounted) setStatus(isAvailable ? 'ready' : 'offline');
+      } catch {
+        if (mounted) setStatus('offline');
+      }
+    };
+
+    checkStatus();
+    const intervalId = setInterval(checkStatus, 10000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const isReady = status === 'ready';
+  const label = isReady ? 'AI Ready' : 'Ollama Offline';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        borderRadius: '4px',
+        padding: '2px 8px',
+        border: isReady ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(245,158,11,0.35)',
+        backgroundColor: isReady ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
+        color: isReady ? '#10B981' : '#F59E0B'
+      }}
+      title={isReady ? 'Ollama is reachable' : 'Ollama is not running'}
+    >
+      <span
+        style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: 'currentColor',
+          flexShrink: 0
+        }}
+      />
+      <span style={{ fontSize: '11px', fontWeight: '500' }}>{label}</span>
+    </div>
+  );
+}
 
 export default function AMDbadge() {
   const { aiStatus, aiActive } = useStore();

@@ -4,9 +4,12 @@
   "description": "RyFlow — Your Campus. Your GPU. Your AI. Offline-first P2P AI collaboration workspace.",
   "main": "electron/main.js",
   "scripts": {
+    "dev:ollama": "node scripts/start-ollama.js",
     "dev:backend": "cd backend && node index.js",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently \"npm run dev:ollama\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "ollama:check": "node scripts/start-ollama.js",
+    "ollama:pull": "ollama pull phi3:mini && ollama pull nomic-embed-text",
     "electron": "electron electron/main.js",
     "build": "cd frontend && npm run build",
     "dist:win": "npm run build && electron-builder --win --x64",

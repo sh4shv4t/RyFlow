@@ -25,6 +25,34 @@ function defaultGuide() {
   };
 }
 
+function isOllamaUnavailableError(message) {
+  const text = String(message || '').toLowerCase();
+  return (
+    (text.includes('ollama') && (text.includes('offline') || text.includes('not running') || text.includes('unavailable'))) ||
+    (text.includes('11434') && (text.includes('connection refused') || text.includes('econnrefused') || text.includes('failed to fetch'))) ||
+    (text.includes('connect') && text.includes('ollama'))
+  );
+}
+
+function OllamaOfflineNotice() {
+  return (
+    <div
+      style={{
+        marginTop: '8px',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        border: '1px solid rgba(245,158,11,0.35)',
+        backgroundColor: 'rgba(245,158,11,0.10)',
+        color: '#F59E0B',
+        fontSize: '12px',
+        lineHeight: 1.5
+      }}
+    >
+      <strong>Ollama is offline.</strong> Start it with <code>ollama serve</code>, then pull models once: <code>ollama pull phi3:mini</code> and <code>ollama pull nomic-embed-text</code>.
+    </div>
+  );
+}
+
 function parseStudyGuide(raw) {
   if (!raw || typeof raw !== 'string') {
     return defaultGuide();
@@ -219,7 +247,15 @@ export default function StudyGuidePanel() {
           {'Generate Study Guide'}
         </button>
 
-        {guideError ? <div style={{ fontSize: '12px', color: guideError === 'Generating...' ? 'var(--text-tertiary)' : 'var(--status-error)', marginTop: '8px' }}>{guideError}</div> : null}
+        {guideError ? (
+          guideError === 'Generating...' ? (
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '8px' }}>{guideError}</div>
+          ) : isOllamaUnavailableError(guideError) ? (
+            <OllamaOfflineNotice />
+          ) : (
+            <div style={{ fontSize: '12px', color: 'var(--status-error)', marginTop: '8px' }}>{guideError}</div>
+          )
+        ) : null}
       </div>
 
       {guide ? (

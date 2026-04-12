@@ -4,6 +4,7 @@ import { Search, Sun, Moon } from 'lucide-react';
 import useStore from '../../store/useStore';
 import { detectAMD } from '../../utils/amdDetect';
 import { startPeerPolling, stopPeerPolling } from '../../utils/lanDiscovery';
+import { OllamaStatusBadge } from './AMDbadge';
 
 export default function TopBar() {
   const { aiStatus, aiActive, setAiStatus, peers, setPeers, workspace, setCommandPaletteOpen } = useStore();
@@ -85,6 +86,36 @@ export default function TopBar() {
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+        <OllamaStatusBadge />
+
+        {aiStatus?.gpuDetected || aiStatus?.rocmAvailable ? (
+          <div
+            className={aiActive ? 'amd-active' : ''}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              backgroundColor: 'var(--accent-subtle)',
+              border: '1px solid var(--accent-border)',
+              borderRadius: '4px',
+              padding: '2px 8px'
+            }}
+          >
+            <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--accent)' }}>⚡ AMD</span>
+          </div>
+        ) : (
+          <div
+            style={{
+              backgroundColor: 'var(--bg-surface)',
+              border: '1px solid var(--border-default)',
+              borderRadius: '4px',
+              padding: '2px 8px'
+            }}
+          >
+            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>CPU Mode</span>
+          </div>
+        )}
+
         <button
           onClick={() =>
             setTheme(theme === 'dark' ? 'light' : 'dark')
@@ -161,34 +192,6 @@ export default function TopBar() {
             }
           </span>
         </button>
-
-        {aiStatus?.gpuDetected || aiStatus?.rocmAvailable ? (
-          <div
-            className={aiActive ? 'amd-active' : ''}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              backgroundColor: 'var(--accent-subtle)',
-              border: '1px solid var(--accent-border)',
-              borderRadius: '4px',
-              padding: '2px 8px'
-            }}
-          >
-            <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--accent)' }}>⚡ AMD</span>
-          </div>
-        ) : (
-          <div
-            style={{
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid var(--border-default)',
-              borderRadius: '4px',
-              padding: '2px 8px'
-            }}
-          >
-            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>CPU Mode</span>
-          </div>
-        )}
 
         {peers.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
