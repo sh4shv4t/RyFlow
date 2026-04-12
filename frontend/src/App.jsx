@@ -25,18 +25,25 @@ function PageTransition({ children }) {
   const location = useLocation();
   const ref = useRef(null);
 
+  // Cursor offset diagnosis (pre-fix): PageTransition animated all routes,
+  // and Monaco can misread click coordinates when ancestor transforms/animations are active.
+  const skipAnimation =
+    location.pathname.startsWith('/code') ||
+    location.pathname.startsWith('/canvas');
+
   useEffect(() => {
+    if (skipAnimation) return;
     if (ref.current) {
       ref.current.classList.remove('page-enter');
       void ref.current.offsetWidth;
       ref.current.classList.add('page-enter');
     }
-  }, [location.pathname]);
+  }, [location.pathname, skipAnimation]);
 
   return (
     <div
       ref={ref}
-      className="page-enter"
+      className={skipAnimation ? '' : 'page-enter'}
       style={{
         height: '100%',
         overflow: 'hidden',

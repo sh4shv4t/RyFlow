@@ -131,6 +131,8 @@ a:hover { opacity: 0.8; }
 .no-transition,
 .no-transition * {
   transition: none !important;
+  animation: none !important;
+  transform: none !important;
 }
 
 /* Smooth page content entrance */

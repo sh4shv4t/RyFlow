@@ -291,8 +291,13 @@ export default function CodeEditorPage() {
 
   const languageBadge = useMemo(() => LANGUAGE_LABELS[activeFile?.language] || 'Unknown', [activeFile?.language]);
 
+  // Cursor offset diagnosis (pre-fix):
+  // 1) Page wrapper had no no-transition class and no animation override.
+  // 2) Code editor host wrapper used calc(100vh - 96px), which can desync from real chrome/toolbars.
+  // 3) Monaco host could inherit route transitions when mounted during page changes.
+  // 4) Wrappers did not explicitly neutralize animation/transform inheritance.
   return (
-    <div style={{ backgroundColor: 'var(--bg-base)', height: '100%', display: 'flex' }}>
+    <div className="no-transition" style={{ backgroundColor: 'var(--bg-base)', height: '100%', width: '100%', display: 'flex', overflow: 'hidden', animation: 'none' }}>
       <aside style={{ width: '260px', minWidth: '260px', borderRight: '1px solid var(--border-subtle)', padding: '12px', overflowY: 'auto', backgroundColor: 'var(--bg-surface)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
           <p style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>Code Files</p>
@@ -407,7 +412,7 @@ export default function CodeEditorPage() {
             </div>
           </div>
         ) : (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', position: 'relative', height: 'calc(100vh - 96px)' }}>
+          <div className="no-transition" style={{ flex: 1, minHeight: '400px', width: '100%', overflow: 'hidden', display: 'flex', position: 'relative', height: 'calc(100vh - 140px)', animation: 'none', transform: 'none' }}>
             <CodeEditor
               fileName={activeFile.title}
               language={activeFile.language || 'javascript'}

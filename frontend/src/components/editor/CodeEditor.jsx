@@ -84,6 +84,7 @@ export default function CodeEditor({
   onLanguageChange
 }) {
   const editorRef = useRef(null);
+  const resizeObserverRef = useRef(null);
   const [wordWrap, setWordWrap] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -92,7 +93,9 @@ export default function CodeEditor({
   const { selectedModel, workspace, setAiActive, theme: appTheme } = useStore();
 
   const monacoThemeName = appTheme === 'light' ? 'light' : 'vs-dark';
-  const editorHeight = 'calc(100vh - 96px)';
+  // Cursor offset diagnosis (pre-fix): Monaco host height was tied to 100vh-96,
+  // which can mismatch real shell chrome (titlebar/topbar/toolbar). Use explicit pixels.
+  const editorHeight = 'calc(100vh - 140px)';
 
   // Configures custom Monaco theme to match RyFlow colors.
   const handleBeforeMount = useCallback((monaco) => {
@@ -105,10 +108,27 @@ export default function CodeEditor({
   }, []);
 
   // Stores Monaco instance after mount for selection-aware actions.
+  // Also forces repeated layout passes after mount and on container resize.
   const handleEditorMount = useCallback((editor) => {
     editorRef.current = editor;
+
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+
     editor.layout();
-    setTimeout(() => editor.layout(), 150);
+    setTimeout(() => editor.layout(), 100);
+    setTimeout(() => editor.layout(), 300);
+
+    const container = editor.getContainerDomNode();
+    if (container && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        editor.layout();
+      });
+      ro.observe(container);
+      resizeObserverRef.current = ro;
+    }
   }, []);
 
   // Re-layout editor after theme/layout transitions to keep cursor and text alignment in sync.
@@ -120,6 +140,24 @@ export default function CodeEditor({
     }, 150);
     return () => clearTimeout(timer);
   }, [monacoThemeName]);
+
+  // Re-layout after file switches to prevent stale click-to-cursor coordinate maps.
+  useEffect(() => {
+    if (!editorRef.current) return;
+    const timer = setTimeout(() => {
+      editorRef.current?.layout();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [fileName, language]);
+
+  useEffect(() => {
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
+      }
+    };
+  }, []);
 
   // Returns selected code or full editor content when no selection exists.
   const getActiveCode = useCallback(() => {
@@ -316,7 +354,7 @@ export default function CodeEditor({
           </div>
         </div>
 
-        <div className="flex-1 no-transition" style={{ minHeight: '420px', height: editorHeight, overflow: 'hidden', position: 'relative' }}>
+        <div className="flex-1 no-transition" style={{ minHeight: '400px', height: editorHeight, width: '100%', overflow: 'hidden', position: 'relative', transform: 'none', animation: 'none' }}>
           <MonacoErrorBoundary
             fallback={(
               <div style={{ height: '100%', padding: '16px', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '13px', overflow: 'auto' }}>
@@ -332,7 +370,7 @@ export default function CodeEditor({
           >
             <Editor
               key="ryflow-monaco-stable"
-              height={editorHeight}
+              height="100%"
               language={language}
               value={content}
               path={fileName || `untitled.${extensionForLanguage(language)}`}
