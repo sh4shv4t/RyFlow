@@ -842,7 +842,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showAI && (
           <PanelShell
-            panelTitle="G�� AI Assist"
+            panelTitle="AI Assist"
             onClose={() => setShowAI(false)}
             headerBg="rgba(139,92,246,0.06)"
             accentColor="#8B5CF6"
@@ -859,7 +859,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showBacklinks && (
           <PanelShell
-            panelTitle="=��� Backlinks"
+            panelTitle="Backlinks"
             onClose={() => setShowBacklinks(false)}
             headerBg="rgba(232,0,13,0.06)"
             accentColor="#E8000D"
@@ -882,7 +882,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
 
         {showComments && (
           <PanelShell
-            panelTitle="=�Ƽ Comments"
+            panelTitle="Comments"
             onClose={() => setShowComments(false)}
             headerBg="rgba(255,107,0,0.06)"
             accentColor="#FF6B00"
