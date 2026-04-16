@@ -3,6 +3,7 @@
 // Lazy-require to avoid circular deps at module load
 const getOllama = () => require('./ollamaService');
 const getDatabase = () => require('../db/database');
+const getHnswIndex = () => require('./hnswIndex');
 
 const queue = [];
 let processing = false;
@@ -119,6 +120,13 @@ async function tick() {
     }
 
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?').run(buf, nodeId);
+
+    // Update HNSW index with the new embedding (best-effort; never blocks the queue).
+    try {
+      getHnswIndex().upsert(job.workspaceId, nodeId, embedding);
+    } catch {
+      // HNSW update failure is non-fatal.
+    }
 
   } catch (err) {
     // Blacklist this node - never try it again

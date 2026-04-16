@@ -87,11 +87,46 @@ function initializeSchema(db) {
 
   addColumnIfMissing(db, 'nodes', 'metadata', 'TEXT');
   addColumnIfMissing(db, 'nodes', 'source_id', 'TEXT');
+  addColumnIfMissing(db, 'nodes', 'degree_centrality', 'INTEGER DEFAULT 0');
+  // updated_at intentionally has no DEFAULT (SQLite ALTER TABLE limitation with functions).
+  // Backfilled from created_at immediately below.
+  addColumnIfMissing(db, 'nodes', 'updated_at', 'DATETIME');
+
+  addColumnIfMissing(db, 'edges', 'edge_type', "TEXT DEFAULT 'default'");
 
   addColumnIfMissing(db, 'ai_chats', 'rag_used', 'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'ai_chats', 'message_count', 'INTEGER DEFAULT 0');
 
   addColumnIfMissing(db, 'document_versions', 'saved_by', 'TEXT');
+
+  // One-time backfill: compute degree centrality for all existing nodes.
+  try {
+    db.prepare(
+      `UPDATE nodes SET degree_centrality =
+         (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+       WHERE degree_centrality = 0`
+    ).run();
+  } catch (err) {
+    console.error('[DB] Could not backfill degree_centrality:', err.message);
+  }
+
+  // One-time backfill: set updated_at from created_at where null.
+  try {
+    db.prepare("UPDATE nodes SET updated_at = created_at WHERE updated_at IS NULL").run();
+  } catch (err) {
+    console.error('[DB] Could not backfill nodes.updated_at:', err.message);
+  }
+
+  // One-time FTS5 bootstrap: populate nodes_fts for pre-existing nodes.
+  try {
+    db.prepare(
+      `INSERT INTO nodes_fts(node_id, title, content)
+       SELECT id, title, content_summary FROM nodes
+       WHERE NOT EXISTS (SELECT 1 FROM nodes_fts WHERE node_id = nodes.id)`
+    ).run();
+  } catch (err) {
+    console.error('[DB] Could not bootstrap nodes_fts:', err.message);
+  }
 }
 
 // Switches active connection to a workspace database, creating it if needed.

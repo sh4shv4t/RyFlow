@@ -1,0 +1,202 @@
+# RyFlow — Cursor Rules
+
+Never add a co-authored-by or signature line to git commit messages.
+You should add a commit -s with the local user's credentials.
+
+## Read Before You Touch
+
+Before modifying any file, read it fully. Do not summarise, do not infer from filename. If a route has a bug, read the route file, the schema, and the relevant service before writing a single line. Read-before-touch is non-negotiable.
+
+---
+
+## Project Identity
+
+RyFlow is a local-first, offline-capable AI collaboration workspace built as an Electron desktop app. Core value proposition: everything runs on your own hardware, data never leaves your machine, works without internet, and gets faster with an AMD GPU.
+
+**This is not a cloud product. Never suggest cloud-first solutions as defaults.**
+
+---
+
+## Tech Stack (Do Not Deviate Without Asking)
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Vite, TailwindCSS, TipTap, Monaco, Excalidraw, D3.js, Framer Motion, Zustand, Y.js + y-webrtc, lucide-react |
+| Backend | Node.js, Express, better-sqlite3, Socket.io, ws, lz-string |
+| AI | Ollama (Phi-3 Mini + nomic-embed-text), Whisper.cpp, Pollinations.ai (internet-only, acknowledged gap) |
+| AMD | ROCm, llama.cpp HIP backend, Ryzen AI SDK + ONNX Runtime |
+| Networking | WebRTC via y-webrtc, Y.js CRDTs, mDNS/Bonjour |
+| Desktop | Electron (frameless, custom titlebar, system tray, IPC via preload.js) |
+| Container | Docker + Docker Compose |
+
+**Languages:** JavaScript (existing files), TypeScript (new files only). `checkJs: false`. Do not convert existing JS files to TS.
+
+---
+
+## Project Structure
+
+```
+RyFlow/
+├── backend/
+│   ├── db/           schema.sql, database.js, registry.js
+│   ├── routes/       documents, tasks, code, canvas, graph, ai,
+│   │                 tags, chats, workspaces, workspace,
+│   │                 comments, voice, templates
+│   ├── services/     ollamaService, embeddingQueue,
+│   │                 embeddingService, graphService,
+│   │                 whisperService, imageService
+│   ├── middleware/   joinCodeAuth, remoteProxy
+│   └── p2p/          discovery.js
+├── frontend/src/
+│   ├── pages/
+│   ├── components/   layout/, editor/, canvas/, graph/,
+│   │                 ai/, tasks/, shared/, workspace/
+│   ├── hooks/        useCollaboration, useOllama, useGraph, useVoice
+│   ├── store/        useStore.js (Zustand)
+│   ├── utils/        apiClient, time, content, amdDetect, lanDiscovery
+│   └── types/        index.ts
+├── electron/         main.js, preload.js
+├── scripts/          start-ollama.js
+└── docker-compose.yml
+```
+
+---
+
+## Data Architecture
+
+- Each workspace = separate SQLite file at `~/.ryflow/workspaces/workspace_{id}.db`
+- Registry = `~/.ryflow/registry.db`
+- Key tables: `documents, tasks, code_files, canvases, ai_chats, nodes, edges, tags, node_tags, doc_comments, document_versions, voice_logs, sustainability_logs, users`
+- Embeddings = 768-dim Float32 binary buffers stored in SQLite (nomic-embed-text)
+- Workspaces are portable: export as `.ryflow` (zip of SQLite + uploads)
+
+**Always audit schema.sql before touching routes that interact with DB tables.**
+
+---
+
+## Code Rules
+
+### General
+- Read every relevant file before writing any code
+- Verify with build + live API checks before considering something done
+- Prefer things that work reliably over things that look impressive but break
+- No features that are wired but do nothing — if it's in the UI, it must work
+- No UI elements that display raw JSON or broken states to the user
+
+### Backend
+- Check schema.sql before writing or modifying any SQL query
+- Use `better-sqlite3` (synchronous) — never mix with async SQLite calls
+- Routes follow REST conventions; check existing route files for patterns before adding new ones
+- Embedding operations go through the queue (`embeddingQueue`) — never call ollamaService directly for embeddings from a route
+- The daily note route `/daily` must be registered before `/:id` — do not reorder Express routes carelessly
+
+### Frontend
+- State lives in Zustand (`useStore.js`) — do not create parallel state solutions
+- All API calls go through `apiClient` utility
+- Skeleton loading states are required on all major pages — do not ship a page without them
+- Y.js awareness is wired — do not remove or stub out collaboration hooks
+
+### TypeScript
+- New files: `.ts` / `.tsx` with proper types
+- Existing files: stay as `.js`, no conversion
+- Shared types go in `frontend/src/types/index.ts`
+
+---
+
+## Design System
+
+**Reference `DESIGN.md` in the project root for the full design spec — spacing scale, component patterns, color palette, and anything not listed here. When in doubt about a visual decision, check there first.**
+
+### Tokens
+- **Accent:** AMD Red `#E8000D`
+- **Font:** Inter (UI), JetBrains Mono (code)
+- **Theme:** Dark-first; light mode is secondary
+- **Animations:** 150–200ms ease only. No bounce, no spring, no dramatic entrances
+- **Backgrounds:** Subtle tints and borders only — no loud backgrounds or gradient meshes
+- **Icons:** lucide-react exclusively
+
+### Rules
+- Use CSS variables — never hardcode colors that are already tokenised
+- Do not introduce new font families
+- Do not add Tailwind classes that conflict with the existing CSS variable system
+- AMD badge (⚡) is shown only when AMD hardware is detected — do not show it unconditionally
+
+---
+
+## Commit Messages
+
+Single descriptive one-liner. No multiline. No bullet lists.
+
+```
+✓  feat: auto-start Ollama on npm run dev, Ollama status badge, offline error messages
+✗  feat: added auto-start
+   - starts ollama
+   - shows badge
+   - handles offline
+```
+
+---
+
+## Known Gaps (Do Not Paper Over These)
+
+These are acknowledged issues. Do not silently work around them with hacks — flag them or fix them properly.
+
+1. **LAN collaboration** — Y.js + WebRTC untested on two real devices. Enterprise WiFi with client isolation will break WebRTC without a TURN relay.
+2. **Pollinations.ai** — requires internet, contradicts offline-first. Document clearly or replace with local model.
+3. **Voice pipeline** — Whisper.cpp backend + UI exist but full record → transcribe → insert pipeline needs proper end-to-end wiring.
+4. **Ryzen AI NPU** — ONNX Runtime path for Whisper is shallow. Do not claim it as a working feature.
+5. **Graph scaling** — cosine similarity is O(n); degrades above ~500 nodes. Fix = HNSW via usearch node bindings.
+6. **Old canvas saves** — elements stored as single compressed blob; some legacy canvases may appear empty on reload. New saves are fine.
+
+---
+
+## Ollama / AI Rules
+
+- Default model: `phi3:mini`
+- Embedding model: `nomic-embed-text` (768-dim)
+- Ollama auto-starts via `scripts/start-ollama.js` on `npm run dev`
+- All AI calls must handle Ollama being unavailable gracefully — show offline error, never crash
+- Embedding queue has circuit breaker + 30s backoff — do not bypass it
+- Study guide and AI routes use 120s timeout — do not reduce this
+
+---
+
+## Electron Rules
+
+- IPC communication only through `preload.js` — no `remote` module, no direct Node access from renderer
+- Window is frameless with custom titlebar — do not use default browser window chrome
+- System tray is active — do not remove tray logic when modifying `main.js`
+- App icon source: `assets/ryflow_squarelogo.png`
+
+---
+
+## What Not to Do
+
+- Do not suggest moving to a cloud database as a solution to any local problem
+- Do not add subscription or auth flows — this product has no cloud backend by design
+- Do not convert existing `.js` files to `.ts`
+- Do not add new npm dependencies without flagging it — prefer using what's already installed
+- Do not add bounce/spring animations
+- Do not remove AMD detection or badge logic
+- Do not reorder Express routes without checking for path conflicts (especially `/daily` vs `/:id`)
+- Do not use `console.log` as a debugging strategy in production paths — use proper error handling
+- Do not write explanations of what you did — just do it correctly
+
+---
+
+## Running the Project
+
+```bash
+# Install
+npm install && cd backend && npm install && cd ../frontend && npm install && cd ..
+
+# Dev (Ollama auto-starts)
+npm run dev
+# Wait for "AI stack ready ✓" → open http://localhost:5173
+
+# Docker
+docker compose up
+```
+
+**Prerequisites:** Node.js 18+, Ollama from ollama.ai  
+**First run:** Downloads phi3:mini (~2.4GB) + nomic-embed-text (~270MB) once.

@@ -27,8 +27,8 @@ router.get('/nodes', (req, res) => {
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
     const nodes = (loadAll
-      ? db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC').all(workspace_id)
-      : db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?').all(workspace_id, limit)
+      ? db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC').all(workspace_id)
+      : db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?').all(workspace_id, limit)
     )
       .map((node) => ({ ...node, metadata: parseMetadata(node.metadata) }));
     res.json({ nodes });
@@ -48,13 +48,13 @@ router.get('/neighborhood', (req, res) => {
 
     const db = getDb();
     const allNodes = db.prepare(
-      'SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ?'
+      'SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ?'
     ).all(workspace_id);
     const nodeMap = new Map(allNodes.map((n) => [n.id, { ...n, metadata: parseMetadata(n.metadata) }]));
     if (!nodeMap.has(node_id)) return res.status(404).json({ error: 'Node not found' });
 
     const allEdges = db.prepare(
-      'SELECT e.* FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+      'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
     ).all(workspace_id, workspace_id);
 
     const adjacency = new Map();
@@ -108,7 +108,7 @@ router.get('/edges', (req, res) => {
     if (nodeIds.length > 0) {
       const placeholders = nodeIds.map(() => '?').join(',');
       edges = db.prepare(
-        `SELECT e.*
+        `SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at
          FROM edges e
          JOIN nodes s ON e.source_id = s.id
          JOIN nodes t ON e.target_id = t.id
@@ -119,7 +119,7 @@ router.get('/edges', (req, res) => {
       ).all(workspace_id, workspace_id, ...nodeIds, ...nodeIds);
     } else {
       edges = db.prepare(
-        'SELECT e.* FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+        'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
       ).all(workspace_id, workspace_id);
     }
 
@@ -183,7 +183,8 @@ router.post('/search', async (req, res) => {
       metadata: parseMetadata(r.metadata),
       source_id: r.source_id,
       score: r.score,
-      created_at: r.created_at
+      created_at: r.created_at,
+      updated_at: r.updated_at
     })) });
   } catch (err) {
     res.status(500).json({ error: 'Semantic search failed. Is Ollama running with nomic-embed-text?', details: err.message });

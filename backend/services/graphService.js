@@ -153,6 +153,26 @@ function edgeExists(db, sourceId, targetId) {
   ).get(sourceId, targetId, targetId, sourceId);
 }
 
+// Recomputes degree_centrality for the given node IDs after any edge change.
+function recomputeDegreeFor(db, nodeIds) {
+  if (!nodeIds || nodeIds.length === 0) return;
+  try {
+    const update = db.prepare(
+      `UPDATE nodes SET degree_centrality =
+         (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+       WHERE id = ?`
+    );
+    const runAll = db.transaction((ids) => {
+      for (const id of ids) {
+        if (id) update.run(id);
+      }
+    });
+    runAll(nodeIds);
+  } catch (err) {
+    console.error('[Graph] recomputeDegreeFor failed:', err.message);
+  }
+}
+
 function createKeywordEdges(newNode, workspaceId) {
   let db;
   try {
@@ -193,9 +213,11 @@ function createKeywordEdges(newNode, workspaceId) {
       ? `shares: ${sharedTitle.slice(0, 2).join(', ')}`
       : `related: ${shared.slice(0, 2).join(', ')}`;
 
+    const affectedId = other.id;
     db.prepare(
-      'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
-    ).run(uuidv4(), newNode.id, other.id, label, 0.6);
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(uuidv4(), newNode.id, affectedId, label, 'keyword', 0.6);
+    recomputeDegreeFor(db, [newNode.id, affectedId]);
     created += 1;
   }
 
@@ -210,7 +232,7 @@ async function createNode(workspaceId, type, title, contentSummary, sourceId = n
   const normalizedSummary = normalizeNodeSummary(type, contentSummary, metadata);
 
   db.prepare(
-    'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)'
   ).run(id, workspaceId, type, title, normalizedSummary || '', metadataText, sourceId);
 
   // Queue embedding generation asynchronously (don't block writes).
@@ -263,8 +285,9 @@ async function autoCreateRelationships(newNode, workspaceId) {
       if (rel.id && rel.relationship_label && targetExists) {
         const edgeId = uuidv4();
         db.prepare(
-          'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
-        ).run(edgeId, newNode.id, rel.id, rel.relationship_label, 0.8);
+          'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(edgeId, newNode.id, rel.id, rel.relationship_label, 'llm', 0.8);
+        recomputeDegreeFor(db, [newNode.id, rel.id]);
       }
     }
   } catch (err) {
@@ -288,20 +311,31 @@ function getGraph(workspaceId) {
 }
 
 // Adds a manual edge between two nodes
-function addEdge(sourceId, targetId, label, weight = 1.0) {
+function addEdge(sourceId, targetId, label, weight = 1.0, edgeType = 'default') {
   const db = getDb();
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO edges (id, source_id, target_id, relationship_label, weight) VALUES (?, ?, ?, ?, ?)'
-  ).run(id, sourceId, targetId, label, weight);
+    'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(id, sourceId, targetId, label, edgeType, weight);
+  recomputeDegreeFor(db, [sourceId, targetId]);
   return { id, sourceId, targetId, label, weight };
 }
 
 // Deletes a node and all its connected edges
 function deleteNode(nodeId) {
   const db = getDb();
+  // Collect neighbors before deleting so we can recompute their degree afterward.
+  const neighborRows = db.prepare(
+    'SELECT source_id, target_id FROM edges WHERE source_id = ? OR target_id = ?'
+  ).all(nodeId, nodeId);
+  const neighborIds = new Set();
+  for (const r of neighborRows) {
+    if (r.source_id !== nodeId) neighborIds.add(r.source_id);
+    if (r.target_id !== nodeId) neighborIds.add(r.target_id);
+  }
   db.prepare('DELETE FROM edges WHERE source_id = ? OR target_id = ?').run(nodeId, nodeId);
   db.prepare('DELETE FROM nodes WHERE id = ?').run(nodeId);
+  recomputeDegreeFor(db, Array.from(neighborIds));
 }
 
 function backfillKeywordEdges(workspaceId) {
