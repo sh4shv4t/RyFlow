@@ -356,22 +356,46 @@ export default function KnowledgeGraph() {
         .attr('stroke-width', 1.5)
         .attr('opacity', 1);
 
-      // F3 — labels rendered with initial opacity from current zoom level.
-      const labelsSel = nodeGroups.append('text')
+      // F3 — labels: each wrapped in a <g> so rect + text share one opacity attr.
+      // The <rect> gives a solid background box; width is estimated from char count.
+      const labelGroups = nodeGroups.append('g')
+        .attr('class', 'label-g')
+        .attr('pointer-events', 'none')
+        .attr('opacity', isLarge ? 0 : 1);
+
+      labelGroups.append('rect')
+        .attr('rx', 3)
+        .attr('ry', 3)
+        .attr('fill', 'var(--bg-surface)')
+        .attr('fill-opacity', 0.88)
+        .attr('stroke', 'var(--border-default)')
+        .attr('stroke-width', 0.5)
+        .attr('y', -22)
+        .attr('height', 15)
+        .attr('x', (d) => {
+          const raw = extractTextPreview(getItemTitle(d), 22) || 'Untitled';
+          const lbl = raw.length > 22 ? raw.slice(0, 22) + '…' : raw;
+          return -(lbl.length * 3.2 + 6);
+        })
+        .attr('width', (d) => {
+          const raw = extractTextPreview(getItemTitle(d), 22) || 'Untitled';
+          const lbl = raw.length > 22 ? raw.slice(0, 22) + '…' : raw;
+          return lbl.length * 6.4 + 12;
+        });
+
+      labelGroups.append('text')
         .attr('text-anchor', 'middle')
         .attr('font-size', '11px')
         .attr('font-family', 'Inter, sans-serif')
         .attr('fill', textSecondary)
-        .attr('dy', -13)
-        .attr('pointer-events', 'none')
-        .attr('opacity', isLarge ? 0 : 1)
+        .attr('dy', -11)
         .text((d) => {
           const title = getItemTitle(d);
           const clean = extractTextPreview(title, 22) || 'Untitled';
           return clean.length > 22 ? clean.slice(0, 22) + '…' : clean;
         });
 
-      labelsRef.current = labelsSel;
+      labelsRef.current = labelGroups;
 
       graphLiveRef.current = {
         links,
@@ -388,62 +412,38 @@ export default function KnowledgeGraph() {
         const { links: linksSel, circles: circlesSel, validEdges: ve } = graphLiveRef.current;
         if (!linksSel || !circlesSel) return;
         const { selectedNode: sel, highlightedIds: hlIds, focusNodeId: focusId } = stateForVisualsRef.current;
-        const accentColor = getCSSVar('--accent', '#E8000D');
         const focusedIds = focusId && hlIds.size === 0
           ? neighbourIdsFromEdges(ve, focusId)
           : new Set();
         const hoverId = hoverNodeIdRef.current;
 
         withTrans(linksSel, transition)
-          .attr('stroke', (d) => {
-            if (sel) {
-              const s = typeof d.source === 'object' ? d.source.id : d.source;
-              const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (s === sel.id || t === sel.id) return accentColor;
-            }
-            return edgeBaseVisual(getEdgeType(d)).stroke;
-          })
+          // Always use type colour — selection state is conveyed by opacity/width only.
+          .attr('stroke', (d) => edgeBaseVisual(getEdgeType(d)).stroke)
           .attr('stroke-opacity', (d) => {
             const ev = edgeBaseVisual(getEdgeType(d));
-            let op = ev.opacity;
-            if (focusedIds.size > 0 && hlIds.size === 0) {
-              const s = typeof d.source === 'object' ? d.source.id : d.source;
-              const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (!focusedIds.has(s) || !focusedIds.has(t)) return 0.15;
-            }
+            const s = typeof d.source === 'object' ? d.source.id : d.source;
+            const t = typeof d.target === 'object' ? d.target.id : d.target;
             if (sel) {
-              const s = typeof d.source === 'object' ? d.source.id : d.source;
-              const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (s === sel.id || t === sel.id) return Math.min(1, op + 0.45);
+              if (s === sel.id || t === sel.id) return Math.min(0.95, ev.opacity + 0.5);
+              return 0.06;
             }
-            return op;
+            if (focusedIds.size > 0 && hlIds.size === 0) {
+              if (!focusedIds.has(s) || !focusedIds.has(t)) return 0.1;
+            }
+            return ev.opacity;
           })
           .attr('stroke-width', (d) => {
             const ev = edgeBaseVisual(getEdgeType(d));
-            const base = ev.width;
             if (sel) {
               const s = typeof d.source === 'object' ? d.source.id : d.source;
               const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (s === sel.id || t === sel.id) return base + 0.6;
+              if (s === sel.id || t === sel.id) return ev.width + 0.8;
             }
-            return base;
+            return ev.width;
           })
-          .attr('stroke-dasharray', (d) => {
-            if (sel) {
-              const s = typeof d.source === 'object' ? d.source.id : d.source;
-              const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (s === sel.id || t === sel.id) return null;
-            }
-            return edgeBaseVisual(getEdgeType(d)).dasharray;
-          })
-          .attr('stroke-linecap', (d) => {
-            if (sel) {
-              const s = typeof d.source === 'object' ? d.source.id : d.source;
-              const t = typeof d.target === 'object' ? d.target.id : d.target;
-              if (s === sel.id || t === sel.id) return 'round';
-            }
-            return edgeBaseVisual(getEdgeType(d)).linecap;
-          });
+          .attr('stroke-dasharray', (d) => edgeBaseVisual(getEdgeType(d)).dasharray)
+          .attr('stroke-linecap', (d) => edgeBaseVisual(getEdgeType(d)).linecap);
 
         withTrans(circlesSel, transition)
           .attr('r', (d) => (sel?.id === d.id ? 11 : 7))
@@ -530,10 +530,12 @@ export default function KnowledgeGraph() {
         nodeGroups.attr('transform', (d) => `translate(${d.x}, ${d.y})`);
       };
 
+      // For large graphs throttle more aggressively (every 3rd tick) to halve DOM mutations.
+      const tickStep = isLarge ? 3 : 2;
       let tickCount = 0;
       simulation.on('tick', () => {
         tickCount += 1;
-        if (tickCount % 2 !== 0) return;
+        if (tickCount % tickStep !== 0) return;
         updatePositions();
       });
       simulation.on('end', () => {
@@ -541,7 +543,8 @@ export default function KnowledgeGraph() {
         const k = zoomKRef.current;
         applyLabelVisibility(k, labelsRef.current, degreeMap, true);
       });
-      simulation.tick(80);
+      // Pre-warm synchronously — keep low so the main thread isn't blocked.
+      simulation.tick(isLarge ? 25 : 40);
       updatePositions();
 
       setTimeout(() => {
@@ -577,9 +580,10 @@ export default function KnowledgeGraph() {
   }, [loading, nodes, edges, localView, localHops, fetchNeighborhood, dims.w, dims.h, theme, applyLabelVisibility, scheduleTooltipPosition]);
 
   // Selection / search / focus — update attributes only (no SVG teardown).
+  // Exclude nodes/edges: the main D3 effect already calls applyVisualsRef on rebuild.
   useEffect(() => {
     applyVisualsRef.current({ transition: true });
-  }, [selectedNode, highlightedIds, focusNodeId, nodes, edges]);
+  }, [selectedNode, highlightedIds, focusNodeId]);
 
   // Zooms and pans graph so currently loaded nodes fit into viewport.
   const handleFitToScreen = useCallback(() => {
@@ -619,6 +623,22 @@ export default function KnowledgeGraph() {
       toast.success(`Keyword edges added: ${Number(res.data?.created || 0)}`);
     } catch {
       toast.error('Keyword edge backfill failed');
+    } finally {
+      setBackfilling(false);
+    }
+  }, [workspace?.id, backfilling, fetchGraph, showAllNodes]);
+
+  const handleBackfillSemanticEdges = useCallback(async () => {
+    if (!workspace?.id || backfilling) return;
+    setBackfilling(true);
+    try {
+      const res = await axios.post('/api/graph/backfill-semantic-edges', { workspace_id: workspace.id });
+      await fetchGraph({ all: showAllNodes, limit: 500 });
+      const { created = 0, processed = 0, note } = res.data || {};
+      if (note) toast(note, { icon: 'ℹ️' });
+      else toast.success(`Semantic edges added: ${Number(created)} (scanned ${Number(processed)} nodes)`);
+    } catch {
+      toast.error('Semantic edge backfill failed');
     } finally {
       setBackfilling(false);
     }
@@ -778,6 +798,39 @@ export default function KnowledgeGraph() {
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Edge backfill tools (bottom-left, below legend) */}
+      <div style={{
+        position: 'absolute', bottom: '96px', left: '16px', zIndex: 10,
+        display: 'flex', gap: '6px'
+      }}>
+        <button
+          onClick={handleBackfillKeywordEdges}
+          disabled={backfilling}
+          title="Create keyword edges between nodes sharing 2+ common terms"
+          style={{
+            height: '24px', borderRadius: '4px', border: '1px solid var(--border-default)',
+            backgroundColor: 'var(--bg-surface)', color: 'var(--text-tertiary)',
+            fontSize: '10px', padding: '0 8px', cursor: backfilling ? 'not-allowed' : 'pointer',
+            opacity: backfilling ? 0.6 : 1
+          }}
+        >
+          {backfilling ? '…' : '+ Keyword edges'}
+        </button>
+        <button
+          onClick={handleBackfillSemanticEdges}
+          disabled={backfilling}
+          title="Create semantic edges between nodes with similar embeddings (needs Ollama)"
+          style={{
+            height: '24px', borderRadius: '4px', border: '1px solid var(--border-default)',
+            backgroundColor: 'var(--bg-surface)', color: 'var(--text-tertiary)',
+            fontSize: '10px', padding: '0 8px', cursor: backfilling ? 'not-allowed' : 'pointer',
+            opacity: backfilling ? 0.6 : 1
+          }}
+        >
+          {backfilling ? '…' : '+ Semantic edges'}
+        </button>
       </div>
 
       {/* Node count */}

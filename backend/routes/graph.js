@@ -236,4 +236,61 @@ router.post('/backfill-keyword-edges', (req, res) => {
   }
 });
 
+// POST /api/graph/backfill-semantic-edges
+// Scans all embedded nodes and creates 'semantic' edges for pairs with
+// cosine similarity >= 0.82.  Safe to call repeatedly (checks existence first).
+router.post('/backfill-semantic-edges', (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+
+    const db = require('../db/database').getDb();
+    const hnswIdx = require('../services/hnswIndex');
+    const { parseEmbedding } = require('../services/embeddingService');
+    const { v4: uuidv4 } = require('uuid');
+
+    const rows = db.prepare(
+      'SELECT id, embedding FROM nodes WHERE workspace_id = ? AND embedding IS NOT NULL'
+    ).all(workspaceId);
+
+    if (rows.length === 0) {
+      return res.json({ success: true, created: 0, processed: 0, note: 'No embedded nodes found.' });
+    }
+
+    const checkEdge = db.prepare(
+      'SELECT id FROM edges WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?) LIMIT 1'
+    );
+    const insertEdge = db.prepare(
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const updateDeg = db.prepare(
+      `UPDATE nodes SET degree_centrality =
+         (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+       WHERE id = ?`
+    );
+
+    let created = 0;
+    for (const row of rows) {
+      const vec = parseEmbedding(row.embedding);
+      if (!vec || vec.length === 0) continue;
+      const similar = hnswIdx.findSimilar(workspaceId, vec, 6, 0.82);
+      for (const { nodeId: otherId, score } of similar) {
+        if (otherId === row.id) continue;
+        const exists = checkEdge.get(row.id, otherId, otherId, row.id);
+        if (!exists) {
+          const w = Math.round(score * 100) / 100;
+          insertEdge.run(uuidv4(), row.id, otherId, 'semantic similarity', 'semantic', w);
+          updateDeg.run(row.id);
+          updateDeg.run(otherId);
+          created += 1;
+        }
+      }
+    }
+
+    return res.json({ success: true, created, processed: rows.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

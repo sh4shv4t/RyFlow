@@ -89,9 +89,9 @@ function buildFromDb(workspaceId) {
     index.addPoint(vec, label);
   }
 
-  // Persist to disk.
+  // Persist to disk (sync API — writeIndex() returns a Promise in v1.4+).
   try {
-    index.writeIndex(indexFilePath(workspaceId));
+    index.writeIndexSync(indexFilePath(workspaceId));
     writeMapFile(workspaceId, map);
   } catch (err) {
     console.error('[HNSW] Could not write index to disk:', err.message);
@@ -112,16 +112,31 @@ function getOrLoad(workspaceId) {
   let entry = null;
 
   if (idxExists && mapExists) {
-    try {
-      const map = readMapFile(workspaceId);
-      const maxElements = Math.max(Object.keys(map.nodes).length + 500, 1000);
-      const index = new HierarchicalNSW('cosine', DIM);
-      index.initIndex(maxElements, 16, 200, 100);
-      index.readIndex(idxPath, true);
-      entry = { index, map };
-    } catch (err) {
-      console.warn('[HNSW] Could not load index from disk, rebuilding:', err.message);
+    // Guard against truncated/corrupt files — a valid HNSW binary is always > 512 bytes.
+    let idxSize = 0;
+    try { idxSize = fs.statSync(idxPath).size; } catch {}
+
+    if (idxSize < 512) {
+      console.warn(`[HNSW] Index file too small (${idxSize} B) — treating as corrupt, rebuilding.`);
+      try { fs.unlinkSync(idxPath); } catch {}
+      try { fs.unlinkSync(mapFilePath(workspaceId)); } catch {}
       entry = buildFromDb(workspaceId);
+    } else {
+      try {
+        const map = readMapFile(workspaceId);
+        const maxElements = Math.max(Object.keys(map.nodes).length + 500, 1000);
+        const index = new HierarchicalNSW('cosine', DIM);
+        index.initIndex(maxElements, 16, 200, 100);
+        // Use the synchronous API — readIndex() returns a Promise (v1.4+) and would
+        // cause an unhandled rejection if not awaited inside a synchronous caller.
+        index.readIndexSync(idxPath, true);
+        entry = { index, map };
+      } catch (err) {
+        console.warn('[HNSW] Could not load index from disk, rebuilding:', err.message);
+        try { fs.unlinkSync(idxPath); } catch {}
+        try { fs.unlinkSync(mapFilePath(workspaceId)); } catch {}
+        entry = buildFromDb(workspaceId);
+      }
     }
   } else {
     entry = buildFromDb(workspaceId);
@@ -204,7 +219,7 @@ function upsert(workspaceId, nodeId, floatArray) {
     map.nodes[nodeId] = label;
     index.addPoint(floatArray, label);
 
-    index.writeIndex(indexFilePath(workspaceId));
+    index.writeIndexSync(indexFilePath(workspaceId));
     writeMapFile(workspaceId, map);
   } catch (err) {
     console.error('[HNSW] Upsert error:', err.message);
@@ -216,4 +231,36 @@ function evict(workspaceId) {
   caches.delete(workspaceId);
 }
 
-module.exports = { search, upsert, evict, isAvailable: () => hnswAvailable };
+// Returns nodes similar to queryVec with score >= minScore (default 0).
+// Used by the embedding queue to auto-create semantic edges.
+function findSimilar(workspaceId, queryVec, topK, minScore = 0) {
+  if (!hnswAvailable) return [];
+  try {
+    const entry = getOrLoad(workspaceId);
+    if (!entry || !entry.index) return [];
+
+    const nodeCount = Object.keys(entry.map.nodes).length;
+    if (nodeCount < 2) return [];
+
+    const k = Math.min(topK, nodeCount);
+    const result = entry.index.searchKnn(queryVec, k);
+    if (!result || !result.neighbors) return [];
+
+    const labelToId = {};
+    for (const [uuid, label] of Object.entries(entry.map.nodes)) {
+      labelToId[label] = uuid;
+    }
+
+    return result.neighbors
+      .map((label, i) => ({
+        nodeId: labelToId[label],
+        score: 1 - (result.distances[i] || 0)
+      }))
+      .filter((r) => r.nodeId && r.score >= minScore);
+  } catch (err) {
+    console.error('[HNSW] findSimilar error:', err.message);
+    return [];
+  }
+}
+
+module.exports = { search, upsert, evict, findSimilar, isAvailable: () => hnswAvailable };

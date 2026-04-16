@@ -123,9 +123,38 @@ async function tick() {
 
     // Update HNSW index with the new embedding (best-effort; never blocks the queue).
     try {
-      getHnswIndex().upsert(job.workspaceId, nodeId, embedding);
+      const hnswIdx = getHnswIndex();
+      hnswIdx.upsert(job.workspaceId, nodeId, embedding);
+
+      // Auto-create semantic edges for any node with cosine similarity >= 0.82.
+      // This populates the 'semantic' edge type visible in the graph.
+      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 6, 0.82);
+      if (similar.length > 0) {
+        const { v4: uuidv4 } = require('uuid');
+        const checkEdge = db.prepare(
+          'SELECT id FROM edges WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?) LIMIT 1'
+        );
+        const insertEdge = db.prepare(
+          'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+        );
+        const updateDeg = db.prepare(
+          `UPDATE nodes SET degree_centrality =
+             (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+           WHERE id = ?`
+        );
+        for (const { nodeId: otherId, score } of similar) {
+          if (otherId === nodeId) continue;
+          const exists = checkEdge.get(nodeId, otherId, otherId, nodeId);
+          if (!exists) {
+            const w = Math.round(score * 100) / 100;
+            insertEdge.run(uuidv4(), nodeId, otherId, 'semantic similarity', 'semantic', w);
+            updateDeg.run(nodeId);
+            updateDeg.run(otherId);
+          }
+        }
+      }
     } catch {
-      // HNSW update failure is non-fatal.
+      // HNSW/semantic-edge failure is non-fatal.
     }
 
   } catch (err) {
