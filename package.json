@@ -8,6 +8,7 @@
     "dev:backend": "cd backend && node index.js",
     "dev:frontend": "cd frontend && npm run dev",
     "dev": "concurrently \"npm run dev:ollama\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "mcp": "node backend/mcp/server.js",
     "ollama:check": "node scripts/start-ollama.js",
     "ollama:pull": "ollama pull phi3:mini && ollama pull nomic-embed-text",
     "electron": "electron electron/main.js",

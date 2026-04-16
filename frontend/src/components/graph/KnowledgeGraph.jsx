@@ -26,13 +26,19 @@ const NODE_COLORS = {
   doc: '#E8000D'
 };
 
-// Edge type → stroke style map (F5)
-const EDGE_STYLES = {
-  keyword:  { dasharray: '4,3', width: 1,   opacity: 0.55 },
-  semantic: { dasharray: null,  width: 0.8, opacity: 0.6  },
-  llm:      { dasharray: '2,2', width: 1,   opacity: 0.4  },
-  default:  { dasharray: null,  width: 1,   opacity: 0.6  }
-};
+// Edge visuals: colour is primary (theme tokens); dash/dot secondary for accessibility (TASK 4).
+function edgeBaseVisual(et) {
+  switch (et) {
+    case 'keyword':
+      return { stroke: 'var(--text-tertiary)', dasharray: '4 4', linecap: 'butt', width: 1.1, opacity: 0.5 };
+    case 'semantic':
+      return { stroke: 'var(--accent)', dasharray: null, linecap: 'round', width: 1.05, opacity: 0.4 };
+    case 'llm':
+      return { stroke: 'var(--graph-edge-inferred)', dasharray: '2 3', linecap: 'round', width: 1, opacity: 0.45 };
+    default:
+      return { stroke: 'var(--border-default)', dasharray: null, linecap: 'round', width: 1, opacity: 0.35 };
+  }
+}
 
 function normalizeType(type) {
   if (type === 'docs') return 'document';
@@ -49,7 +55,10 @@ function getCSSVar(name, fallback) {
 
 // Classifies an edge into one of the four style buckets (F5).
 function getEdgeType(edge) {
-  if (edge.edge_type && edge.edge_type !== 'default') return edge.edge_type;
+  if (edge.edge_type && edge.edge_type !== 'default') {
+    if (edge.edge_type === 'embedding') return 'semantic';
+    return edge.edge_type;
+  }
   const l = String(edge.relationship_label || '').toLowerCase();
   if (l.startsWith('shares:') || l.startsWith('related:')) return 'keyword';
   if (l) return 'llm';
@@ -82,6 +91,18 @@ function bfsNeighborhood(nodes, edges, centerId, hops) {
   return visited;
 }
 
+// Neighbours of focusNodeId for F1 (1-hop), using edges with string source/target ids.
+function neighbourIdsFromEdges(validEdges, focusNodeId) {
+  const ids = new Set([focusNodeId]);
+  for (const e of validEdges) {
+    const s = typeof e.source === 'object' ? e.source.id : e.source;
+    const t = typeof e.target === 'object' ? e.target.id : e.target;
+    if (s === focusNodeId) ids.add(t);
+    if (t === focusNodeId) ids.add(s);
+  }
+  return ids;
+}
+
 export default function KnowledgeGraph() {
   const navigate = useNavigate();
   const containerRef = useRef(null);
@@ -90,6 +111,22 @@ export default function KnowledgeGraph() {
   const gRef = useRef(null);
   const draggingRef = useRef(false);
   const labelsRef = useRef(null); // d3 selection of all label <text> elements
+  const graphLiveRef = useRef({
+    links: null,
+    circles: null,
+    degreeMap: null,
+    validEdges: []
+  });
+  const tooltipRafRef = useRef(null);
+  const pendingTooltipRef = useRef(null);
+  const hoverNodeIdRef = useRef(null);
+  const zoomKRef = useRef(1);
+  const applyVisualsRef = useRef(() => {});
+  const stateForVisualsRef = useRef({
+    selectedNode: null,
+    highlightedIds: new Set(),
+    focusNodeId: null
+  });
   const [dims, setDims] = useState({ w: 900, h: 650 });
 
   // Search state (existing)
@@ -104,9 +141,6 @@ export default function KnowledgeGraph() {
 
   // F2 — hover tooltip state
   const [hoverInfo, setHoverInfo] = useState(null); // { node, x, y } | null
-
-  // F3 — zoom scale (for label visibility)
-  const [zoomScale, setZoomScale] = useState(1);
 
   // F4 — local view
   const [localView, setLocalView] = useState(false);
@@ -150,21 +184,43 @@ export default function KnowledgeGraph() {
     return () => { clearTimeout(fallbackTimer); ro.disconnect(); };
   }, []);
 
-  // F3: apply label visibility based on current zoom scale and node degree.
-  const applyLabelVisibility = useCallback((k, labelsSel, degreeMap) => {
+  // F3: label visibility from zoom scale. During live zoom use instant attrs (no transition) to avoid jank.
+  const applyLabelVisibility = useCallback((k, labelsSel, degreeMap, animate) => {
     if (!labelsSel) return;
-    labelsSel
-      .transition().duration(150).ease(d3.easeLinear)
-      .attr('opacity', (d) => {
-        if (k >= 1.0) return 1;
-        if (k < 0.6) return 0;
-        // Between 0.6 and 1.0: only show labels for nodes with degree ≥ 3.
-        const degree = d.degree_centrality != null
-          ? d.degree_centrality
-          : (degreeMap ? (degreeMap.get(d.id) || 0) : 0);
-        return degree >= 3 ? 1 : 0;
-      });
+    const labelOpacity = (d) => {
+      if (k >= 1.0) return 1;
+      if (k < 0.6) return 0;
+      const degree = d.degree_centrality != null
+        ? d.degree_centrality
+        : (degreeMap ? (degreeMap.get(d.id) || 0) : 0);
+      return degree >= 3 ? 1 : 0;
+    };
+    if (animate) {
+      labelsSel.transition().duration(150).ease(d3.easeCubicOut).attr('opacity', labelOpacity);
+    } else {
+      labelsSel.interrupt().attr('opacity', labelOpacity);
+    }
   }, []);
+
+  useEffect(() => {
+    stateForVisualsRef.current = { selectedNode, highlightedIds, focusNodeId };
+  }, [selectedNode, highlightedIds, focusNodeId]);
+
+  const flushTooltipPosition = useCallback(() => {
+    tooltipRafRef.current = null;
+    const pending = pendingTooltipRef.current;
+    if (!pending) return;
+    setHoverInfo((prev) => (prev && prev.node?.id === pending.node?.id
+      ? { ...prev, x: pending.x, y: pending.y }
+      : prev));
+  }, []);
+
+  const scheduleTooltipPosition = useCallback((node, x, y) => {
+    pendingTooltipRef.current = { node, x, y };
+    if (tooltipRafRef.current == null) {
+      tooltipRafRef.current = requestAnimationFrame(flushTooltipPosition);
+    }
+  }, [flushTooltipPosition]);
 
   // Main D3 render effect.
   useEffect(() => {
@@ -173,14 +229,13 @@ export default function KnowledgeGraph() {
     if (!svgRef.current) return;
 
     try {
+      hoverNodeIdRef.current = null;
       const svg = d3.select(svgRef.current);
       svg.selectAll('*').remove();
       labelsRef.current = null;
 
       const W = dims.w;
       const H = dims.h;
-      const linkColor = getCSSVar('--border-default', '#475569');
-      const accentColor = getCSSVar('--accent', '#E8000D');
       const textSecondary = getCSSVar('--text-secondary', '#94A3B8');
       const textTertiary = getCSSVar('--text-tertiary', '#64748B');
       const borderStrong = getCSSVar('--border-strong', '#64748B');
@@ -191,7 +246,10 @@ export default function KnowledgeGraph() {
         .attr('viewBox', `0 0 ${W} ${H}`)
         .style('background', 'var(--bg-base)');
 
-      if (!nodes.length) return;
+      if (!nodes.length) {
+        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [] };
+        return;
+      }
 
       // F4 — filter to local neighbourhood if active and a focus node is selected.
       let effectiveNodes = nodes;
@@ -216,18 +274,6 @@ export default function KnowledgeGraph() {
         degreeMap.set(t, (degreeMap.get(t) || 0) + 1);
       }
 
-      // F1 — compute focused neighbour set (used for opacity rules).
-      const focusedIds = new Set();
-      if (focusNodeId && highlightedIds.size === 0) {
-        focusedIds.add(focusNodeId);
-        for (const e of validEdges) {
-          const s = typeof e.source === 'object' ? e.source.id : e.source;
-          const t = typeof e.target === 'object' ? e.target.id : e.target;
-          if (s === focusNodeId) focusedIds.add(t);
-          if (t === focusNodeId) focusedIds.add(s);
-        }
-      }
-
       const spread = Math.min(W, H) * 0.4;
       const positionedNodes = graphNodes.map((n) => ({
         ...n,
@@ -238,12 +284,13 @@ export default function KnowledgeGraph() {
       const g = svg.append('g');
       gRef.current = g.node();
 
-      // F3 — capture zoom scale and apply label visibility on zoom.
+      // F3 — zoom: do not call React setState here (was causing a full re-render every frame).
+      // Label opacity updates are cheap DOM writes only.
       const zoomBehavior = d3.zoom().scaleExtent([0.2, 6]).on('zoom', (event) => {
         g.attr('transform', event.transform);
         const k = event.transform.k;
-        setZoomScale(k);
-        if (labelsRef.current) applyLabelVisibility(k, labelsRef.current, degreeMap);
+        zoomKRef.current = k;
+        if (labelsRef.current) applyLabelVisibility(k, labelsRef.current, degreeMap, false);
       });
       zoomRef.current = zoomBehavior;
       svg.call(zoomBehavior);
@@ -255,51 +302,27 @@ export default function KnowledgeGraph() {
         }
       });
 
+      const isLarge = graphNodes.length > 300;
       const simulation = d3.forceSimulation(positionedNodes)
-        .force('link', d3.forceLink(validEdges).id((d) => d.id).distance(110).strength(0.4))
-        .force('charge', d3.forceManyBody().strength(-380).distanceMin(30).distanceMax(500))
+        .force('link', d3.forceLink(validEdges).id((d) => d.id).distance(110).strength(0.4).iterations(1))
+        .force('charge', d3.forceManyBody().strength(-380).distanceMin(30).distanceMax(800))
         .force('center', d3.forceCenter(W / 2, H / 2))
         .force('collide', d3.forceCollide(42).strength(0.85))
         .force('x', d3.forceX(W / 2).strength(0.03))
         .force('y', d3.forceY(H / 2).strength(0.03))
-        .alphaDecay(0.02)
-        .velocityDecay(0.4);
+        .alphaDecay(isLarge ? 0.05 : 0.03)
+        .velocityDecay(0.4)
+        .alphaMin(0.001);
 
-      simulation.tick(200);
+      // Edges: geometry + theme colours (TASK 4); selection/focus/hover via applyVisualsRef.
+      const links = g.append('g').selectAll('line').data(validEdges, (d) => d.id).enter().append('line')
+        .attr('stroke', (d) => edgeBaseVisual(getEdgeType(d)).stroke)
+        .attr('stroke-opacity', (d) => edgeBaseVisual(getEdgeType(d)).opacity)
+        .attr('stroke-width', (d) => edgeBaseVisual(getEdgeType(d)).width)
+        .attr('stroke-dasharray', (d) => edgeBaseVisual(getEdgeType(d)).dasharray)
+        .attr('stroke-linecap', (d) => edgeBaseVisual(getEdgeType(d)).linecap);
 
-      // F5 — render edges with type-based stroke styles.
-      const links = g.append('g').selectAll('line').data(validEdges).enter().append('line')
-        .attr('stroke', (d) => {
-          if (!selectedNode) return linkColor;
-          const s = typeof d.source === 'object' ? d.source.id : d.source;
-          const t = typeof d.target === 'object' ? d.target.id : d.target;
-          return s === selectedNode.id || t === selectedNode.id ? accentColor : linkColor;
-        })
-        .attr('stroke-opacity', (d) => {
-          const et = getEdgeType(d);
-          const base = EDGE_STYLES[et]?.opacity ?? 0.6;
-          // F1 — fade edges that don't touch the focused node.
-          if (focusedIds.size > 0 && highlightedIds.size === 0) {
-            const s = typeof d.source === 'object' ? d.source.id : d.source;
-            const t = typeof d.target === 'object' ? d.target.id : d.target;
-            if (!focusedIds.has(s) || !focusedIds.has(t)) return 0.15;
-          }
-          if (!selectedNode) return base;
-          const s = typeof d.source === 'object' ? d.source.id : d.source;
-          const t = typeof d.target === 'object' ? d.target.id : d.target;
-          return s === selectedNode.id || t === selectedNode.id ? 1.0 : base;
-        })
-        .attr('stroke-width', (d) => {
-          const et = getEdgeType(d);
-          const base = EDGE_STYLES[et]?.width ?? 1;
-          if (!selectedNode) return base;
-          const s = typeof d.source === 'object' ? d.source.id : d.source;
-          const t = typeof d.target === 'object' ? d.target.id : d.target;
-          return s === selectedNode.id || t === selectedNode.id ? base + 0.5 : base;
-        })
-        .attr('stroke-dasharray', (d) => EDGE_STYLES[getEdgeType(d)]?.dasharray || null);
-
-      const nodeGroups = g.selectAll('.node').data(positionedNodes).enter().append('g')
+      const nodeGroups = g.selectAll('.node').data(positionedNodes, (d) => d.id).enter().append('g')
         .attr('class', 'node')
         .style('cursor', 'pointer')
         .call(
@@ -322,8 +345,8 @@ export default function KnowledgeGraph() {
             })
         );
 
-      nodeGroups.append('circle')
-        .attr('r', (d) => (selectedNode?.id === d.id ? 11 : 7))
+      const circles = nodeGroups.append('circle')
+        .attr('r', 7)
         .attr('fill', (d) => NODE_COLORS[d.type] || textTertiary)
         .attr('stroke', (d) => {
           const fill = NODE_COLORS[d.type] || textTertiary;
@@ -331,12 +354,7 @@ export default function KnowledgeGraph() {
           return darker ? darker.formatHex() : borderStrong;
         })
         .attr('stroke-width', 1.5)
-        .attr('opacity', (d) => {
-          // F1 — search highlight takes precedence over focus.
-          if (highlightedIds.size > 0) return highlightedIds.has(d.id) ? 1 : 0.35;
-          if (focusedIds.size > 0) return focusedIds.has(d.id) ? 1 : 0.15;
-          return 1;
-        });
+        .attr('opacity', 1);
 
       // F3 — labels rendered with initial opacity from current zoom level.
       const labelsSel = nodeGroups.append('text')
@@ -345,7 +363,8 @@ export default function KnowledgeGraph() {
         .attr('font-family', 'Inter, sans-serif')
         .attr('fill', textSecondary)
         .attr('dy', -13)
-        .attr('opacity', 1) // will be updated by applyLabelVisibility
+        .attr('pointer-events', 'none')
+        .attr('opacity', isLarge ? 0 : 1)
         .text((d) => {
           const title = getItemTitle(d);
           const clean = extractTextPreview(title, 22) || 'Untitled';
@@ -354,33 +373,144 @@ export default function KnowledgeGraph() {
 
       labelsRef.current = labelsSel;
 
-      // F2 — hover tooltip: mouseenter / mousemove / mouseleave on node groups.
-      // Uses the SVG container's bounding rect to convert mouse coords to relative px.
+      graphLiveRef.current = {
+        links,
+        circles,
+        degreeMap,
+        validEdges
+      };
+
+      const withTrans = (sel, transition) =>
+        (transition ? sel.transition().duration(150).ease(d3.easeCubicOut) : sel);
+
+      applyVisualsRef.current = (opts = {}) => {
+        const { transition = false } = opts;
+        const { links: linksSel, circles: circlesSel, validEdges: ve } = graphLiveRef.current;
+        if (!linksSel || !circlesSel) return;
+        const { selectedNode: sel, highlightedIds: hlIds, focusNodeId: focusId } = stateForVisualsRef.current;
+        const accentColor = getCSSVar('--accent', '#E8000D');
+        const focusedIds = focusId && hlIds.size === 0
+          ? neighbourIdsFromEdges(ve, focusId)
+          : new Set();
+        const hoverId = hoverNodeIdRef.current;
+
+        withTrans(linksSel, transition)
+          .attr('stroke', (d) => {
+            if (sel) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (s === sel.id || t === sel.id) return accentColor;
+            }
+            return edgeBaseVisual(getEdgeType(d)).stroke;
+          })
+          .attr('stroke-opacity', (d) => {
+            const ev = edgeBaseVisual(getEdgeType(d));
+            let op = ev.opacity;
+            if (focusedIds.size > 0 && hlIds.size === 0) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (!focusedIds.has(s) || !focusedIds.has(t)) return 0.15;
+            }
+            if (sel) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (s === sel.id || t === sel.id) return Math.min(1, op + 0.45);
+            }
+            return op;
+          })
+          .attr('stroke-width', (d) => {
+            const ev = edgeBaseVisual(getEdgeType(d));
+            const base = ev.width;
+            if (sel) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (s === sel.id || t === sel.id) return base + 0.6;
+            }
+            return base;
+          })
+          .attr('stroke-dasharray', (d) => {
+            if (sel) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (s === sel.id || t === sel.id) return null;
+            }
+            return edgeBaseVisual(getEdgeType(d)).dasharray;
+          })
+          .attr('stroke-linecap', (d) => {
+            if (sel) {
+              const s = typeof d.source === 'object' ? d.source.id : d.source;
+              const t = typeof d.target === 'object' ? d.target.id : d.target;
+              if (s === sel.id || t === sel.id) return 'round';
+            }
+            return edgeBaseVisual(getEdgeType(d)).linecap;
+          });
+
+        withTrans(circlesSel, transition)
+          .attr('r', (d) => (sel?.id === d.id ? 11 : 7))
+          .attr('opacity', (d) => {
+            if (hlIds.size > 0) return hlIds.has(d.id) ? 1 : 0.35;
+            if (hoverId) {
+              if (focusedIds.size > 0) {
+                if (d.id === hoverId) return 1;
+                if (focusedIds.has(d.id)) return 1;
+                return 0.15;
+              }
+              return d.id === hoverId ? 1 : 0.45;
+            }
+            if (focusedIds.size > 0) return focusedIds.has(d.id) ? 1 : 0.15;
+            return 1;
+          });
+      };
+
+      applyVisualsRef.current({ transition: false });
+
+      // F2 — tooltip: one React state update on enter/leave; position throttled via rAF on move.
+      const clampTip = (rawX, rawY, rect) => {
+        const TIP_W = 260;
+        const TIP_H = 96;
+        const rw = rect.width || dims.w;
+        const rh = rect.height || dims.h;
+        return {
+          x: Math.min(Math.max(rawX, 8), rw - TIP_W - 8),
+          y: Math.min(Math.max(rawY, 8), rh - TIP_H - 8)
+        };
+      };
+
       nodeGroups
         .on('mouseenter', function (event, d) {
           if (draggingRef.current) return;
+          hoverNodeIdRef.current = d.id;
+          applyVisualsRef.current({ transition: false });
           const rect = svgRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const TIP_W = 260, TIP_H = 96;
           const rawX = event.clientX - rect.left + 12;
           const rawY = event.clientY - rect.top + 12;
-          const x = Math.min(Math.max(rawX, 8), (rect.width || dims.w) - TIP_W - 8);
-          const y = Math.min(Math.max(rawY, 8), (rect.height || dims.h) - TIP_H - 8);
+          const { x, y } = clampTip(rawX, rawY, rect);
+          pendingTooltipRef.current = null;
+          if (tooltipRafRef.current != null) {
+            cancelAnimationFrame(tooltipRafRef.current);
+            tooltipRafRef.current = null;
+          }
           setHoverInfo({ node: d, x, y });
         })
-        .on('mousemove', function (event) {
+        .on('mousemove', function (event, d) {
           if (draggingRef.current) { setHoverInfo(null); return; }
           const rect = svgRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const TIP_W = 260, TIP_H = 96;
           const rawX = event.clientX - rect.left + 12;
           const rawY = event.clientY - rect.top + 12;
-          const x = Math.min(Math.max(rawX, 8), (rect.width || dims.w) - TIP_W - 8);
-          const y = Math.min(Math.max(rawY, 8), (rect.height || dims.h) - TIP_H - 8);
-          setHoverInfo((prev) => prev ? { ...prev, x, y } : null);
+          const { x, y } = clampTip(rawX, rawY, rect);
+          scheduleTooltipPosition(d, x, y);
         })
         .on('mouseleave', function () {
+          pendingTooltipRef.current = null;
+          if (tooltipRafRef.current != null) {
+            cancelAnimationFrame(tooltipRafRef.current);
+            tooltipRafRef.current = null;
+          }
           setHoverInfo(null);
+          hoverNodeIdRef.current = null;
+          applyVisualsRef.current({ transition: true });
         });
 
       // F1 — click: set focus + selected + fetch neighbourhood (preserving existing side-pane behaviour).
@@ -400,8 +530,19 @@ export default function KnowledgeGraph() {
         nodeGroups.attr('transform', (d) => `translate(${d.x}, ${d.y})`);
       };
 
+      let tickCount = 0;
+      simulation.on('tick', () => {
+        tickCount += 1;
+        if (tickCount % 2 !== 0) return;
+        updatePositions();
+      });
+      simulation.on('end', () => {
+        if (!isLarge || !labelsRef.current) return;
+        const k = zoomKRef.current;
+        applyLabelVisibility(k, labelsRef.current, degreeMap, true);
+      });
+      simulation.tick(80);
       updatePositions();
-      simulation.on('tick', updatePositions);
 
       setTimeout(() => {
         if (!svgRef.current || !gRef.current || !zoomRef.current) return;
@@ -416,18 +557,29 @@ export default function KnowledgeGraph() {
         d3.select(svgRef.current)
           .transition().duration(500)
           .call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-        // F3 — apply initial label visibility after fit-to-screen.
-        if (labelsRef.current) applyLabelVisibility(scale, labelsRef.current, degreeMap);
+        zoomKRef.current = scale;
+        // F3 — smooth label fade only after programmatic fit (not during free pan/zoom).
+        if (labelsRef.current && !isLarge) applyLabelVisibility(scale, labelsRef.current, degreeMap, true);
       }, 0);
 
       return () => {
         simulation.stop();
         gRef.current = null;
+        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [] };
+        if (tooltipRafRef.current != null) {
+          cancelAnimationFrame(tooltipRafRef.current);
+          tooltipRafRef.current = null;
+        }
       };
     } catch (err) {
       console.error('[Graph] Render effect failed:', err);
     }
-  }, [loading, nodes, edges, selectedNode, highlightedIds, focusNodeId, localView, localHops, fetchNeighborhood, dims.w, dims.h, theme, applyLabelVisibility]);
+  }, [loading, nodes, edges, localView, localHops, fetchNeighborhood, dims.w, dims.h, theme, applyLabelVisibility, scheduleTooltipPosition]);
+
+  // Selection / search / focus — update attributes only (no SVG teardown).
+  useEffect(() => {
+    applyVisualsRef.current({ transition: true });
+  }, [selectedNode, highlightedIds, focusNodeId, nodes, edges]);
 
   // Zooms and pans graph so currently loaded nodes fit into viewport.
   const handleFitToScreen = useCallback(() => {
@@ -599,24 +751,26 @@ export default function KnowledgeGraph() {
         ))}
       </div>
 
-      {/* F5 — Edge type legend (bottom-left, below node legend) */}
+      {/* Edge legend: colour-primary, pattern secondary (TASK 4) */}
       <div style={{
         position: 'absolute', bottom: '52px', left: '16px', zIndex: 10,
         backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
         borderRadius: '4px', padding: '6px 12px', display: 'flex', gap: '14px', alignItems: 'center'
       }}>
         {[
-          { label: 'keyword', dasharray: '4,3' },
-          { label: 'inferred', dasharray: '2,2' },
-          { label: 'semantic', dasharray: null }
-        ].map(({ label, dasharray }) => (
+          { label: 'keyword', stroke: 'var(--text-tertiary)', dasharray: '4 4', linecap: 'butt' },
+          { label: 'semantic', stroke: 'var(--accent)', dasharray: undefined, linecap: 'round' },
+          { label: 'inferred', stroke: 'var(--graph-edge-inferred)', dasharray: '2 3', linecap: 'round' }
+        ].map(({ label, stroke, dasharray, linecap }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <svg width="22" height="10" style={{ display: 'block' }}>
+            <svg width="28" height="10" style={{ display: 'block' }}>
               <line
-                x1="0" y1="5" x2="22" y2="5"
-                stroke="var(--text-tertiary)"
-                strokeWidth="1.5"
-                strokeDasharray={dasharray || undefined}
+                x1="0" y1="5" x2="28" y2="5"
+                stroke={stroke}
+                strokeWidth="2"
+                strokeLinecap={linecap}
+                strokeDasharray={dasharray}
+                opacity={label === 'semantic' ? 0.85 : 1}
               />
             </svg>
             <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.06em', fontWeight: '500' }}>
