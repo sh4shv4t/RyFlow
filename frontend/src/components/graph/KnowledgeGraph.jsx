@@ -1,6 +1,6 @@
 // KnowledgeGraph — D3.js force-directed graph visualization with semantic search
 // Features: click focus/fade (1-hop), semantic zoom, local graph view, solid colour edges by type
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as d3 from 'd3';
 import { Search, X, Network } from 'lucide-react';
@@ -92,6 +92,38 @@ function bfsNeighborhood(nodes, edges, centerId, hops) {
   return visited;
 }
 
+/** Fit zoom from node positions (avoids full-size hit rect inflating getBBox). */
+function computeNodeExtentFitTransform(svgElement, nodes, options = {}) {
+  const padding = options.padding ?? 80;
+  const maxScale = options.maxScale ?? 1.2;
+  const nodeRadius = options.nodeRadius ?? 24;
+  const rect = svgElement.getBoundingClientRect();
+  const svgW = rect.width;
+  const svgH = rect.height;
+  if (!nodes?.length || svgW < 8 || svgH < 8) return null;
+  const xs = [];
+  const ys = [];
+  for (const d of nodes) {
+    if (Number.isFinite(d.x) && Number.isFinite(d.y)) {
+      xs.push(d.x);
+      ys.push(d.y);
+    }
+  }
+  if (!xs.length) return null;
+  const xMin = Math.min(...xs) - nodeRadius;
+  const xMax = Math.max(...xs) + nodeRadius;
+  const yMin = Math.min(...ys) - nodeRadius;
+  const yMax = Math.max(...ys) + nodeRadius;
+  const graphWidth = Math.max(1, xMax - xMin);
+  const graphHeight = Math.max(1, yMax - yMin);
+  const scaleX = (svgW - padding * 2) / graphWidth;
+  const scaleY = (svgH - padding * 2) / graphHeight;
+  const scale = Math.min(scaleX, scaleY, maxScale);
+  const tx = (svgW - scale * graphWidth) / 2 - scale * xMin;
+  const ty = (svgH - scale * graphHeight) / 2 - scale * yMin;
+  return d3.zoomIdentity.translate(tx, ty).scale(scale);
+}
+
 // Neighbours of focusNodeId for F1 (1-hop), using edges with string source/target ids.
 function neighbourIdsFromEdges(validEdges, focusNodeId) {
   const ids = new Set([focusNodeId]);
@@ -116,7 +148,8 @@ export default function KnowledgeGraph() {
     links: null,
     circles: null,
     degreeMap: null,
-    validEdges: []
+    validEdges: [],
+    nodePositions: null
   });
   const zoomKRef = useRef(1);
   const applyVisualsRef = useRef(() => {});
@@ -149,6 +182,11 @@ export default function KnowledgeGraph() {
     centerNodeId,
     search
   } = useGraph();
+
+  const semanticEdgeCount = useMemo(
+    () => edges.filter((e) => e.edge_type === 'semantic' || e.edge_type === 'embedding').length,
+    [edges]
+  );
 
   // Fetch graph data on mount.
   useEffect(() => {
@@ -221,8 +259,32 @@ export default function KnowledgeGraph() {
         .attr('viewBox', `0 0 ${W} ${H}`)
         .style('background', 'var(--bg-base)');
 
+      const defs = svg.append('defs');
+      const pattern = defs
+        .append('pattern')
+        .attr('id', 'ryflow-dot-grid')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', 24)
+        .attr('height', 24)
+        .attr('patternUnits', 'userSpaceOnUse');
+      pattern
+        .append('circle')
+        .attr('cx', 0.8)
+        .attr('cy', 0.8)
+        .attr('r', 0.8)
+        .attr('fill', 'var(--border-default)')
+        .attr('fill-opacity', theme === 'light' ? 0.08 : 0.12);
+
+      svg
+        .append('rect')
+        .attr('width', W)
+        .attr('height', H)
+        .attr('fill', 'url(#ryflow-dot-grid)')
+        .attr('pointer-events', 'none');
+
       if (!nodes.length) {
-        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [] };
+        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [], nodePositions: null };
         return;
       }
 
@@ -258,6 +320,22 @@ export default function KnowledgeGraph() {
 
       const g = svg.append('g');
       gRef.current = g.node();
+
+      const applyGraphZoomFit = (withTransition) => {
+        const svgEl = svgRef.current;
+        const zb = zoomRef.current;
+        const pos = graphLiveRef.current.nodePositions;
+        if (!svgEl || !zb || !pos?.length) return;
+        const t = computeNodeExtentFitTransform(svgEl, pos, { padding: 80, maxScale: 1.2, nodeRadius: 24 });
+        if (!t) return;
+        const sel = d3.select(svgEl);
+        if (withTransition) {
+          sel.transition().duration(500).call(zb.transform, t);
+        } else {
+          sel.call(zb.transform, t);
+        }
+        zoomKRef.current = t.k;
+      };
 
       // F3 — zoom: do not call React setState here (was causing a full re-render every frame).
       // Label opacity updates are cheap DOM writes only.
@@ -377,7 +455,8 @@ export default function KnowledgeGraph() {
         links,
         circles,
         degreeMap,
-        validEdges
+        validEdges,
+        nodePositions: positionedNodes
       };
 
       const withTrans = (sel, transition) =>
@@ -445,37 +524,26 @@ export default function KnowledgeGraph() {
         if (tickCount % tickStep !== 0) return;
         updatePositions();
       });
-      simulation.on('end', () => {
-        if (!isLarge || !labelsRef.current) return;
-        const k = zoomKRef.current;
-        applyLabelVisibility(k, labelsRef.current, degreeMap, true);
-      });
-      // Pre-warm synchronously — keep low so the main thread isn't blocked.
-      simulation.tick(isLarge ? 25 : 40);
+      simulation.stop();
+      const maxTicks = isLarge ? 520 : 620;
+      let tickI = 0;
+      while (simulation.alpha() > simulation.alphaMin() && tickI < maxTicks) {
+        simulation.tick();
+        tickI += 1;
+        if (tickI % tickStep === 0) updatePositions();
+      }
       updatePositions();
-
-      setTimeout(() => {
-        if (!svgRef.current || !gRef.current || !zoomRef.current) return;
-        const bbox = gRef.current.getBBox();
-        if (!bbox.width || !bbox.height) return;
-        const svgW = svgRef.current.clientWidth || W;
-        const svgH = svgRef.current.clientHeight || H;
-        const pad = 64;
-        const scale = Math.min(1.5, (svgW - pad * 2) / bbox.width, (svgH - pad * 2) / bbox.height);
-        const tx = (svgW - scale * bbox.width) / 2 - scale * bbox.x;
-        const ty = (svgH - scale * bbox.height) / 2 - scale * bbox.y;
-        d3.select(svgRef.current)
-          .transition().duration(500)
-          .call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-        zoomKRef.current = scale;
-        // F3 — smooth label fade only after programmatic fit (not during free pan/zoom).
-        if (labelsRef.current && !isLarge) applyLabelVisibility(scale, labelsRef.current, degreeMap, true);
-      }, 0);
+      requestAnimationFrame(() => {
+        applyGraphZoomFit(true);
+        if (labelsRef.current) {
+          applyLabelVisibility(zoomKRef.current, labelsRef.current, degreeMap, !isLarge);
+        }
+      });
 
       return () => {
         simulation.stop();
         gRef.current = null;
-        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [] };
+        graphLiveRef.current = { links: null, circles: null, degreeMap: null, validEdges: [], nodePositions: null };
       };
     } catch (err) {
       console.error('[Graph] Render effect failed:', err);
@@ -489,19 +557,14 @@ export default function KnowledgeGraph() {
 
   // Zooms and pans graph so currently loaded nodes fit into viewport.
   const handleFitToScreen = useCallback(() => {
-    if (!svgRef.current || !gRef.current || !zoomRef.current) return;
-    const bbox = gRef.current.getBBox();
-    if (!bbox.width || !bbox.height) return;
-    const svgW = svgRef.current.clientWidth || dims.w;
-    const svgH = svgRef.current.clientHeight || dims.h;
-    const pad = 64;
-    const scale = Math.min(1.5, (svgW - pad * 2) / bbox.width, (svgH - pad * 2) / bbox.height);
-    const tx = (svgW - scale * bbox.width) / 2 - scale * bbox.x;
-    const ty = (svgH - scale * bbox.height) / 2 - scale * bbox.y;
-    d3.select(svgRef.current)
-      .transition().duration(500)
-      .call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-  }, [dims.w, dims.h]);
+    if (!svgRef.current || !zoomRef.current) return;
+    const pos = graphLiveRef.current.nodePositions;
+    if (!pos?.length) return;
+    const t = computeNodeExtentFitTransform(svgRef.current, pos, { padding: 80, maxScale: 1.2, nodeRadius: 24 });
+    if (!t) return;
+    d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.transform, t);
+    zoomKRef.current = t.k;
+  }, []);
 
   // Handles semantic search.
   const handleSearch = useCallback(async () => {
@@ -631,14 +694,24 @@ export default function KnowledgeGraph() {
         </div>
       </div>
 
-      {/* Node count */}
-      <div style={{
-        position: 'absolute', top: '16px', right: panelOffset, zIndex: 10,
-        backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)',
-        borderRadius: '4px', padding: '4px 10px', fontSize: '11px', color: 'var(--text-tertiary)'
-      }}>
-        {nodes.length} nodes
-      </div>
+      {nodes.length > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            right: panelOffset,
+            zIndex: 10,
+            fontSize: '11px',
+            color: 'var(--text-tertiary)',
+            pointerEvents: 'none',
+            lineHeight: 1.35,
+            textAlign: 'right',
+            maxWidth: '240px'
+          }}
+        >
+          {nodes.length} nodes · {edges.length} edges ({semanticEdgeCount} semantic)
+        </div>
+      )}
 
       {/* All / Fast mode toggle */}
       <button

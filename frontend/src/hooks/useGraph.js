@@ -1,5 +1,5 @@
 // Hook for knowledge graph data fetching and state
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
 import useStore from '../store/useStore';
 import toast from 'react-hot-toast';
@@ -20,6 +20,11 @@ export default function useGraph() {
   const GRAPH_MIN_LOADING_MS = 0;
   const GRAPH_SEARCH_MIN_LOADING_MS = 40;
   const lastFetchOptionsRef = useRef({ all: false, limit: 500 });
+  /** One POST /backfill-semantic-edges per workspace session (not every fetchGraph). */
+  const semanticBackfillOnceRef = useRef(false);
+  useEffect(() => {
+    semanticBackfillOnceRef.current = false;
+  }, [workspace?.id]);
 
   const runSilentEmbeddingBackfill = useCallback(async (workspaceId, refreshGraph) => {
     try {
@@ -95,6 +100,25 @@ export default function useGraph() {
     if (fetchSucceeded && !skipEmbeddingBackcheck && workspace) {
       const wsId = workspace.id;
       const opts = { ...lastFetchOptionsRef.current };
+      if (!semanticBackfillOnceRef.current) {
+        semanticBackfillOnceRef.current = true;
+        queueMicrotask(() => {
+          void (async () => {
+            try {
+              const res = await axios.post('/api/graph/backfill-semantic-edges', {
+                workspace_id: wsId
+              });
+              const created = Number(res.data?.created ?? 0);
+              if (created > 0) {
+                await fetchGraph({ ...opts, skipEmbeddingBackcheck: true });
+                toast('Graph updated', { duration: 2200 });
+              }
+            } catch {
+              /* silent */
+            }
+          })();
+        });
+      }
       queueMicrotask(() => {
         void runSilentEmbeddingBackfill(wsId, async () => {
           await fetchGraph({ ...opts, skipEmbeddingBackcheck: true });

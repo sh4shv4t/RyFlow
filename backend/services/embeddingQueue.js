@@ -103,7 +103,7 @@ async function tick() {
     const rawForSummary = loadNodeContentForSummary(db, node);
     let textToEmbed = text;
 
-    if (rawForSummary.length >= 100) {
+    if (rawForSummary.length >= 50) {
       const ollama = getOllama();
       try {
         const truncated = rawForSummary.slice(0, 1500);
@@ -150,9 +150,9 @@ async function tick() {
       const hnswIdx = getHnswIndex();
       hnswIdx.upsert(job.workspaceId, nodeId, embedding);
 
-      // Auto-create semantic edges for any node with cosine similarity >= 0.82.
+      // Auto-create semantic edges for any node with cosine similarity >= 0.72.
       // This populates the 'semantic' edge type visible in the graph.
-      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 6, 0.82);
+      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 6, 0.72);
       if (similar.length > 0) {
         const { v4: uuidv4 } = require('uuid');
         const checkEdge = db.prepare(

@@ -273,7 +273,7 @@ router.post('/backfill-keyword-edges', (req, res) => {
 
 // POST /api/graph/backfill-semantic-edges
 // Scans all embedded nodes and creates 'semantic' edges for pairs with
-// cosine similarity >= 0.82.  Safe to call repeatedly (checks existence first).
+// cosine similarity >= 0.72.  Safe to call repeatedly (checks existence first).
 router.post('/backfill-semantic-edges', (req, res) => {
   try {
     const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
@@ -308,7 +308,7 @@ router.post('/backfill-semantic-edges', (req, res) => {
     for (const row of rows) {
       const vec = parseEmbedding(row.embedding);
       if (!vec || vec.length === 0) continue;
-      const similar = hnswIdx.findSimilar(workspaceId, vec, 6, 0.82);
+      const similar = hnswIdx.findSimilar(workspaceId, vec, 6, 0.72);
       for (const { nodeId: otherId, score } of similar) {
         if (otherId === row.id) continue;
         const exists = checkEdge.get(row.id, otherId, otherId, row.id);
