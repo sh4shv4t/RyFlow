@@ -266,6 +266,85 @@ async function semanticSearch(query, workspaceId, topK = 5) {
   return results.sort((a, b) => b.score - a.score).slice(0, topK);
 }
 
+// Plain text from TipTap/JSON doc content (max length), for summarisation input.
+function extractPlainFromStoredContent(content, maxLen = 1500) {
+  if (!content) return '';
+  let value = content;
+  if (typeof value !== 'string') {
+    try {
+      value = JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed?.type === 'doc') {
+      const texts = [];
+      function walk(node) {
+        if (!node) return;
+        if (node.type === 'text' && node.text) texts.push(node.text);
+        if (Array.isArray(node.content)) node.content.forEach(walk);
+      }
+      walk(parsed);
+      const result = texts.join(' ').replace(/\s+/g, ' ').trim();
+      return result.slice(0, maxLen);
+    }
+  } catch {}
+  const stripped = String(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.slice(0, maxLen);
+}
+
+function extractTextFromChatMessages(messagesRaw) {
+  if (!messagesRaw) return '';
+  let parsed = messagesRaw;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return String(messagesRaw).slice(0, 1500);
+    }
+  }
+  if (!Array.isArray(parsed)) return '';
+  const parts = [];
+  for (const m of parsed) {
+    if (m?.role === 'user' && m.content) {
+      parts.push(String(m.content));
+    }
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
+}
+
+/** Rich source text for LLM summarisation before embedding (up to 1500 chars). */
+function loadNodeContentForSummary(db, node) {
+  const { type, source_id: sid, title, content_summary: cs } = node;
+  let raw = '';
+  try {
+    if (type === 'doc' && sid) {
+      const row = db.prepare('SELECT content FROM documents WHERE id = ?').get(sid);
+      raw = extractPlainFromStoredContent(row?.content, 5000);
+    } else if (type === 'task' && sid) {
+      const row = db.prepare('SELECT title, description FROM tasks WHERE id = ?').get(sid);
+      raw = `${row?.title || ''} ${row?.description || ''}`.trim();
+    } else if (type === 'code' && sid) {
+      const row = db.prepare('SELECT content FROM code_files WHERE id = ?').get(sid);
+      raw = String(row?.content || '');
+    } else if (type === 'ai_chat' && sid) {
+      const row = db.prepare('SELECT messages FROM ai_chats WHERE id = ?').get(sid);
+      raw = extractTextFromChatMessages(row?.messages);
+    } else if (type === 'canvas') {
+      raw = `${title || ''} ${cs || ''}`.trim();
+    }
+  } catch {
+    raw = '';
+  }
+  if (!raw) raw = `${title || ''} ${cs || ''}`.trim();
+  return raw.slice(0, 1500);
+}
+
 // Generates and stores an embedding for a given node
 async function generateAndStoreEmbedding(nodeId, text) {
   try {
@@ -291,5 +370,6 @@ module.exports = {
   parseMetadata,
   floatArrayToBuffer,
   bufferToFloatArray,
-  parseEmbedding
+  parseEmbedding,
+  loadNodeContentForSummary
 };

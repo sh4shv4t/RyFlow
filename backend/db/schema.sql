@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS edges (
   relationship_label TEXT,
   edge_type TEXT DEFAULT 'default',
   weight REAL DEFAULT 1.0,
+  edge_weight REAL DEFAULT 1.0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Keep edge references valid as nodes are removed.
   FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,

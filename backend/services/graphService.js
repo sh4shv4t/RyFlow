@@ -215,8 +215,8 @@ function createKeywordEdges(newNode, workspaceId) {
 
     const affectedId = other.id;
     db.prepare(
-      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(uuidv4(), newNode.id, affectedId, label, 'keyword', 0.6);
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(uuidv4(), newNode.id, affectedId, label, 'keyword', 0.6, 1.0);
     recomputeDegreeFor(db, [newNode.id, affectedId]);
     created += 1;
   }
@@ -285,8 +285,8 @@ async function autoCreateRelationships(newNode, workspaceId) {
       if (rel.id && rel.relationship_label && targetExists) {
         const edgeId = uuidv4();
         db.prepare(
-          'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(edgeId, newNode.id, rel.id, rel.relationship_label, 'llm', 0.8);
+          'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(edgeId, newNode.id, rel.id, rel.relationship_label, 'llm', 0.8, 1.0);
         recomputeDegreeFor(db, [newNode.id, rel.id]);
       }
     }
@@ -311,12 +311,12 @@ function getGraph(workspaceId) {
 }
 
 // Adds a manual edge between two nodes
-function addEdge(sourceId, targetId, label, weight = 1.0, edgeType = 'default') {
+function addEdge(sourceId, targetId, label, weight = 1.0, edgeType = 'default', edgeWeight = 1.0) {
   const db = getDb();
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, sourceId, targetId, label, edgeType, weight);
+    'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, sourceId, targetId, label, edgeType, weight, edgeWeight);
   recomputeDegreeFor(db, [sourceId, targetId]);
   return { id, sourceId, targetId, label, weight };
 }

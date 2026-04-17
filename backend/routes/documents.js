@@ -112,8 +112,8 @@ function upsertMentionEdges(db, docNodeId, mentionNodeIds = []) {
 
     if (!existing) {
       db.prepare(
-        `INSERT INTO edges (id, source_id, target_id, relationship_label, weight)
-         VALUES (?, ?, ?, 'mentions', 1.0)`
+        `INSERT INTO edges (id, source_id, target_id, relationship_label, weight, edge_weight)
+         VALUES (?, ?, ?, 'mentions', 1.0, 1.0)`
       ).run(crypto.randomUUID(), docNodeId, mentionedId);
     }
   });

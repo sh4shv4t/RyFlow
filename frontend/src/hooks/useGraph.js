@@ -1,9 +1,13 @@
 // Hook for knowledge graph data fetching and state
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import axios from 'axios';
 import useStore from '../store/useStore';
 import toast from 'react-hot-toast';
 import { waitForMinimumLoading } from '../utils/loadingDelay';
+
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export default function useGraph() {
   const [nodes, setNodes] = useState([]);
@@ -15,15 +19,51 @@ export default function useGraph() {
   const { workspace, setAiActive } = useStore();
   const GRAPH_MIN_LOADING_MS = 0;
   const GRAPH_SEARCH_MIN_LOADING_MS = 40;
+  const lastFetchOptionsRef = useRef({ all: false, limit: 500 });
+
+  const runSilentEmbeddingBackfill = useCallback(async (workspaceId, refreshGraph) => {
+    try {
+      const missingRes = await axios.get('/api/graph/nodes-without-embeddings', {
+        params: { workspace_id: workspaceId }
+      });
+      const initialIds = missingRes.data?.node_ids || [];
+      if (!initialIds.length) return;
+
+      await axios.post('/api/graph/enqueue-missing-embeddings', {
+        workspace_id: workspaceId,
+        node_ids: initialIds
+      });
+
+      const initialSet = new Set(initialIds);
+      for (let i = 0; i < 45; i += 1) {
+        await sleep(2000);
+        const check = await axios.get('/api/graph/nodes-without-embeddings', {
+          params: { workspace_id: workspaceId }
+        });
+        const stillMissing = new Set(check.data?.node_ids || []);
+        const anyStill = [...initialSet].some((id) => stillMissing.has(id));
+        if (!anyStill) {
+          await refreshGraph();
+          toast('Graph updated', { duration: 2200 });
+          return;
+        }
+      }
+    } catch {
+      /* silent */
+    }
+  }, []);
 
   // Fetches the full knowledge graph for the current workspace
   const fetchGraph = useCallback(async (options = {}) => {
     if (!workspace) return;
     const startedAt = Date.now();
+    const skipEmbeddingBackcheck = options.skipEmbeddingBackcheck === true;
+    const loadAll = Boolean(options.all);
+    const limit = Number(options.limit || 500);
+    lastFetchOptionsRef.current = { all: loadAll, limit };
     setLoading(true);
+    let fetchSucceeded = false;
     try {
-      const loadAll = Boolean(options.all);
-      const limit = Number(options.limit || 500);
       const nodesRes = await axios.get('/api/graph/nodes', {
         params: { workspace_id: workspace.id, all: loadAll ? 1 : 0, limit }
       });
@@ -44,13 +84,24 @@ export default function useGraph() {
       setEdges(filteredEdges);
       setIsNeighborhoodMode(false);
       setCenterNodeId(null);
+      fetchSucceeded = true;
     } catch (err) {
       toast.error('Failed to load knowledge graph');
     } finally {
       await waitForMinimumLoading(startedAt, GRAPH_MIN_LOADING_MS);
       setLoading(false);
     }
-  }, [workspace]);
+
+    if (fetchSucceeded && !skipEmbeddingBackcheck && workspace) {
+      const wsId = workspace.id;
+      const opts = { ...lastFetchOptionsRef.current };
+      queueMicrotask(() => {
+        void runSilentEmbeddingBackfill(wsId, async () => {
+          await fetchGraph({ ...opts, skipEmbeddingBackcheck: true });
+        });
+      });
+    }
+  }, [workspace, runSilentEmbeddingBackfill]);
 
   const fetchNeighborhood = useCallback(async (nodeId, hops = 2) => {
     if (!workspace || !nodeId) return;

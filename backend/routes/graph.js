@@ -4,6 +4,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode, getGraph, addEdge, deleteNode, backfillKeywordEdges } = require('../services/graphService');
 const { semanticSearch, parseMetadata } = require('../services/embeddingService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // GET /api/graph — Get full knowledge graph for a workspace
 router.get('/', (req, res) => {
@@ -54,7 +55,7 @@ router.get('/neighborhood', (req, res) => {
     if (!nodeMap.has(node_id)) return res.status(404).json({ error: 'Node not found' });
 
     const allEdges = db.prepare(
-      'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+      'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
     ).all(workspace_id, workspace_id);
 
     const adjacency = new Map();
@@ -108,7 +109,7 @@ router.get('/edges', (req, res) => {
     if (nodeIds.length > 0) {
       const placeholders = nodeIds.map(() => '?').join(',');
       edges = db.prepare(
-        `SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at
+        `SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at
          FROM edges e
          JOIN nodes s ON e.source_id = s.id
          JOIN nodes t ON e.target_id = t.id
@@ -119,11 +120,45 @@ router.get('/edges', (req, res) => {
       ).all(workspace_id, workspace_id, ...nodeIds, ...nodeIds);
     } else {
       edges = db.prepare(
-        'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.created_at FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+        'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
       ).all(workspace_id, workspace_id);
     }
 
     res.json({ edges });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/graph/nodes-without-embeddings — node ids missing embeddings (for silent backfill).
+router.get('/nodes-without-embeddings', (req, res) => {
+  try {
+    const { workspace_id } = req.query;
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    const rows = db.prepare(
+      'SELECT id FROM nodes WHERE workspace_id = ? AND embedding IS NULL'
+    ).all(workspace_id);
+    res.json({ node_ids: rows.map((r) => r.id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/graph/enqueue-missing-embeddings — queue embedding jobs (idempotent enqueue).
+router.post('/enqueue-missing-embeddings', (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    let ids = Array.isArray(req.body?.node_ids) ? req.body.node_ids.filter((id) => typeof id === 'string') : null;
+    if (!ids || ids.length === 0) {
+      ids = db.prepare('SELECT id FROM nodes WHERE workspace_id = ? AND embedding IS NULL').all(workspaceId).map((r) => r.id);
+    }
+    for (const id of ids) {
+      enqueueEmbeddingJob(id, workspaceId);
+    }
+    res.json({ success: true, queued: ids.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -261,7 +296,7 @@ router.post('/backfill-semantic-edges', (req, res) => {
       'SELECT id FROM edges WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?) LIMIT 1'
     );
     const insertEdge = db.prepare(
-      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     const updateDeg = db.prepare(
       `UPDATE nodes SET degree_centrality =
@@ -279,7 +314,7 @@ router.post('/backfill-semantic-edges', (req, res) => {
         const exists = checkEdge.get(row.id, otherId, otherId, row.id);
         if (!exists) {
           const w = Math.round(score * 100) / 100;
-          insertEdge.run(uuidv4(), row.id, otherId, 'semantic similarity', 'semantic', w);
+          insertEdge.run(uuidv4(), row.id, otherId, 'semantic similarity', 'semantic', w, score);
           updateDeg.run(row.id);
           updateDeg.run(otherId);
           created += 1;

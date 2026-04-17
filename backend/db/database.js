@@ -93,6 +93,9 @@ function initializeSchema(db) {
   addColumnIfMissing(db, 'nodes', 'updated_at', 'DATETIME');
 
   addColumnIfMissing(db, 'edges', 'edge_type', "TEXT DEFAULT 'default'");
+  addColumnIfMissing(db, 'edges', 'edge_weight', 'REAL');
+
+  addColumnIfMissing(db, 'nodes', 'content_summary', 'TEXT');
 
   addColumnIfMissing(db, 'ai_chats', 'rag_used', 'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'ai_chats', 'message_count', 'INTEGER DEFAULT 0');
