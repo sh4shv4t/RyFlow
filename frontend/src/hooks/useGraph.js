@@ -22,8 +22,11 @@ export default function useGraph() {
   const lastFetchOptionsRef = useRef({ all: false, limit: 500 });
   /** One POST /backfill-semantic-edges per workspace session (not every fetchGraph). */
   const semanticBackfillOnceRef = useRef(false);
+  /** One silent embedding backfill poll per workspace session (not every fetchGraph). */
+  const embeddingBackfillOnceRef = useRef(false);
   useEffect(() => {
     semanticBackfillOnceRef.current = false;
+    embeddingBackfillOnceRef.current = false;
   }, [workspace?.id]);
 
   const runSilentEmbeddingBackfill = useCallback(async (workspaceId, refreshGraph) => {
@@ -119,11 +122,14 @@ export default function useGraph() {
           })();
         });
       }
-      queueMicrotask(() => {
-        void runSilentEmbeddingBackfill(wsId, async () => {
-          await fetchGraph({ ...opts, skipEmbeddingBackcheck: true });
+      if (!embeddingBackfillOnceRef.current) {
+        embeddingBackfillOnceRef.current = true;
+        queueMicrotask(() => {
+          void runSilentEmbeddingBackfill(wsId, async () => {
+            await fetchGraph({ ...opts, skipEmbeddingBackcheck: true });
+          });
         });
-      });
+      }
     }
   }, [workspace, runSilentEmbeddingBackfill]);
 

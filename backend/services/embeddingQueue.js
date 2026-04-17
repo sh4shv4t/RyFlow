@@ -150,9 +150,8 @@ async function tick() {
       const hnswIdx = getHnswIndex();
       hnswIdx.upsert(job.workspaceId, nodeId, embedding);
 
-      // Auto-create semantic edges for any node with cosine similarity >= 0.72.
-      // This populates the 'semantic' edge type visible in the graph.
-      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 6, 0.72);
+      // Auto-create semantic edges: top-5 nearest neighbours with similarity floor 0.55.
+      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 5, 0.55);
       if (similar.length > 0) {
         const { v4: uuidv4 } = require('uuid');
         const checkEdge = db.prepare(

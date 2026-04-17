@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Zap, Loader2, Trash2, ChevronDown } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import useOllama from '../../hooks/useOllama';
 import useStore from '../../store/useStore';
 import toast from 'react-hot-toast';
@@ -35,6 +36,84 @@ function createMessage(role, content, extras = {}) {
   };
 }
 
+const markdownComponents = {
+  h1: ({ children }) => <h4 style={{ margin: '10px 0 6px', fontWeight: 600, color: 'inherit', fontSize: '15px' }}>{children}</h4>,
+  h2: ({ children }) => <h5 style={{ margin: '8px 0 4px', fontWeight: 600, color: 'inherit', fontSize: '14px' }}>{children}</h5>,
+  h3: ({ children }) => <h6 style={{ margin: '8px 0 4px', fontWeight: 600, color: 'inherit', fontSize: '13px' }}>{children}</h6>,
+  h4: () => null,
+  h5: () => null,
+  h6: () => null,
+  img: () => null,
+  p: ({ children }) => <p style={{ margin: '0 0 8px', lineHeight: 1.7, color: 'inherit' }}>{children}</p>,
+  ul: ({ children }) => <ul style={{ margin: '4px 0 8px', paddingLeft: '1.1rem', color: 'inherit' }}>{children}</ul>,
+  ol: ({ children }) => <ol style={{ margin: '4px 0 8px', paddingLeft: '1.1rem', color: 'inherit' }}>{children}</ol>,
+  li: ({ children }) => <li style={{ marginBottom: 4, color: 'inherit' }}>{children}</li>,
+  strong: ({ children }) => <strong style={{ fontWeight: 600, color: 'inherit' }}>{children}</strong>,
+  em: ({ children }) => <em style={{ color: 'inherit' }}>{children}</em>,
+  pre: ({ children }) => (
+    <pre
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 6,
+        padding: 12,
+        overflowX: 'auto',
+        margin: '8px 0',
+        color: 'inherit'
+      }}
+    >
+      {children}
+    </pre>
+  ),
+  code: ({ inline, children, ...props }) => {
+    if (inline) {
+      return (
+        <code
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 3,
+            padding: '1px 5px',
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 12,
+            color: 'inherit'
+          }}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code
+        style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 12,
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          display: 'block',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          color: 'inherit'
+        }}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  }
+};
+
+function AssistantMessageMarkdown({ text }) {
+  const src = typeof text === 'string' ? text : extractTextPreview(text, 2000);
+  return (
+    <div style={{ color: 'inherit' }}>
+      <ReactMarkdown components={markdownComponents}>{src}</ReactMarkdown>
+    </div>
+  );
+}
+
 export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewChat }) {
   const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
@@ -42,13 +121,12 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
   const [showTemplates, setShowTemplates] = useState(false);
   const [runtimeTemplates, setRuntimeTemplates] = useState(PROMPT_TEMPLATES);
   const [currentChatId, setCurrentChatId] = useState(null);
-  const [chatTitle, setChatTitle] = useState('New Chat');
-  const [titleGenerated, setTitleGenerated] = useState(false);
+  const [chatTitle, setChatTitle] = useState('');
   const messagesEndRef = useRef(null);
   const isSendingRef = useRef(false);
   const isCreatingRef = useRef(false);
   const { chatStream, loading, streamingText } = useOllama();
-  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace, setAiActive } = useStore();
+  const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace } = useStore();
 
   useEffect(() => {
     if (!workspace?.id) return;
@@ -65,13 +143,6 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
       });
   }, [workspace?.id]);
 
-  // Builds a fallback chat title from first user text.
-  const fallbackTitle = useCallback((text) => {
-    const value = String(text || '').trim();
-    if (!value) return 'New Chat';
-    return value.length > 50 ? `${value.slice(0, 50)}...` : value;
-  }, []);
-
   // Creates a chat record once (first-message flow).
   const createChatRecord = useCallback(async (userMessage) => {
     if (!workspace?.id) return null;
@@ -79,17 +150,15 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
 
     isCreatingRef.current = true;
     try {
-      const firstTitle = fallbackTitle(userMessage);
       const res = await axios.post('/api/chats', {
         workspace_id: workspace.id,
-        title: firstTitle,
-        messages: [],
+        messages: [{ role: 'user', content: userMessage }],
         model: selectedModel,
         rag_used: 0
       });
       const created = res.data;
       setCurrentChatId(created.id);
-      setChatTitle(created.title || firstTitle);
+      setChatTitle(created.title?.trim() || '');
       if (onChatCreated) onChatCreated(created);
       return created.id;
     } catch {
@@ -98,27 +167,28 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
     } finally {
       isCreatingRef.current = false;
     }
-  }, [workspace?.id, selectedModel, fallbackTitle, onChatCreated]);
+  }, [workspace?.id, selectedModel, onChatCreated]);
 
   // Persists updates for an already-created chat.
   const persistChatUpdate = useCallback(async (chatId, nextMessages, options = {}) => {
     if (!chatId || !workspace?.id) return;
-    await axios.put(`/api/chats/${chatId}`, {
+    const res = await axios.put(`/api/chats/${chatId}`, {
       workspace_id: workspace.id,
-      title: options.title || chatTitle,
       messages: nextMessages,
       model: selectedModel,
       rag_used: options.ragUsed ? 1 : 0
     });
-  }, [workspace?.id, chatTitle, selectedModel]);
+    const t = res.data?.title;
+    if (typeof t === 'string' && t.trim()) setChatTitle(t.trim());
+    return res.data;
+  }, [workspace?.id, selectedModel]);
 
   // Loads a selected chat session into the panel.
   const loadChat = useCallback(async (chatId) => {
     if (!chatId) {
       setMessages([]);
       setCurrentChatId(null);
-      setChatTitle('New Chat');
-      setTitleGenerated(false);
+      setChatTitle('');
       return;
     }
     try {
@@ -132,8 +202,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
         }));
       setMessages(hydrated);
       setCurrentChatId(res.data.id);
-      setChatTitle(res.data.title || 'New Chat');
-      setTitleGenerated(true);
+      setChatTitle(String(res.data.title || '').trim());
     } catch {
       toast.error('Failed to load chat');
     }
@@ -147,39 +216,6 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingText]);
-
-  // Auto-generates a concise chat title after first full exchange.
-  useEffect(() => {
-    const generateTitle = async () => {
-      if (titleGenerated || messages.length < 2 || !currentChatId) return;
-      const firstUser = messages.find((m) => m.role === 'user' && m.content);
-      if (!firstUser) return;
-      try {
-        setAiActive(true);
-        const res = await axios.post('/api/ai/chat', {
-          messages: [{
-            role: 'user',
-            content: `Generate a 4-6 word title for a conversation that starts with: '${firstUser.content}'. Return only the title, nothing else.`
-          }],
-          model: selectedModel,
-          workspace_id: null
-        });
-        const title = String(res.data.content || '').trim().replace(/^"|"$/g, '') || fallbackTitle(firstUser.content);
-        setChatTitle(title);
-        await axios.put(`/api/chats/${currentChatId}`, {
-          title,
-          messages,
-          model: selectedModel
-        });
-        setTitleGenerated(true);
-      } catch {
-        setTitleGenerated(true);
-      } finally {
-        setAiActive(false);
-      }
-    };
-    generateTitle();
-  }, [messages, titleGenerated, currentChatId, selectedModel, fallbackTitle, setAiActive]);
 
   // Sends a message to the LLM and streams the response
   const sendMessage = useCallback(async (text = null) => {
@@ -262,8 +298,7 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
           onClick={() => {
             setMessages([]);
             setCurrentChatId(null);
-            setChatTitle('New Chat');
-            setTitleGenerated(false);
+            setChatTitle('');
             onRequestNewChat && onRequestNewChat();
           }}
           style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
@@ -321,19 +356,23 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
                 color: 'var(--text-primary)'
               }}
             >
-              <p style={{
-                fontSize: 13,
-                lineHeight: 1.7,
-                color: 'var(--text-primary)',
-                margin: 0,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}>
-                {typeof msg.content === 'string'
-                  ? msg.content
-                  : extractTextPreview(msg.content, 2000)
-                }
-              </p>
+              {msg.role === 'assistant' ? (
+                <AssistantMessageMarkdown text={msg.content} />
+              ) : (
+                <p style={{
+                  fontSize: 13,
+                  lineHeight: 1.7,
+                  color: 'var(--text-primary)',
+                  margin: 0,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word'
+                }}>
+                  {typeof msg.content === 'string'
+                    ? msg.content
+                    : extractTextPreview(msg.content, 2000)
+                  }
+                </p>
+              )}
               {msg.role === 'assistant' && (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px', fontSize: '10px', color: 'var(--text-tertiary)' }}>
@@ -377,9 +416,8 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
             className="flex justify-start"
           >
             <div style={{ maxWidth: '80%', backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '16px', padding: '12px 16px', fontSize: '13px', color: 'var(--text-primary)', marginRight: '32px' }}>
-              <div className="whitespace-pre-wrap">
-                {streamingText}<span className="animate-pulse text-amd-red">▊</span>
-              </div>
+              <AssistantMessageMarkdown text={streamingText} />
+              <span className="animate-pulse text-amd-red">▊</span>
             </div>
           </motion.div>
         )}
