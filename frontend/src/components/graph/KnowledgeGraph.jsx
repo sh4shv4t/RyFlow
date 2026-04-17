@@ -260,27 +260,50 @@ export default function KnowledgeGraph() {
         .style('background', 'var(--bg-base)');
 
       const defs = svg.append('defs');
-      const pattern = defs
+      const gridSize = 36;
+      const lineOp = theme === 'light' ? 0.07 : 0.11;
+      const dotOp = theme === 'light' ? 0.1 : 0.14;
+      const bgPattern = defs
         .append('pattern')
-        .attr('id', 'ryflow-dot-grid')
+        .attr('id', 'ryflow-graph-bg')
         .attr('x', 0)
         .attr('y', 0)
-        .attr('width', 24)
-        .attr('height', 24)
+        .attr('width', gridSize)
+        .attr('height', gridSize)
         .attr('patternUnits', 'userSpaceOnUse');
-      pattern
+      // Subtle orthogonal grid (fixed in screen space — does not pan with the graph).
+      bgPattern
+        .append('line')
+        .attr('x1', 0)
+        .attr('y1', 0)
+        .attr('x2', 0)
+        .attr('y2', gridSize)
+        .attr('stroke', 'var(--border-default)')
+        .attr('stroke-width', 0.65)
+        .attr('stroke-opacity', lineOp);
+      bgPattern
+        .append('line')
+        .attr('x1', 0)
+        .attr('y1', 0)
+        .attr('x2', gridSize)
+        .attr('y2', 0)
+        .attr('stroke', 'var(--border-default)')
+        .attr('stroke-width', 0.65)
+        .attr('stroke-opacity', lineOp);
+      // Soft dot at cell corner for a bit of depth without noise.
+      bgPattern
         .append('circle')
-        .attr('cx', 0.8)
-        .attr('cy', 0.8)
-        .attr('r', 0.8)
-        .attr('fill', 'var(--border-default)')
-        .attr('fill-opacity', theme === 'light' ? 0.08 : 0.12);
+        .attr('cx', 1.2)
+        .attr('cy', 1.2)
+        .attr('r', 1.1)
+        .attr('fill', 'var(--text-tertiary)')
+        .attr('fill-opacity', dotOp);
 
       svg
         .append('rect')
         .attr('width', W)
         .attr('height', H)
-        .attr('fill', 'url(#ryflow-dot-grid)')
+        .attr('fill', 'url(#ryflow-graph-bg)')
         .attr('pointer-events', 'none');
 
       if (!nodes.length) {
