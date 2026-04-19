@@ -18,6 +18,8 @@
   --accent:         #E8000D;
   --accent-subtle:  rgba(232, 0, 13, 0.1);
   --accent-border:  rgba(232, 0, 13, 0.3);
+  /* Knowledge graph: inferred / LLM edges (violet, readable on dark base) */
+  --graph-edge-inferred: #9D8CFF;
   --success:        #3D9970;
   --warning:        #B85C00;
   --error:          #C0392B;
@@ -47,6 +49,7 @@
   --accent:         #CC0008;
   --accent-subtle:  rgba(204, 0, 8, 0.08);
   --accent-border:  rgba(204, 0, 8, 0.25);
+  --graph-edge-inferred: #6D5BD6;
 
   --status-success: #1A6B42;
   --status-warning: #8A4200;

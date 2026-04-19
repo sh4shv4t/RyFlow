@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS nodes (
   -- was previously TEXT (JSON array string)
   embedding BLOB,
   source_id TEXT,
+  degree_centrality INTEGER DEFAULT 0,
+  updated_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Ensure nodes are cleaned when a workspace is deleted.
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
@@ -92,7 +94,9 @@ CREATE TABLE IF NOT EXISTS edges (
   source_id TEXT NOT NULL,
   target_id TEXT NOT NULL,
   relationship_label TEXT,
+  edge_type TEXT DEFAULT 'default',
   weight REAL DEFAULT 1.0,
+  edge_weight REAL DEFAULT 1.0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   -- Keep edge references valid as nodes are removed.
   FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
@@ -223,6 +227,29 @@ CREATE TABLE IF NOT EXISTS doc_comments (
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
   FOREIGN KEY (parent_id) REFERENCES doc_comments(id) ON DELETE CASCADE
 );
+
+-- FTS5 full-text search for hybrid BM25 + vector retrieval (B3)
+-- Standalone FTS5 table (not external-content) because nodes.id is TEXT UUID,
+-- not an INTEGER rowid, so external-content mode is incompatible.
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+  node_id UNINDEXED,
+  title,
+  content,
+  tokenize = 'porter unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS nodes_ai AFTER INSERT ON nodes BEGIN
+  INSERT INTO nodes_fts(node_id, title, content) VALUES (new.id, new.title, new.content_summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS nodes_ad AFTER DELETE ON nodes BEGIN
+  DELETE FROM nodes_fts WHERE node_id = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS nodes_au AFTER UPDATE ON nodes BEGIN
+  DELETE FROM nodes_fts WHERE node_id = old.id;
+  INSERT INTO nodes_fts(node_id, title, content) VALUES (new.id, new.title, new.content_summary);
+END;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_document_versions_doc_version ON document_versions(document_id, version_number);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_workspace_name ON tags(workspace_id, name);

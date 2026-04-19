@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ryflow": {
+      "command": "node",
+      "args": ["./backend/mcp/server.js"]
+    }
+  }
+}

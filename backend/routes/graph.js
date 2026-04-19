@@ -4,6 +4,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { createNode, getGraph, addEdge, deleteNode, backfillKeywordEdges } = require('../services/graphService');
 const { semanticSearch, parseMetadata } = require('../services/embeddingService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 // GET /api/graph — Get full knowledge graph for a workspace
 router.get('/', (req, res) => {
@@ -27,8 +28,8 @@ router.get('/nodes', (req, res) => {
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
     const db = getDb();
     const nodes = (loadAll
-      ? db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC').all(workspace_id)
-      : db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?').all(workspace_id, limit)
+      ? db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC').all(workspace_id)
+      : db.prepare('SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?').all(workspace_id, limit)
     )
       .map((node) => ({ ...node, metadata: parseMetadata(node.metadata) }));
     res.json({ nodes });
@@ -48,13 +49,13 @@ router.get('/neighborhood', (req, res) => {
 
     const db = getDb();
     const allNodes = db.prepare(
-      'SELECT id, workspace_id, type, title, content_summary, metadata, source_id, created_at FROM nodes WHERE workspace_id = ?'
+      'SELECT id, workspace_id, type, title, content_summary, metadata, source_id, degree_centrality, updated_at, created_at FROM nodes WHERE workspace_id = ?'
     ).all(workspace_id);
     const nodeMap = new Map(allNodes.map((n) => [n.id, { ...n, metadata: parseMetadata(n.metadata) }]));
     if (!nodeMap.has(node_id)) return res.status(404).json({ error: 'Node not found' });
 
     const allEdges = db.prepare(
-      'SELECT e.* FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+      'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at FROM edges e JOIN nodes s ON s.id = e.source_id JOIN nodes t ON t.id = e.target_id WHERE s.workspace_id = ? AND t.workspace_id = ?'
     ).all(workspace_id, workspace_id);
 
     const adjacency = new Map();
@@ -108,7 +109,7 @@ router.get('/edges', (req, res) => {
     if (nodeIds.length > 0) {
       const placeholders = nodeIds.map(() => '?').join(',');
       edges = db.prepare(
-        `SELECT e.*
+        `SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at
          FROM edges e
          JOIN nodes s ON e.source_id = s.id
          JOIN nodes t ON e.target_id = t.id
@@ -119,11 +120,45 @@ router.get('/edges', (req, res) => {
       ).all(workspace_id, workspace_id, ...nodeIds, ...nodeIds);
     } else {
       edges = db.prepare(
-        'SELECT e.* FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
+        'SELECT e.id, e.source_id, e.target_id, e.relationship_label, e.edge_type, e.weight, e.edge_weight, e.created_at FROM edges e JOIN nodes s ON e.source_id = s.id JOIN nodes t ON e.target_id = t.id WHERE s.workspace_id = ? AND t.workspace_id = ?'
       ).all(workspace_id, workspace_id);
     }
 
     res.json({ edges });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/graph/nodes-without-embeddings — node ids missing embeddings (for silent backfill).
+router.get('/nodes-without-embeddings', (req, res) => {
+  try {
+    const { workspace_id } = req.query;
+    if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    const rows = db.prepare(
+      'SELECT id FROM nodes WHERE workspace_id = ? AND embedding IS NULL'
+    ).all(workspace_id);
+    res.json({ node_ids: rows.map((r) => r.id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/graph/enqueue-missing-embeddings — queue embedding jobs (idempotent enqueue).
+router.post('/enqueue-missing-embeddings', (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+    const db = getDb();
+    let ids = Array.isArray(req.body?.node_ids) ? req.body.node_ids.filter((id) => typeof id === 'string') : null;
+    if (!ids || ids.length === 0) {
+      ids = db.prepare('SELECT id FROM nodes WHERE workspace_id = ? AND embedding IS NULL').all(workspaceId).map((r) => r.id);
+    }
+    for (const id of ids) {
+      enqueueEmbeddingJob(id, workspaceId);
+    }
+    res.json({ success: true, queued: ids.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -183,7 +218,8 @@ router.post('/search', async (req, res) => {
       metadata: parseMetadata(r.metadata),
       source_id: r.source_id,
       score: r.score,
-      created_at: r.created_at
+      created_at: r.created_at,
+      updated_at: r.updated_at
     })) });
   } catch (err) {
     res.status(500).json({ error: 'Semantic search failed. Is Ollama running with nomic-embed-text?', details: err.message });
@@ -230,6 +266,63 @@ router.post('/backfill-keyword-edges', (req, res) => {
     if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
     const result = backfillKeywordEdges(workspaceId);
     return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/graph/backfill-semantic-edges
+// Scans all embedded nodes and creates 'semantic' edges for pairs among each
+// node's top-5 nearest neighbours with similarity >= 0.55. Safe to call repeatedly.
+router.post('/backfill-semantic-edges', (req, res) => {
+  try {
+    const workspaceId = req.body?.workspace_id || req.query?.workspace_id;
+    if (!workspaceId) return res.status(400).json({ error: 'workspace_id is required' });
+
+    const db = require('../db/database').getDb();
+    const hnswIdx = require('../services/hnswIndex');
+    const { parseEmbedding } = require('../services/embeddingService');
+    const { v4: uuidv4 } = require('uuid');
+
+    const rows = db.prepare(
+      'SELECT id, embedding FROM nodes WHERE workspace_id = ? AND embedding IS NOT NULL'
+    ).all(workspaceId);
+
+    if (rows.length === 0) {
+      return res.json({ success: true, created: 0, processed: 0, note: 'No embedded nodes found.' });
+    }
+
+    const checkEdge = db.prepare(
+      'SELECT id FROM edges WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?) LIMIT 1'
+    );
+    const insertEdge = db.prepare(
+      'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    const updateDeg = db.prepare(
+      `UPDATE nodes SET degree_centrality =
+         (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+       WHERE id = ?`
+    );
+
+    let created = 0;
+    for (const row of rows) {
+      const vec = parseEmbedding(row.embedding);
+      if (!vec || vec.length === 0) continue;
+      const similar = hnswIdx.findSimilar(workspaceId, vec, 5, 0.55);
+      for (const { nodeId: otherId, score } of similar) {
+        if (otherId === row.id) continue;
+        const exists = checkEdge.get(row.id, otherId, otherId, row.id);
+        if (!exists) {
+          const w = Math.round(score * 100) / 100;
+          insertEdge.run(uuidv4(), row.id, otherId, 'semantic similarity', 'semantic', w, score);
+          updateDeg.run(row.id);
+          updateDeg.run(otherId);
+          created += 1;
+        }
+      }
+    }
+
+    return res.json({ success: true, created, processed: rows.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

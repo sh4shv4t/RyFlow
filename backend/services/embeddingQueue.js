@@ -3,6 +3,8 @@
 // Lazy-require to avoid circular deps at module load
 const getOllama = () => require('./ollamaService');
 const getDatabase = () => require('../db/database');
+const getHnswIndex = () => require('./hnswIndex');
+const getLoadNodeContentForSummary = () => require('./embeddingService').loadNodeContentForSummary;
 
 const queue = [];
 let processing = false;
@@ -60,7 +62,7 @@ async function tick() {
 
     // Fetch node - may be null if deleted
     const node = db.prepare(
-      'SELECT id, title, type, content_summary, metadata FROM nodes WHERE id = ?'
+      'SELECT id, title, type, content_summary, metadata, source_id FROM nodes WHERE id = ?'
     ).get(nodeId);
 
     // Node gone - blacklist and move on silently
@@ -97,9 +99,32 @@ async function tick() {
       return;
     }
 
-    // Call Ollama
+    const loadNodeContentForSummary = getLoadNodeContentForSummary();
+    const rawForSummary = loadNodeContentForSummary(db, node);
+    let textToEmbed = text;
+
+    if (rawForSummary.length >= 50) {
+      const ollama = getOllama();
+      try {
+        const truncated = rawForSummary.slice(0, 1500);
+        const prompt =
+          'Summarise the following in 2-3 sentences, focusing on its core topic and key concepts. Be concise and factual. Do not add commentary.\n\nContent:\n' +
+          truncated;
+        const summary = String(
+          (await ollama.chat([{ role: 'user', content: prompt }], 'phi3:mini', false, 60000)) || ''
+        ).trim();
+        if (summary) {
+          textToEmbed = summary;
+          db.prepare('UPDATE nodes SET content_summary = ? WHERE id = ?').run(summary, nodeId);
+        }
+      } catch {
+        // Fall back to composite embed text
+      }
+    }
+
+    // Call Ollama (nomic-embed-text)
     const ollama = getOllama();
-    const embedding = await ollama.embed(text);
+    const embedding = await ollama.embed(textToEmbed);
 
     if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
       // Ollama returned nothing - retry later
@@ -119,6 +144,41 @@ async function tick() {
     }
 
     db.prepare('UPDATE nodes SET embedding = ? WHERE id = ?').run(buf, nodeId);
+
+    // Update HNSW index with the new embedding (best-effort; never blocks the queue).
+    try {
+      const hnswIdx = getHnswIndex();
+      hnswIdx.upsert(job.workspaceId, nodeId, embedding);
+
+      // Auto-create semantic edges: top-5 nearest neighbours with similarity floor 0.55.
+      const similar = hnswIdx.findSimilar(job.workspaceId, embedding, 5, 0.55);
+      if (similar.length > 0) {
+        const { v4: uuidv4 } = require('uuid');
+        const checkEdge = db.prepare(
+          'SELECT id FROM edges WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?) LIMIT 1'
+        );
+        const insertEdge = db.prepare(
+          'INSERT INTO edges (id, source_id, target_id, relationship_label, edge_type, weight, edge_weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        const updateDeg = db.prepare(
+          `UPDATE nodes SET degree_centrality =
+             (SELECT COUNT(*) FROM edges WHERE source_id = nodes.id OR target_id = nodes.id)
+           WHERE id = ?`
+        );
+        for (const { nodeId: otherId, score } of similar) {
+          if (otherId === nodeId) continue;
+          const exists = checkEdge.get(nodeId, otherId, otherId, nodeId);
+          if (!exists) {
+            const w = Math.round(score * 100) / 100;
+            insertEdge.run(uuidv4(), nodeId, otherId, 'semantic similarity', 'semantic', w, score);
+            updateDeg.run(nodeId);
+            updateDeg.run(otherId);
+          }
+        }
+      }
+    } catch {
+      // HNSW/semantic-edge failure is non-fatal.
+    }
 
   } catch (err) {
     // Blacklist this node - never try it again

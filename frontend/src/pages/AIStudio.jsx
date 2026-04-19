@@ -271,7 +271,13 @@ export default function AIStudio() {
                     marginBottom: '3px'
                   }}
                 >
-                  {chat.title || getItemTitle(chat) || 'New Chat'}
+                  {(() => {
+                    const label = String(chat.title || getItemTitle(chat) || '').trim();
+                    const untitled = !label || label === 'New Chat';
+                    return untitled
+                      ? <span style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>Untitled chat</span>
+                      : label;
+                  })()}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', backgroundColor: 'var(--bg-overlay)', color: 'var(--text-tertiary)', padding: '1px 5px', borderRadius: '2px' }}>{chat.model}</span>

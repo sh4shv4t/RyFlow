@@ -16,12 +16,24 @@ function parseMessages(messagesText) {
   }
 }
 
-// Derives a fallback chat title from the first user message.
-function deriveChatTitle(title, messages) {
-  if (title && String(title).trim()) return String(title).trim();
-  const firstUser = (messages || []).find((m) => m.role === 'user' && m.content);
-  const base = firstUser?.content ? String(firstUser.content).trim() : 'Untitled chat';
-  return base.length > 50 ? `${base.slice(0, 50)}...` : base;
+function formatSessionTitleFromUserContent(content) {
+  const base = String(content || '').trim();
+  if (!base) return '';
+  return base.length > 60 ? `${base.slice(0, 60)}...` : base;
+}
+
+function isTitlePlaceholder(title) {
+  const t = title == null ? '' : String(title);
+  return !t.trim() || t === 'New Chat';
+}
+
+// Title shown on the knowledge-graph node (session list title comes from DB `title`).
+function resolveChatTitleForNode(chat) {
+  const messages = parseMessages(chat.messages);
+  if (!isTitlePlaceholder(chat.title)) return String(chat.title).trim();
+  const firstUser = messages.find((m) => m.role === 'user' && String(m.content || '').trim());
+  if (firstUser) return formatSessionTitleFromUserContent(firstUser.content);
+  return 'Untitled chat';
 }
 
 // Creates AI chat node metadata for graph search and detail views.
@@ -37,7 +49,7 @@ function buildChatMetadata(chat) {
 async function upsertChatNode(chat) {
   const db = getDb();
   const messages = parseMessages(chat.messages);
-  const title = deriveChatTitle(chat.title, messages);
+  const title = resolveChatTitleForNode(chat);
   const summary = extractLastUserMessage(messages);
   const metadata = buildChatMetadata(chat);
   const existing = db.prepare("SELECT id FROM nodes WHERE source_id = ? AND type = 'ai_chat'").get(chat.id);
@@ -73,12 +85,13 @@ router.get('/', (req, res) => {
 // POST /api/chats — create a new persistent chat session
 router.post('/', async (req, res) => {
   try {
-    const { workspace_id, title, messages, model, rag_used } = req.body;
+    const { workspace_id, messages, model, rag_used } = req.body;
     if (!workspace_id) return res.status(400).json({ error: 'workspace_id is required' });
 
     const id = uuidv4();
     const safeMessages = Array.isArray(messages) ? messages : [];
-    const resolvedTitle = deriveChatTitle(title, safeMessages);
+    const firstUser = safeMessages.find((m) => m.role === 'user' && String(m.content || '').trim());
+    const resolvedTitle = firstUser ? formatSessionTitleFromUserContent(firstUser.content) : '';
     const payload = {
       id,
       workspace_id,
@@ -123,7 +136,16 @@ router.put('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Chat not found' });
 
     const nextMessages = Array.isArray(messages) ? messages : parseMessages(existing.messages);
-    const nextTitle = deriveChatTitle(title || existing.title, nextMessages);
+    const firstUser = nextMessages.find((m) => m.role === 'user' && String(m.content || '').trim());
+
+    let nextTitle = existing.title;
+    if (isTitlePlaceholder(existing.title) && firstUser) {
+      nextTitle = formatSessionTitleFromUserContent(firstUser.content);
+    }
+    if (title !== undefined && title !== null) {
+      const t = String(title).trim();
+      if (t && !isTitlePlaceholder(t)) nextTitle = t;
+    }
     const nextModel = model || existing.model || 'phi3:mini';
     const nextRag = rag_used === undefined ? Number(existing.rag_used || 0) : (rag_used ? 1 : 0);
 

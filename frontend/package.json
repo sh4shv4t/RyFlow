@@ -35,6 +35,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
+    "react-markdown": "^9.0.1",
     "react-router-dom": "^6.21.3",
     "ryflow": "file:..",
     "tesseract.js": "^7.0.0",
