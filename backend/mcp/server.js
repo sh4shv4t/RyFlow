@@ -65,7 +65,7 @@ function hasColumn(db, table, column) {
 }
 
 function mapFilterType(t) {
-  if (t === 'document') return 'doc';
+  if (t === 'document') return 'document';
   return t;
 }
 
@@ -341,7 +341,7 @@ function registerTools(server) {
     {
       title: 'List nodes',
       description:
-        "List nodes in the workspace (optional type: document | task | code | canvas | ai_chat). Document maps to stored type 'doc'.",
+        "List nodes in the workspace (optional type: document | task | code | canvas | ai_chat).",
       inputSchema: z.object({
         type: z.enum(['document', 'task', 'code', 'canvas', 'ai_chat']).optional()
       })

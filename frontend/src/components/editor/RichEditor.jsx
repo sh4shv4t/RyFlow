@@ -388,7 +388,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
     try {
       const nodesRes = await apiFetch(`/api/graph/nodes?workspace_id=${workspaceId}&all=1`);
       const nodesData = await nodesRes.json().catch(() => ({}));
-      const node = (nodesData?.nodes || []).find((n) => n.type === 'doc' && n.source_id === doc.id);
+      const node = (nodesData?.nodes || []).find((n) => n.type === 'document' && n.source_id === doc.id);
 
       if (!node?.id) {
         setBacklinks({ incoming: [], outgoing: [], total: 0 });
@@ -871,7 +871,7 @@ export default function RichEditor({ doc, workspaceId, onDocUpdate }) {
               onClose={() => setShowBacklinks(false)}
               onOpenNode={(entry) => {
                 if (!entry) return;
-                if (entry.type === 'doc' && entry.source_id) navigate(`/editor/${entry.source_id}`);
+                if (entry.type === 'document' && entry.source_id) navigate(`/editor/${entry.source_id}`);
                 else if (entry.type === 'code') navigate(entry.source_id ? `/code/${entry.source_id}` : '/code');
                 else if (entry.type === 'canvas') navigate(entry.source_id ? `/canvas/${entry.source_id}` : '/canvas');
               }}

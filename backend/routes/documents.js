@@ -34,7 +34,7 @@ function appendTagsToDocuments(db, docs = []) {
      FROM nodes n
      JOIN node_tags nt ON nt.node_id = n.id
      JOIN tags t ON t.id = nt.tag_id
-     WHERE n.type = 'doc' AND n.source_id IN (${placeholders})`
+     WHERE n.type = 'document' AND n.source_id IN (${placeholders})`
   ).all(...docs.map((d) => d.id));
 
   rows.forEach((row) => {
@@ -60,7 +60,7 @@ function saveVersionSnapshot(db, doc, editorId) {
 }
 
 function updateDocNode(db, documentId, workspaceId, title, content, metadata) {
-  const node = db.prepare('SELECT id, metadata FROM nodes WHERE source_id = ? AND type = ?').get(documentId, 'doc');
+  const node = db.prepare('SELECT id, metadata FROM nodes WHERE source_id = ? AND type = ?').get(documentId, 'document');
   if (!node) return null;
 
   const tags = listNodeTags(db, node.id);
@@ -168,7 +168,7 @@ router.get('/daily', async (req, res) => {
         is_daily_note: true,
         daily_note_date: `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-${day}`
       };
-      await createNode(workspace_id, 'doc', title, extractPlainText(emptyContent, 200), id, metadata);
+      await createNode(workspace_id, 'document', title, extractPlainText(emptyContent, 200), id, metadata);
       doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(id);
     }
 
@@ -231,7 +231,7 @@ router.post('/', async (req, res) => {
         };
         const createdNode = await createNode(
           workspace_id,
-          'doc',
+          'document',
           title,
           extractPlainText(content || '', 200),
           id,
@@ -391,7 +391,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM doc_comments WHERE document_id = ?').run(id);
 
     // Clean up graph node
-    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(id, 'doc');
+    const node = db.prepare('SELECT id FROM nodes WHERE source_id = ? AND type = ?').get(id, 'document');
     if (node) {
       db.prepare('DELETE FROM edges WHERE source_id = ? OR target_id = ?').run(node.id, node.id);
       db.prepare('DELETE FROM nodes WHERE id = ?').run(node.id);

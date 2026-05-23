@@ -42,8 +42,6 @@ function edgeColourForType(et) {
 }
 
 function normalizeType(type) {
-  if (type === 'docs') return 'document';
-  if (type === 'doc') return 'document';
   if (type === 'tasks') return 'task';
   return type || 'document';
 }

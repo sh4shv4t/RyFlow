@@ -433,7 +433,7 @@ export default function CodeEditorPage() {
               onOpenNode={(entry) => {
                 const sid = entry?.source_id;
                 if (!sid) return;
-                if (entry.type === 'doc') window.location.href = `/editor/${sid}`;
+                if (entry.type === 'document') window.location.href = `/editor/${sid}`;
                 else if (entry.type === 'task') window.location.href = '/tasks';
                 else if (entry.type === 'code') window.location.href = `/code/${sid}`;
                 else if (entry.type === 'canvas') window.location.href = `/canvas/${sid}`;
