@@ -131,7 +131,10 @@ export default function Home() {
   }, [workspace?.id]);
 
   const handleImportFolder = useCallback(async () => {
-    if (!workspace?.id) return;
+    if (!workspace?.id) {
+      toast.error('Open or create a workspace first');
+      return;
+    }
     if (!window.electronAPI?.pickFolder) {
       toast.error('Folder import requires the desktop app');
       return;
@@ -154,13 +157,12 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Import failed');
       toast.success(`Imported ${data.documents || 0} docs, ${data.code || 0} code files`);
-      fetchDashboard().catch(() => {});
     } catch (err) {
       toast.error(err.message || 'Import failed');
     } finally {
       setImportLoading(false);
     }
-  }, [fetchDashboard, user?.id, workspace?.id]);
+  }, [user?.id, workspace?.id]);
 
   useEffect(() => {
     fetchDashboard().catch(() => {});

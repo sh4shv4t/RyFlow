@@ -1,10 +1,11 @@
-// One-time folder import — copies local files into workspace DB (no disk sync).
+// One-time folder import — copies local files into the active workspace DB (no disk sync).
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { getDb, getActiveWorkspaceId, switchWorkspace } = require('../db/database');
-const { createNode, extractPlainText } = require('../services/graphService');
+const { getDb, getActiveWorkspaceId } = require('../db/database');
+const { extractPlainText } = require('../services/graphService');
+const { enqueueEmbeddingJob } = require('../services/embeddingQueue');
 
 const router = express.Router();
 
@@ -111,12 +112,35 @@ function walkDir(rootPath, files = []) {
   return files;
 }
 
-// POST /api/import/folder — import all supported files under root_path into workspace.
-router.post('/folder', async (req, res) => {
+// Inserts a graph node and queues embedding — no LLM edges or workspace switching.
+function insertGraphNode(db, workspaceId, type, title, contentSummary, sourceId, metadata) {
+  const nodeId = uuidv4();
+  const metadataText = metadata ? JSON.stringify(metadata) : null;
+  const normalizedSummary = type === 'code'
+    ? String(contentSummary || '').slice(0, 200)
+    : extractPlainText(contentSummary, 200);
+
+  db.prepare(
+    'INSERT INTO nodes (id, workspace_id, type, title, content_summary, metadata, source_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)'
+  ).run(nodeId, workspaceId, type, title, normalizedSummary || '', metadataText, sourceId);
+
+  enqueueEmbeddingJob(nodeId, workspaceId);
+}
+
+// POST /api/import/folder — import files into the currently active workspace only.
+router.post('/folder', (req, res) => {
   try {
     const { workspace_id, root_path, created_by } = req.body || {};
     if (!workspace_id || !root_path) {
       return res.status(400).json({ error: 'workspace_id and root_path are required' });
+    }
+
+    const activeId = getActiveWorkspaceId();
+    if (!activeId) {
+      return res.status(400).json({ error: 'No active workspace. Open or create a workspace first.' });
+    }
+    if (activeId !== workspace_id) {
+      return res.status(400).json({ error: 'workspace_id does not match the active workspace' });
     }
 
     const resolvedRoot = path.resolve(String(root_path));
@@ -130,14 +154,9 @@ router.post('/folder', async (req, res) => {
       return res.status(400).json({ error: 'root_path must be a directory' });
     }
 
-    if (getActiveWorkspaceId() !== workspace_id) {
-      switchWorkspace(workspace_id);
-    }
-
     const db = getDb();
     const createdBy = resolveValidUserId(db, created_by, workspace_id);
     const filePaths = walkDir(resolvedRoot);
-    const relativeRoot = resolvedRoot;
 
     let documents = 0;
     let code = 0;
@@ -151,7 +170,7 @@ router.post('/folder', async (req, res) => {
         continue;
       }
 
-      const relativeTitle = path.relative(relativeRoot, filePath).split(path.sep).join('/');
+      const relativeTitle = path.relative(resolvedRoot, filePath).split(path.sep).join('/');
       let rawContent;
       try {
         rawContent = fs.readFileSync(filePath, 'utf8');
@@ -172,11 +191,12 @@ router.post('/folder', async (req, res) => {
              VALUES (?, ?, ?, ?, ?, ?, ?)`
           ).run(id, workspace_id, relativeTitle, content, createdBy, now, now);
 
-          await createNode(
+          insertGraphNode(
+            db,
             workspace_id,
             'document',
             relativeTitle,
-            extractPlainText(content, 200),
+            content,
             id,
             {
               ...buildDocMetadata(content, createdBy),
@@ -193,14 +213,14 @@ router.post('/folder', async (req, res) => {
           ).run(fileId, workspace_id, relativeTitle, rawContent, language, createdBy);
 
           const summary = extractPlainText(rawContent, 200);
-          const metadata = buildCodeMetadata({ content: rawContent, language });
-          await createNode(
+          insertGraphNode(
+            db,
             workspace_id,
             'code',
             `${relativeTitle} (${language})`,
             summary,
             fileId,
-            metadata
+            buildCodeMetadata({ content: rawContent, language })
           );
           code += 1;
         }

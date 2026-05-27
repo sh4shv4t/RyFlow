@@ -10,6 +10,7 @@ function getStoredJoinCode(workspaceId) {
 // Decides whether this route should never be proxied.
 function shouldSkipProxy(urlPath) {
   return String(urlPath || '').startsWith('/api/workspaces')
+    || String(urlPath || '').startsWith('/api/import')
     || String(urlPath || '').startsWith('/api/system/info')
     || String(urlPath || '').startsWith('/api/health')
     || String(urlPath || '').startsWith('/api/peers');
