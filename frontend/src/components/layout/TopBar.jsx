@@ -12,6 +12,12 @@ export default function TopBar() {
   const setTheme = useStore((s) => s.setTheme);
   const [searchHover, setSearchHover] = useState(false);
 
+  useEffect(() => {
+    if (window?.electronAPI?.setTitleBarTheme) {
+      window.electronAPI.setTitleBarTheme(theme);
+    }
+  }, [theme]);
+
   // Fetch AMD/system status once and rely on shared status cache.
   useEffect(() => {
     const fetchStatus = async () => {
