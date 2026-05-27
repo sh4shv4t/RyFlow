@@ -44,7 +44,7 @@ function buildEmbedText(node = {}) {
     if (metadata.rag_used !== undefined) parts.push(`RAG Used: ${Boolean(metadata.rag_used)}`);
   }
 
-  if (node.type === 'doc') {
+  if (node.type === 'document') {
     if (metadata.word_count !== undefined) parts.push(`Word Count: ${metadata.word_count}`);
     if (metadata.last_editor) parts.push(`Last Editor: ${metadata.last_editor}`);
     if (metadata.is_daily_note) parts.push('Daily Note: true');
@@ -323,7 +323,7 @@ function loadNodeContentForSummary(db, node) {
   const { type, source_id: sid, title, content_summary: cs } = node;
   let raw = '';
   try {
-    if (type === 'doc' && sid) {
+    if (type === 'document' && sid) {
       const row = db.prepare('SELECT content FROM documents WHERE id = ?').get(sid);
       raw = extractPlainFromStoredContent(row?.content, 5000);
     } else if (type === 'task' && sid) {

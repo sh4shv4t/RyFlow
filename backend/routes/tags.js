@@ -34,7 +34,7 @@ function ensureTagTables(db) {
 
 function normalizeType(type) {
   const value = String(type || '').toLowerCase();
-  if (value === 'document' || value === 'docs') return 'doc';
+  if (value === 'document' || value === 'docs' || value === 'doc') return 'document';
   if (value === 'tasks') return 'task';
   return value;
 }

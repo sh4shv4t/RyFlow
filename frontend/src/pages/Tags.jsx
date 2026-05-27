@@ -20,7 +20,7 @@ const TYPE_OPTIONS = [
 const TAG_PRESET_COLORS = ['#64748b', '#E8000D', '#FF6B00', '#00C853', '#3B82F6', '#8B5CF6', '#F59E0B'];
 
 function targetPathForItem(item) {
-  if (item.type === 'doc') return item.source_id ? `/editor/${item.source_id}` : '/documents';
+  if (item.type === 'document') return item.source_id ? `/editor/${item.source_id}` : '/documents';
   if (item.type === 'task') return '/tasks';
   if (item.type === 'code') return item.source_id ? `/code/${item.source_id}` : '/code';
   if (item.type === 'canvas') return item.source_id ? `/canvas/${item.source_id}` : '/canvas';

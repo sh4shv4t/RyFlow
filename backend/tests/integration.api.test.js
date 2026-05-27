@@ -164,7 +164,7 @@ test('tags create/assign/filter/delete flow works', async () => {
     method: 'POST',
     body: JSON.stringify({
       workspace_id: workspaceId,
-      type: 'doc',
+      type: 'document',
       source_id: docId,
       tag_ids: [tagId]
     })
@@ -173,7 +173,7 @@ test('tags create/assign/filter/delete flow works', async () => {
   assert.equal(assign.res.status, 200);
   assert.equal(assign.body?.success, true);
 
-  const bySource = await api(`/api/tags/by-source?workspace_id=${workspaceId}&type=doc&source_id=${docId}`);
+  const bySource = await api(`/api/tags/by-source?workspace_id=${workspaceId}&type=document&source_id=${docId}`);
   assert.equal(bySource.res.status, 200);
   const sourceTags = Array.isArray(bySource.body?.tags) ? bySource.body.tags : [];
   assert.ok(sourceTags.some((t) => t.id === tagId), 'created tag should appear in by-source response');

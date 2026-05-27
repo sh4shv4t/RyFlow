@@ -34,7 +34,7 @@ function getDirSize(dirPath) {
 
 // Builds full workspace statistics payload across feature areas.
 function buildWorkspaceStats(db, workspaceId) {
-  const docRows = db.prepare("SELECT metadata, created_at FROM nodes WHERE workspace_id = ? AND type = 'doc'").all(workspaceId);
+  const docRows = db.prepare("SELECT metadata, created_at FROM nodes WHERE workspace_id = ? AND type = 'document'").all(workspaceId);
   const totalWords = docRows.reduce((sum, row) => sum + Number(parseMetadata(row.metadata).word_count || 0), 0);
   const lastDocCreated = db.prepare('SELECT created_at FROM documents WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 1').get(workspaceId)?.created_at || null;
 

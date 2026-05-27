@@ -43,7 +43,7 @@ const navSections = [
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { workspace, remoteMode, setRemoteMode, user } = useStore();
+  const { workspace, remoteMode, setRemoteMode, user, peers } = useStore();
   const [workspaceHover, setWorkspaceHover] = useState(false);
   const [hoveredNav, setHoveredNav] = useState('');
   const [settingsHover, setSettingsHover] = useState(false);
@@ -181,7 +181,7 @@ export default function Sidebar() {
               style={{
                 fontSize: '11px',
                 color: 'var(--text-secondary)',
-                maxWidth: '140px',
+                maxWidth: '120px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap'
@@ -191,6 +191,31 @@ export default function Sidebar() {
             </span>
           ) : (
             <SidebarWorkspaceSkeleton />
+          )}
+          {peers.length > 0 && (
+            <span
+              title={`${peers.length} peer${peers.length !== 1 ? 's' : ''} online`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '2px',
+                fontSize: '10px',
+                color: 'var(--accent)',
+                flexShrink: 0
+              }}
+            >
+              <span
+                style={{
+                  width: '5px',
+                  height: '5px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--accent)',
+                  display: 'inline-block',
+                  flexShrink: 0
+                }}
+              />
+              {peers.length}
+            </span>
           )}
           <ChevronDown size={10} color="var(--text-tertiary)" />
         </button>

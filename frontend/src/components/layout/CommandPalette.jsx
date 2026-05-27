@@ -6,7 +6,7 @@ import { Command, FileText, CheckSquare, Code2, PencilRuler, Cpu, Search } from 
 import useStore from '../../store/useStore';
 
 function iconForType(type) {
-  if (type === 'doc') return FileText;
+  if (type === 'document') return FileText;
   if (type === 'task') return CheckSquare;
   if (type === 'code') return Code2;
   if (type === 'canvas') return PencilRuler;
@@ -64,7 +64,7 @@ export default function CommandPalette() {
 
   const openResult = (item) => {
     if (!item) return;
-    if (item.type === 'doc') navigate(item.source_id ? `/editor/${item.source_id}` : '/documents');
+    if (item.type === 'document') navigate(item.source_id ? `/editor/${item.source_id}` : '/documents');
     else if (item.type === 'task') navigate('/tasks');
     else if (item.type === 'code') navigate(item.source_id ? `/code/${item.source_id}` : '/code');
     else if (item.type === 'canvas') navigate(item.source_id ? `/canvas/${item.source_id}` : '/canvas');

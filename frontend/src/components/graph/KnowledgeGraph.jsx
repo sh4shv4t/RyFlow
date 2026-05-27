@@ -42,8 +42,6 @@ function edgeColourForType(et) {
 }
 
 function normalizeType(type) {
-  if (type === 'docs') return 'document';
-  if (type === 'doc') return 'document';
   if (type === 'tasks') return 'task';
   return type || 'document';
 }
@@ -362,12 +360,25 @@ export default function KnowledgeGraph() {
 
       // F3 — zoom: do not call React setState here (was causing a full re-render every frame).
       // Label opacity updates are cheap DOM writes only.
-      const zoomBehavior = d3.zoom().scaleExtent([0.2, 6]).on('zoom', (event) => {
-        g.attr('transform', event.transform);
-        const k = event.transform.k;
-        zoomKRef.current = k;
-        if (labelsRef.current) applyLabelVisibility(k, labelsRef.current, degreeMap, false);
-      });
+      const zoomBehavior = d3.zoom()
+        .scaleExtent([0.08, 5])
+        .filter(function(event) {
+          // Allow all non-wheel events (drag, programmatic, double-click).
+          if (event.type !== 'wheel') return true;
+          // Only zoom via scroll when Ctrl is held — matches browser pinch-zoom convention.
+          return event.ctrlKey;
+        })
+        .wheelDelta(function(event) {
+          // D3 default is ~0.003 per tick which is too aggressive.
+          // 0.002 gives a smooth, controlled zoom per scroll tick.
+          return -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002);
+        })
+        .on('zoom', (event) => {
+          g.attr('transform', event.transform);
+          const k = event.transform.k;
+          zoomKRef.current = k;
+          if (labelsRef.current) applyLabelVisibility(k, labelsRef.current, degreeMap, false);
+        });
       zoomRef.current = zoomBehavior;
       svg.call(zoomBehavior);
 

@@ -281,7 +281,7 @@ async function createWindow() {
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     titleBarOverlay: process.platform === 'win32'
-      ? { color: '#1A1A1A', symbolColor: '#F0F0F0', height: 40 }
+      ? { color: '#F7F6F2', symbolColor: '#1C1C1A', height: 40 }
       : false,
     backgroundColor: '#111111',
     show: false,
@@ -364,6 +364,19 @@ ipcMain.on('window-close', () => {
 
 ipcMain.handle('window-is-maximized', () => {
   return mainWindow ? mainWindow.isMaximized() : false;
+});
+
+ipcMain.on('window-set-titlebar-theme', (_event, theme) => {
+  if (!mainWindow || process.platform !== 'win32') return;
+  const isLight = String(theme).toLowerCase() === 'light';
+  const overlay = isLight
+    ? { color: '#F7F6F2', symbolColor: '#1C1C1A', height: 40 }
+    : { color: '#1A1A1A', symbolColor: '#F0F0F0', height: 40 };
+  try {
+    mainWindow.setTitleBarOverlay(overlay);
+  } catch (err) {
+    console.warn('[electron] Failed to set title bar overlay:', err.message);
+  }
 });
 
 app.whenReady().then(async () => {

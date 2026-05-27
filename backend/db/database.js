@@ -120,6 +120,16 @@ function initializeSchema(db) {
     console.error('[DB] Could not backfill nodes.updated_at:', err.message);
   }
 
+  // One-time migration: unify legacy graph node type 'doc' → 'document'.
+  try {
+    const migrated = db.prepare("UPDATE nodes SET type = 'document' WHERE type = 'doc'").run();
+    if (migrated.changes > 0) {
+      console.log(`[DB] Migrated ${migrated.changes} node(s) from type 'doc' to 'document'`);
+    }
+  } catch (err) {
+    console.error('[DB] Could not migrate nodes.type doc → document:', err.message);
+  }
+
   // One-time FTS5 bootstrap: populate nodes_fts for pre-existing nodes.
   try {
     db.prepare(
