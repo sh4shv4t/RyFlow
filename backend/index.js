@@ -215,6 +215,7 @@ app.use('/api/canvas', require('./routes/canvas'));
 app.use('/api/chats', require('./routes/chats'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/workspaces', require('./routes/workspaces'));
+app.use('/api/import', require('./routes/folderImport'));
 app.use('/api/comments', require('./routes/comments'));
 app.use('/api/tags', require('./routes/tags'));
 

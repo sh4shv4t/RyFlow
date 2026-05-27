@@ -4,9 +4,10 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, CheckSquare, Code2, PencilRuler, MessageSquare,
-  AlertCircle, Mic
+  AlertCircle, Mic, FolderOpen
 } from 'lucide-react';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/apiClient';
 import useStore from '../store/useStore';
 import PeerList from '../components/workspace/PeerList';
@@ -48,6 +49,7 @@ export default function Home() {
   const [briefingSpeaking, setBriefingSpeaking] = useState(false);
   const [briefingText, setBriefingText] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   // Updates the live clock every minute.
   useEffect(() => {
@@ -127,6 +129,38 @@ export default function Home() {
       setDashboardLoading(false);
     }
   }, [workspace?.id]);
+
+  const handleImportFolder = useCallback(async () => {
+    if (!workspace?.id) return;
+    if (!window.electronAPI?.pickFolder) {
+      toast.error('Folder import requires the desktop app');
+      return;
+    }
+
+    const rootPath = await window.electronAPI.pickFolder();
+    if (!rootPath) return;
+
+    setImportLoading(true);
+    try {
+      const res = await apiFetch('/api/import/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspace.id,
+          root_path: rootPath,
+          created_by: user?.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      toast.success(`Imported ${data.documents || 0} docs, ${data.code || 0} code files`);
+      fetchDashboard().catch(() => {});
+    } catch (err) {
+      toast.error(err.message || 'Import failed');
+    } finally {
+      setImportLoading(false);
+    }
+  }, [fetchDashboard, user?.id, workspace?.id]);
 
   useEffect(() => {
     fetchDashboard().catch(() => {});
@@ -216,7 +250,7 @@ export default function Home() {
               { label: 'New Doc', icon: FileText, onClick: () => navigate('/documents'), accent: '#E8000D' },
               { label: 'New Task', icon: CheckSquare, onClick: () => navigate('/tasks'), accent: '#FF6B00' },
               { label: 'Ask AI', icon: MessageSquare, onClick: () => navigate('/ai'), accent: '#8B5CF6' },
-              { label: 'Voice Note', icon: Mic, onClick: () => navigate('/ai'), accent: '#3D9970' }
+              { label: importLoading ? 'Importing...' : 'Import Folder', icon: FolderOpen, onClick: handleImportFolder, accent: '#3D9970' }
             ].map((action) => {
               const ActionIcon = action.icon;
               return (
