@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, CheckSquare, Code2, PencilRuler, MessageSquare,
-  AlertCircle, Mic, FolderOpen
+  AlertCircle, Mic, FolderOpen, GitBranch
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -50,6 +50,9 @@ export default function Home() {
   const [briefingText, setBriefingText] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [gitModalOpen, setGitModalOpen] = useState(false);
+  const [gitUrl, setGitUrl] = useState('');
+  const [gitLoading, setGitLoading] = useState(false);
 
   // Updates the live clock every minute.
   useEffect(() => {
@@ -130,6 +133,19 @@ export default function Home() {
     }
   }, [workspace?.id]);
 
+  const showImportResult = useCallback((data, label) => {
+    const docs = data.documents || 0;
+    const codeCount = data.code || 0;
+    const skipped = data.skipped || 0;
+    const failed = Array.isArray(data.errors) ? data.errors.length : 0;
+    let message = `${label}: ${docs} docs, ${codeCount} code files`;
+    if (skipped > 0) message += ` (${skipped} skipped)`;
+    toast.success(message);
+    if (failed > 0) {
+      toast(`${failed} file(s) could not be imported`, { icon: '⚠️' });
+    }
+  }, []);
+
   const handleImportFolder = useCallback(async () => {
     if (!workspace?.id) {
       toast.error('Open or create a workspace first');
@@ -156,13 +172,47 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Import failed');
-      toast.success(`Imported ${data.documents || 0} docs, ${data.code || 0} code files`);
+      showImportResult(data, 'Imported');
     } catch (err) {
       toast.error(err.message || 'Import failed');
     } finally {
       setImportLoading(false);
     }
-  }, [user?.id, workspace?.id]);
+  }, [showImportResult, user?.id, workspace?.id]);
+
+  const handleCloneGitRepo = useCallback(async () => {
+    const url = gitUrl.trim();
+    if (!url) {
+      toast.error('Enter a repository URL');
+      return;
+    }
+    if (!workspace?.id) {
+      toast.error('Open or create a workspace first');
+      return;
+    }
+
+    setGitLoading(true);
+    try {
+      const res = await apiFetch('/api/import/git', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: workspace.id,
+          repo_url: url,
+          created_by: user?.id
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Clone failed');
+      showImportResult(data, `Indexed ${data.repo || 'repo'}`);
+      setGitModalOpen(false);
+      setGitUrl('');
+    } catch (err) {
+      toast.error(err.message || 'Clone failed');
+    } finally {
+      setGitLoading(false);
+    }
+  }, [gitUrl, showImportResult, user?.id, workspace?.id]);
 
   useEffect(() => {
     fetchDashboard().catch(() => {});
@@ -252,7 +302,8 @@ export default function Home() {
               { label: 'New Doc', icon: FileText, onClick: () => navigate('/documents'), accent: '#E8000D' },
               { label: 'New Task', icon: CheckSquare, onClick: () => navigate('/tasks'), accent: '#FF6B00' },
               { label: 'Ask AI', icon: MessageSquare, onClick: () => navigate('/ai'), accent: '#8B5CF6' },
-              { label: importLoading ? 'Importing...' : 'Import Folder', icon: FolderOpen, onClick: handleImportFolder, accent: '#3D9970' }
+              { label: importLoading ? 'Importing...' : 'Import Folder', icon: FolderOpen, onClick: handleImportFolder, accent: '#3D9970' },
+              { label: gitLoading ? 'Cloning...' : 'Clone Repo', icon: GitBranch, onClick: () => setGitModalOpen(true), accent: '#64748b' }
             ].map((action) => {
               const ActionIcon = action.icon;
               return (
@@ -287,6 +338,76 @@ export default function Home() {
             })}
           </div>
         </div>
+
+        {gitModalOpen ? (
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '16px',
+              borderRadius: '8px',
+              border: '1px solid var(--border-default)',
+              backgroundColor: 'var(--bg-surface)'
+            }}
+          >
+            <p style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px' }}>Clone a Git repository</p>
+            <input
+              type="text"
+              value={gitUrl}
+              onChange={(e) => setGitUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !gitLoading && handleCloneGitRepo()}
+              placeholder="https://github.com/user/repo.git"
+              disabled={gitLoading}
+              style={{
+                width: '100%',
+                height: '36px',
+                marginBottom: '10px',
+                padding: '0 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-default)',
+                backgroundColor: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                fontSize: '13px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleCloneGitRepo}
+                disabled={gitLoading}
+                style={{
+                  height: '32px',
+                  padding: '0 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#64748b',
+                  color: '#fff',
+                  fontSize: '12px',
+                  cursor: gitLoading ? 'not-allowed' : 'pointer',
+                  opacity: gitLoading ? 0.7 : 1
+                }}
+              >
+                {gitLoading ? 'Cloning & indexing...' : 'Clone & index'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setGitModalOpen(false); setGitUrl(''); }}
+                disabled={gitLoading}
+                style={{
+                  height: '32px',
+                  padding: '0 12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-default)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-secondary)',
+                  fontSize: '12px',
+                  cursor: gitLoading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {!aiStatus.ollamaRunning && (
           <div
