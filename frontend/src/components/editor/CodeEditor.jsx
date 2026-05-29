@@ -75,16 +75,19 @@ function extensionForLanguage(language) {
   return found?.ext || 'txt';
 }
 
-// Renders Monaco editor with code-specific toolbar actions and AI panel.
+// Renders Monaco editor with code-specific toolbar actions, AI panel, and optional Y.js collaboration.
 export default function CodeEditor({
   fileName,
   language,
   content,
   onContentChange,
-  onLanguageChange
+  onLanguageChange,
+  yText,
+  awareness
 }) {
   const editorRef = useRef(null);
   const resizeObserverRef = useRef(null);
+  const suppressMonacoUpdateRef = useRef(false);
   const [wordWrap, setWordWrap] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -130,6 +133,78 @@ export default function CodeEditor({
       resizeObserverRef.current = ro;
     }
   }, []);
+
+  useEffect(() => {
+    if (!yText || !editorRef.current) return undefined;
+
+    const editor = editorRef.current;
+    const model = editor.getModel();
+    if (!model) return undefined;
+
+    const remoteContent = yText.toString();
+    if (remoteContent.length > 0 && model.getValue() !== remoteContent) {
+      suppressMonacoUpdateRef.current = true;
+      model.setValue(remoteContent);
+      suppressMonacoUpdateRef.current = false;
+    } else if (remoteContent.length === 0 && model.getValue().length > 0) {
+      yText.doc.transact(() => {
+        yText.delete(0, yText.length);
+        yText.insert(0, model.getValue());
+      }, 'init');
+    }
+
+    function onYTextChange(_event, txn) {
+      if (txn.origin === 'monaco') return;
+      const newContent = yText.toString();
+      if (model.getValue() !== newContent) {
+        suppressMonacoUpdateRef.current = true;
+        const pos = editor.getPosition();
+        model.setValue(newContent);
+        if (pos) editor.setPosition(pos);
+        suppressMonacoUpdateRef.current = false;
+      }
+    }
+    yText.observe(onYTextChange);
+
+    const disposable = editor.onDidChangeModelContent(() => {
+      if (suppressMonacoUpdateRef.current) return;
+      const currentContent = model.getValue();
+      yText.doc.transact(() => {
+        if (yText.toString() !== currentContent) {
+          yText.delete(0, yText.length);
+          yText.insert(0, currentContent);
+        }
+      }, 'monaco');
+    });
+
+    return () => {
+      yText.unobserve(onYTextChange);
+      disposable.dispose();
+    };
+  }, [yText]);
+
+  useEffect(() => {
+    if (!awareness || !editorRef.current) return undefined;
+    const editor = editorRef.current;
+    let decorations = [];
+
+    function updateCursors() {
+      const states = Array.from(awareness.getStates().entries());
+      const newDecorations = states
+        .filter(([clientId]) => clientId !== awareness.clientID)
+        .map(([, state]) => ({
+          range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 },
+          options: {
+            glyphMarginClassName: 'remote-cursor-glyph',
+            hoverMessage: { value: state?.user?.name || 'Peer' }
+          }
+        }));
+      decorations = editor.deltaDecorations(decorations, newDecorations);
+    }
+
+    awareness.on('change', updateCursors);
+    return () => awareness.off('change', updateCursors);
+  }, [awareness]);
 
   // Re-layout editor after theme/layout transitions to keep cursor and text alignment in sync.
   useEffect(() => {

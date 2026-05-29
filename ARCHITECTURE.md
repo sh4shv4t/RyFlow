@@ -223,15 +223,23 @@ User content written
 
 `backend/p2p/discovery.js` uses `bonjour-service` to advertise the workspace on the local network. The frontend polls `GET /api/peers` every 5 seconds; results are written to Zustand and rendered in the peer list.
 
-### Real-Time Document Co-Editing
+### Real-Time Document and Code Co-Editing (Y.js / WebRTC)
 
-Y.js CRDTs power conflict-free merging for the TipTap rich-text editor:
+Y.js CRDTs power conflict-free merging for the TipTap rich-text editor and Monaco code editor:
 
-- The frontend creates a `Y.Doc` and a `WebrtcProvider` (from `y-webrtc`) connecting to `ws://host:3001/yjs`.
+- The frontend creates a `Y.Doc` and a `WebrtcProvider` (from `y-webrtc`) per document/code session, connecting to `ws://host:3001/yjs`.
 - `backend/index.js` implements the full y-webrtc topic pub/sub protocol over a `ws.WebSocketServer` — no external relay.
-- Awareness (cursor position, user name, avatar colour) is wired via `CollaborationCursor` in `RichEditor.jsx`.
+- **Documents** use `Y.XmlFragment` bound to the TipTap `Collaboration` extension. Awareness is wired via `CollaborationCursor` in `RichEditor.jsx`.
+- **Code files** use `Y.Text` in room `workspace-${id}-code-${fileId}`. `CodeEditor.jsx` syncs Monaco with `Y.Text` using origin-guarded transactions.
+- `useCollaboration` accepts `docType: 'rich' | 'code'` to select the Y.js data type.
 
-**Scope:** CRDT sync is active for the **TipTap document editor only**, and only when the workspace is in remote (joined) mode. Tasks, canvas, and code files do not currently use Y.js.
+### Real-Time Task Board Sync (Socket.io)
+
+Task create/update/delete events are broadcast to the workspace Socket.io room:
+
+- `TaskBoard.jsx` uses `useWorkspaceSocket` when in remote mode.
+- After each successful REST mutation, it emits `task-created`, `task-updated`, or `task-deleted`.
+- `backend/index.js` relays these events to other sockets in the workspace room.
 
 ### Remote Workspace Join
 
@@ -239,12 +247,13 @@ Y.js CRDTs power conflict-free merging for the TipTap rich-text editor:
 2. Guest enters the host's IP and join code in Workspace Manager.
 3. Guest frontend stores the remote host details in `localStorage`.
 4. All API requests from the guest are intercepted by `remoteProxy.js` and forwarded to the host's backend with the `x-join-code` header.
-5. `joinCodeAuth.js` on the host validates the code before processing.
+5. `joinCodeAuth.js` on the host validates the code before processing. Protected routes include `/api/ai`, `/api/import`, and `/api/templates`.
 
 ### Known Limitations
 
 - No TURN server is configured. `y-webrtc` uses browser-default STUN (Google). Connections fail across strict NAT or WiFi with client isolation.
-- Tasks and canvas changes are not CRDT-synced between peers in real time.
+- Canvas changes are not synced live between peers.
+- Socket.io and Y.js signaling have no authentication layer — join-code checks apply at the REST API level only.
 
 ---
 
@@ -293,7 +302,7 @@ The typical pattern:
 
 ### Good first contributions
 
-- Extend CRDT sync to tasks or canvas items
+- Extend CRDT sync to canvas items (tasks now use Socket.io broadcast)
 - Add a TURN/STUN configuration option for WebRTC over the internet
 - Expand MCP tool coverage
 - Increase test coverage in `backend/tests/` or `frontend/src/`

@@ -31,23 +31,28 @@ function normalizeUserColor(user) {
   return user?.avatar_color || user?.avatarColor || '#E8000D';
 }
 
-export default function useCollaboration({ workspaceId, docId }) {
+/**
+ * @param {{ workspaceId: string|null, docId: string|null, docType?: 'rich'|'code' }} options
+ */
+export default function useCollaboration({ workspaceId, docId, docType = 'rich' }) {
   const user = useStore((s) => s.user);
   const roomName = useMemo(() => {
     if (!workspaceId || !docId) return null;
-    return `workspace-${workspaceId}-doc-${docId}`;
-  }, [workspaceId, docId]);
+    const prefix = docType === 'code' ? 'code' : 'doc';
+    return `workspace-${workspaceId}-${prefix}-${docId}`;
+  }, [workspaceId, docId, docType]);
 
   const [state, setState] = useState({
     ydoc: null,
     provider: null,
     awareness: null,
-    connected: false
+    connected: false,
+    yText: null
   });
 
   useEffect(() => {
     if (!roomName) {
-      setState({ ydoc: null, provider: null, awareness: null, connected: false });
+      setState({ ydoc: null, provider: null, awareness: null, connected: false, yText: null });
       return undefined;
     }
 
@@ -74,20 +79,23 @@ export default function useCollaboration({ workspaceId, docId }) {
 
     provider.on('status', handleStatus);
 
+    const yText = docType === 'code' ? ydoc.getText('code') : null;
+
     setState({
       ydoc,
       provider,
       awareness,
-      connected: Boolean(provider.connected)
+      connected: Boolean(provider.connected),
+      yText
     });
 
     return () => {
       provider.off('status', handleStatus);
       provider.destroy();
       ydoc.destroy();
-      setState({ ydoc: null, provider: null, awareness: null, connected: false });
+      setState({ ydoc: null, provider: null, awareness: null, connected: false, yText: null });
     };
-  }, [roomName, user?.name, user?.avatar_color, user?.avatarColor]);
+  }, [roomName, user?.name, user?.avatar_color, user?.avatarColor, docType]);
 
   return {
     ...state,

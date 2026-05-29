@@ -2,10 +2,24 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, Wifi, UserPlus } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
 
 export default function PeerList() {
-  const { peers } = useStore();
+  const { peers, workspace } = useStore();
+
+  function handleInvite() {
+    const joinCode = workspace?.join_code;
+    if (!joinCode) {
+      toast.error('No join code available for this workspace.');
+      return;
+    }
+    navigator.clipboard.writeText(joinCode).then(() => {
+      toast.success('Join code copied — share with your teammate');
+    }).catch(() => {
+      toast(`Join code: ${joinCode}`);
+    });
+  }
 
   if (peers.length === 0) {
     return (
@@ -51,7 +65,11 @@ export default function PeerList() {
                 </div>
               </div>
 
-              <button className="p-1.5 rounded-lg text-amd-white/30 hover:text-amd-red hover:bg-amd-red/10 transition-colors" title="Invite to workspace">
+              <button
+                className="p-1.5 rounded-lg text-amd-white/30 hover:text-amd-red hover:bg-amd-red/10 transition-colors"
+                title="Copy join code to invite this peer"
+                onClick={handleInvite}
+              >
                 <UserPlus size={14} />
               </button>
             </motion.div>

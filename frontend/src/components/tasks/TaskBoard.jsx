@@ -1,10 +1,11 @@
-// TaskBoard — Kanban board with optimistic updates and animated new tasks.
+// TaskBoard — Kanban board with optimistic updates, animated new tasks, and LAN sync.
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Edit3, GripVertical } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import useStore from '../../store/useStore';
+import useWorkspaceSocket from '../../hooks/useWorkspaceSocket';
 import { formatDueDate } from '../../utils/time';
 import { getContentSummary, getItemTitle } from '../../utils/content';
 
@@ -20,12 +21,54 @@ function normalizeStatus(status) {
 }
 
 export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefresh }) {
-  const { workspace } = useStore();
+  const { workspace, user, remoteMode } = useStore();
+  const socketRef = useWorkspaceSocket(remoteMode ? workspace?.id : null, user);
   const [localTasks, setLocalTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingTask, setEditingTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
   const [newTaskIds, setNewTaskIds] = useState(new Set());
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !remoteMode) return undefined;
+
+    function onRemoteTaskCreated(task) {
+      setLocalTasks((prev) => {
+        if (prev.some((t) => t.id === task.id)) return prev;
+        const normalized = { ...task, status: normalizeStatus(task.status) };
+        setNewTaskIds((ids) => new Set([...ids, normalized.id]));
+        setTimeout(() => {
+          setNewTaskIds((ids) => {
+            const next = new Set(ids);
+            next.delete(normalized.id);
+            return next;
+          });
+        }, 2000);
+        return [normalized, ...prev];
+      });
+    }
+
+    function onRemoteTaskUpdated(task) {
+      setLocalTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, ...task, status: normalizeStatus(task.status ?? t.status) } : t))
+      );
+    }
+
+    function onRemoteTaskDeleted({ taskId }) {
+      setLocalTasks((prev) => prev.filter((t) => t.id !== taskId));
+    }
+
+    socket.on('task-created', onRemoteTaskCreated);
+    socket.on('task-updated', onRemoteTaskUpdated);
+    socket.on('task-deleted', onRemoteTaskDeleted);
+
+    return () => {
+      socket.off('task-created', onRemoteTaskCreated);
+      socket.off('task-updated', onRemoteTaskUpdated);
+      socket.off('task-deleted', onRemoteTaskDeleted);
+    };
+  }, [socketRef, remoteMode]);
 
   // Fetches initial tasks for the current workspace.
   const fetchTasks = useCallback(async () => {
@@ -78,12 +121,13 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
     setLocalTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, status: normalized } : task));
     try {
       await axios.patch(`/api/tasks/${taskId}`, { status: normalized });
+      socketRef.current?.emit('task-updated', { workspaceId: workspace?.id, task: { id: taskId, status: normalized } });
       onRefresh && onRefresh();
     } catch {
       setLocalTasks(previous);
       toast.error('Failed to move task. Reverted.');
     }
-  }, [localTasks, onRefresh]);
+  }, [localTasks, onRefresh, socketRef, workspace?.id]);
 
   // Optimistically deletes a task card then syncs in background.
   const deleteTask = useCallback(async (taskId) => {
@@ -92,12 +136,13 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
     setLocalTasks(next);
     try {
       await axios.delete(`/api/tasks/${taskId}`);
+      socketRef.current?.emit('task-deleted', { workspaceId: workspace?.id, taskId });
       onChange && onChange(next);
     } catch {
       setLocalTasks(previous);
       toast.error('Failed to delete task. Reverted.');
     }
-  }, [localTasks, onChange]);
+  }, [localTasks, onChange, socketRef, workspace?.id]);
 
   // Creates a new blank task in todo column.
   const createTask = useCallback(async () => {
@@ -121,12 +166,13 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
         });
       }, 2000);
       setEditingTask(created.id);
+      socketRef.current?.emit('task-created', { workspaceId: workspace.id, task: created });
       onChange && onChange(next);
       toast.success('Task created');
     } catch {
       toast.error('Failed to create task');
     }
-  }, [workspace, onChange, localTasks]);
+  }, [workspace, onChange, localTasks, socketRef]);
 
   // Optimistically patches a task locally and syncs with backend.
   const updateTask = useCallback(async (taskId, updates) => {
@@ -138,11 +184,12 @@ export default function TaskBoard({ tasks: externalTasks = [], onChange, onRefre
     setLocalTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, ...normalizedUpdates } : task));
     try {
       await axios.patch(`/api/tasks/${taskId}`, normalizedUpdates);
+      socketRef.current?.emit('task-updated', { workspaceId: workspace?.id, task: { id: taskId, ...normalizedUpdates } });
     } catch {
       setLocalTasks(previous);
       toast.error('Failed to update task. Reverted.');
     }
-  }, [localTasks]);
+  }, [localTasks, socketRef, workspace?.id]);
 
   // Handles drop target status updates.
   const handleDrop = useCallback((status) => {

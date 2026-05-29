@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const fetch = require('node-fetch');
 
@@ -47,17 +49,21 @@ async function api(pathname, options = {}) {
 }
 
 test.before(async () => {
+  const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ryflow-test-'));
   serverProc = spawn(process.execPath, ['index.js'], {
     cwd: path.resolve(__dirname, '..'),
     env: {
       ...process.env,
-      PORT: String(BACKEND_PORT)
+      PORT: String(BACKEND_PORT),
+      RYFLOW_DATA_DIR: testDataDir
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
   serverProc.stdout.on('data', () => {});
-  serverProc.stderr.on('data', () => {});
+  serverProc.stderr.on('data', (chunk) => {
+    process.stderr.write(`[integration-backend] ${chunk}`);
+  });
 
   await waitForHealth();
 });

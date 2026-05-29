@@ -10,7 +10,7 @@ services:
     ports:
       - "11434:11434"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 || wget -qO /dev/null http://localhost:11434/api/tags > /dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -129,6 +129,15 @@ export default function ChatPanel({ activeChatId, onChatCreated, onRequestNewCha
   const { selectedModel, setSelectedModel, language, setLanguage, aiStatus, workspace } = useStore();
 
   useEffect(() => {
+    function handleVoiceTranscript(e) {
+      const text = e.detail?.text;
+      if (text) setInput((prev) => (prev ? `${prev} ${text}` : text));
+    }
+    window.addEventListener('ryflow:voice-transcript', handleVoiceTranscript);
+    return () => window.removeEventListener('ryflow:voice-transcript', handleVoiceTranscript);
+  }, []);
+
+  useEffect(() => {
     if (!workspace?.id) return;
     axios.get('/api/templates', { params: { workspace_id: workspace.id, type: 'chat' } })
       .then((res) => {

@@ -397,7 +397,12 @@ export default function AIStudio() {
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                   Record speech and transcribe with Whisper.cpp — fully offline
                 </p>
-                <VoiceInput onTranscript={(text) => {}} />
+                <VoiceInput onTranscript={(text) => {
+                  if (text) {
+                    setActiveTab('chat');
+                    window.dispatchEvent(new CustomEvent('ryflow:voice-transcript', { detail: { text } }));
+                  }
+                }} />
               </div>
             </motion.div>
           )}
