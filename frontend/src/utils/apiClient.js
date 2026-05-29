@@ -2,10 +2,13 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-// Resolves API base URL for browser vs Electron/file protocol.
-export const API_BASE = (window.location.protocol === 'file:' || window.electronAPI?.isElectron)
-  ? 'http://localhost:3001'
-  : '';
+// Resolves API base URL. Reads VITE_API_URL when set (Docker / custom deployments).
+export const API_BASE = (() => {
+  if (window.location.protocol === 'file:' || window.electronAPI?.isElectron) {
+    return import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  }
+  return import.meta.env.VITE_API_URL || '';
+})();
 
 let disconnectHandled = false;
 

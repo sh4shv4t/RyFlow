@@ -1,10 +1,11 @@
-// Code editor workspace page with file list, save/load, and AI-augmented Monaco editor
+// Code editor workspace page with file list, save/load, AI-augmented Monaco editor, and LAN collaboration.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Code2, FilePlus2, Save, Trash2, Link as LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useStore from '../store/useStore';
+import useCollaboration from '../hooks/useCollaboration';
 import CodeEditor, { detectLanguageFromFileName } from '../components/editor/CodeEditor';
 import BacklinksPanel from '../components/editor/BacklinksPanel';
 import { formatRelativeTime } from '../utils/time';
@@ -55,9 +56,16 @@ function iconForLanguage(language) {
 export default function CodeEditorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { workspace, workspaceId, user, setAiActive } = useStore();
+  const { workspace, workspaceId, user, setAiActive, remoteMode } = useStore();
   const [files, setFiles] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
+
+  const resolvedWorkspaceId = workspaceId || workspace?.id || null;
+  const { yText, awareness } = useCollaboration({
+    workspaceId: remoteMode ? resolvedWorkspaceId : null,
+    docId: remoteMode ? activeFile?.id : null,
+    docType: 'code'
+  });
   const [isLoadingFiles, setIsLoadingFiles] =
     useState(true);
   const [saving, setSaving] = useState(false);
@@ -419,6 +427,8 @@ export default function CodeEditorPage() {
               content={activeFile.content || ''}
               onContentChange={handleContentChange}
               onLanguageChange={handleLanguageChange}
+              yText={yText}
+              awareness={awareness}
             />
             {isFileLoading && (
               <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px', zIndex: 5 }}>

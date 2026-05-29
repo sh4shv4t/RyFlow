@@ -202,6 +202,9 @@ app.use('/api/voice', joinCodeAuth);
 app.use('/api/workspace', joinCodeAuth);
 app.use('/api/comments', joinCodeAuth);
 app.use('/api/tags', joinCodeAuth);
+app.use('/api/ai', joinCodeAuth);
+app.use('/api/import', joinCodeAuth);
+app.use('/api/templates', joinCodeAuth);
 
 // Mount API routes
 app.use('/api/ai', require('./routes/ai'));
@@ -289,6 +292,17 @@ io.on('connection', (socket) => {
     socket.to(workspaceId).emit('doc-update', { docId, update, from: socket.id });
   });
 
+  // Task collaboration — relay create/update/delete events to workspace peers
+  socket.on('task-created', ({ workspaceId, task }) => {
+    if (workspaceId && task) socket.to(workspaceId).emit('task-created', task);
+  });
+  socket.on('task-updated', ({ workspaceId, task }) => {
+    if (workspaceId && task) socket.to(workspaceId).emit('task-updated', task);
+  });
+  socket.on('task-deleted', ({ workspaceId, taskId }) => {
+    if (workspaceId && taskId) socket.to(workspaceId).emit('task-deleted', { taskId });
+  });
+
   socket.on('disconnect', () => {
     const user = connectedUsers.get(socket.id);
     if (user) {
@@ -303,7 +317,7 @@ io.on('connection', (socket) => {
 
 // Start the server
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('RyFlow backend listening on port 3001');
+  console.log(`RyFlow backend listening on port ${PORT}`);
   console.log(`Ollama host: ${OLLAMA_HOST}`);
   console.log('LAN access enabled');
   console.log(`📡 Socket.io signaling active at ${LOCAL_IP}:${PORT}`);

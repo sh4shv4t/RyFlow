@@ -1,5 +1,4 @@
 // Root App component — handles routing and layout
-import React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -62,10 +61,11 @@ export default function App() {
   const [hasActiveSession, setHasActiveSession] = useState(false);
   const isElectron = Boolean(window?.electronAPI?.isElectron);
 
-  // Remove first-launch wizard friction by marking setup complete immediately.
-  if (localStorage.getItem('ryflow_setup_complete') !== 'true') {
-    localStorage.setItem('ryflow_setup_complete', 'true');
-  }
+  useEffect(() => {
+    if (localStorage.getItem('ryflow_setup_complete') !== 'true') {
+      localStorage.setItem('ryflow_setup_complete', 'true');
+    }
+  }, []);
 
   // Restores active local/remote session from backend so app starts in correct mode.
   useEffect(() => {

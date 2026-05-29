@@ -49,7 +49,7 @@ RyFlow turns the AMD chip already in your machine into a private, offline AI bra
 |---|---|
 | **Local AI** | Phi-3 Mini / Gemma 2B via Ollama — runs entirely on-device, no API keys |
 | **AMD ROCm** | Auto-detects AMD GPU and switches to hardware-accelerated inference (up to 10× faster) |
-| **P2P Collaboration** | Real-time co-editing of documents over LAN via WebRTC + Y.js CRDTs, self-hosted signaling |
+| **P2P Collaboration** | Real-time co-editing over LAN — documents and code files via Y.js CRDTs + WebRTC; task board via Socket.io broadcast |
 | **Remote Join Codes** | Connect to a host's workspace from another machine over LAN using a generated join code |
 | **Hybrid Search** | Semantic vector search (HNSW ANN) fused with BM25 keyword search (FTS5) and recency scoring |
 | **Knowledge Graph** | Auto-built graph of backlinks, @mentions, and embedding-derived edges; D3 visualisation |
@@ -59,7 +59,7 @@ RyFlow turns the AMD chip already in your machine into a private, offline AI bra
 | **Canvas** | Excalidraw-powered freeform drawing with AI description |
 | **Task Board** | Natural-language task creation — type a sentence, get a Kanban card |
 | **AI Studio** | Persistent RAG chat — answers are grounded in your workspace content |
-| **Knowledge Guide** | Auto-generate summaries, key terms, and quizzes from any document set |
+| **Study Guide** | Auto-generate summaries, key terms, and quizzes from any document set |
 | **AI Morning Briefing** | Daily LLM-generated standup digest read aloud via browser TTS |
 | **Command Palette** | `Ctrl/Cmd+K` workspace-wide semantic search and navigation |
 | **Templates** | Built-in and custom workspace templates (Meeting Notes, Project Brief, Sprint Retro, and more) |
@@ -201,7 +201,13 @@ Every document, task, code file, canvas, and chat is converted into a 768-dimens
 
 ### P2P Collaboration
 
-Peers on the same LAN are discovered automatically via mDNS. Document co-editing uses WebRTC data channels and Y.js CRDTs with a self-hosted signaling server at `ws://host:3001/yjs` — no external relay. Remote workspaces on different machines connect via join codes, with the host acting as a reverse proxy. Note: real-time CRDT sync currently covers the TipTap document editor only; tasks and canvas do not yet sync live.
+Peers on the same LAN are discovered automatically via mDNS. Three collaboration channels are active in remote (joined) mode:
+
+- **Documents and code files** — Y.js CRDTs over WebRTC with a self-hosted signaling server at `ws://host:3001/yjs`. No external relay.
+- **Task board** — Socket.io broadcast events (`task-created`, `task-updated`, `task-deleted`) relayed through the host. Creates, status moves, edits, and deletes appear live on all peers' boards.
+- **Canvas** — not yet synced live; changes reflect on next load.
+
+Remote workspaces on different machines connect via join codes, with the host acting as a reverse proxy.
 
 ### Workspace Portability
 
