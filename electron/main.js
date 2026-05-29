@@ -1,5 +1,5 @@
 // Electron main process — starts backend/frontend then opens native shell window.
-const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync } = require('child_process');
@@ -377,6 +377,14 @@ ipcMain.on('window-set-titlebar-theme', (_event, theme) => {
   } catch (err) {
     console.warn('[electron] Failed to set title bar overlay:', err.message);
   }
+});
+
+ipcMain.handle('pick-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory']
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
 });
 
 app.whenReady().then(async () => {

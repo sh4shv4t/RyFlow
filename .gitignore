@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+docs/
+
+scripts/
+
 # Environment and local overrides
 .env
 .env.*
@@ -23,13 +27,42 @@ node_modules/
 dist/
 build/
 coverage/
+release/
+
+# Frontend dev cache
+.vite/
+frontend/.vite/
+*.tsbuildinfo
 
 # App runtime directories
 backend/uploads/
 
+# Local AI / model artifacts (large binaries)
+models/
+*.gguf
+
+# Marketing / print collateral (regenerate with scripts/generate-pamphlet-pdf.js)
+docs/ryflow-pamphlet.pdf
+docs/qr-*.png
+
+# Puppeteer browser cache (pamphlet PDF script only)
+.puppeteer-cache/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor / IDE local settings
+.vscode/
+.idea/
+.cursor/
+
+# npm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 TO-DO.md
 

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  pickFolder: () => ipcRenderer.invoke('pick-folder'),
   setTitleBarTheme: (theme) => ipcRenderer.send('window-set-titlebar-theme', theme),
 
   onMaximizeChanged: (callback) => {
